@@ -10,7 +10,7 @@ Working name. Change it if a better one appears before v1.0 ships.
 
 ## 1. What it is
 
-A website that tells a USACO student which problem to solve next.
+A website that tells a competitive programmer which problem to solve next.
 
 You enter your Codeforces handle. It reads your public submission history,
 works out which topics you are strong and weak at, and recommends problems
@@ -19,11 +19,17 @@ shows you the topic breakdown it computed, because that is useful on its own.
 
 ## 2. Who it is for
 
-High-school students training for USACO, roughly Bronze through Gold, who
-already practise on Codeforces.
+Anyone who practises on Codeforces and does not know what to solve next.
+Realistically that skews toward the 1000–1900 rating range, where people are
+actively training rather than competing at the top.
 
-Not competitive programmers in general. Specifically people in that position.
-Every design decision should be made for that person.
+Chosen over the narrower "USACO students" audience for one reason: the tool
+requires a Codeforces handle, and many USACO students do not have one. An
+audience that cannot supply the data the product needs is the wrong audience.
+
+Positioning is a separate question from the audience. The product is built for
+Codeforces users generally; contest preparation, including USACO, is one use
+case worth mentioning when launching, not a constraint on the design.
 
 ## 3. Why it should exist
 
@@ -33,8 +39,18 @@ gives every student the same fixed curriculum. Neither one knows that you are
 fine at greedy and weak at trees, and neither remembers that you learned
 segment trees in June and have since forgotten them.
 
-Nothing found so far models an individual student's per-topic skill and picks
-problems against it.
+Nothing found so far models an individual user's per-topic skill and picks
+problems against it. Static problem "ladders" exist, but they are the same
+list for everybody and most are unmaintained.
+
+**The differentiator is measurement, and it is the only one.** Recommenders in
+this space are not hard to build, and several have been. What none of them
+publish is evidence that their recommendations beat sorting the problemset by
+rating. §9 is therefore not an optional extra at the end — it is the reason
+this project exists. Skip it and this is a website.
+
+Still to verify: search for existing Codeforces recommenders and training
+tools, and if abandoned ones turn up, work out why they were abandoned.
 
 ## 4. How it works
 
@@ -141,8 +157,9 @@ Written down because they are guesses, not facts, and should be revisited.
    research (desirable difficulty; the "85% rule", Wilson et al. 2019). Not
    established for competitive programming. Testing this properly is a v2.0
    experiment.
-2. **Codeforces skill transfers to USACO.** Plausible since USACO students
-   already practise there, but unverified.
+2. **Users want to be told what to solve.** Some people enjoy choosing, and
+   some deliberately pick problems far above their level to learn new
+   techniques. Unknown how large that group is.
 3. **A submission with verdict "OK" means the problem was learned.** Ignores
    solving after reading an editorial, or after five attempts.
 4. **Public Codeforces histories are representative** of the students this is
