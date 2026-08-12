@@ -172,8 +172,28 @@ v1.0 is done when all three hold:
 
 1. The model predicts solve/fail on held-out submissions with **lower log loss
    than the rating-only baseline**, and that number is written down.
-2. At least **20 people who are not the author** have used it.
+2. At least **50 people who are not the author** have used it, and at least
+   **20 have returned** after their first visit.
 3. It is live at a URL and stays up.
+
+### Stretch goals
+
+Deliberately aimed at being the reference point rather than the fourth
+product, because that target does not require anyone to switch tools:
+
+- **Publish the evaluation** as a Codeforces blog post. The question "do
+  problem recommenders actually beat sorting by rating?" is one this community
+  keeps asking and nobody has answered with data.
+- **Release the dataset and the harness.** Nobody has published a clean
+  Codeforces submission dataset for skill modelling, a stated evaluation
+  protocol, or baseline numbers. All three have to be built anyway; publishing
+  them costs almost nothing and makes them the thing others measure against.
+- **500 people try it, 50 return.** Achievable if the blog post lands.
+- **Someone who is not the author uses the harness or the dataset.**
+
+Explicitly not a goal: more weekly users than the incumbent. Optimising for
+that means competing on landing pages and features, which is a losing fight
+and would come out of the time budget for the model.
 
 Second-order, once recommendations have been acted on: **calibration.** Of the
 problems recommended at 70%, roughly 70% should actually get solved. If the
