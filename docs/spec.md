@@ -1,10 +1,8 @@
-# usaco-next — Specification
+# NextCF — Specification
 
 **Status:** draft
 **Written:** 2026-08-11
 **Author:** Leo Ma
-
-Working name. Change it if a better one appears before v1.0 ships.
 
 ---
 
@@ -54,29 +52,57 @@ tools, and if abandoned ones turn up, work out why they were abandoned.
 
 ## 4. How it works
 
-Two separate things run. They are not the same program.
+Three programs sharing one database. They are not the same process and they do
+not run at the same times.
 
 ```
-  BACKGROUND SCRIPT — run manually, occasionally
-  ────────────────────────────────────────────────
-    1. fetch every problem from the Codeforces API
-    2. fetch ~2000 public users' submission histories
-    3. write them to the database
-    4. fit the model on that data
-  ────────────────────────────────────────────────
-                       |
-                 [  database  ]
-                       |
-  WEB APP — runs whenever someone visits
-  ────────────────────────────────────────────────
-    1. visitor types a handle
-    2. fetch that handle's submissions from the API
-    3. store them
-    4. estimate the visitor's skill per topic
-    5. predict solve probability for unattempted problems
-    6. show the 5 closest to the target probability
-  ────────────────────────────────────────────────
+  api_client.py   Codeforces API — rate limiting, retries, backoff
+  db.py           schema and queries
+  sync.py         fetch one user's history, as a resumable background job
+  collect.py      bulk collection of ~2000 users, run manually
+  model.py        skill estimation and solve-probability prediction
+  evaluate.py     the harness — train/test split, scoring
+  web.py          routes and pages
+  scheduler.py    nightly re-sync of users already known
 ```
+
+```
+  BULK COLLECTION — run manually, takes about an hour
+  ─────────────────────────────────────────────────────
+    collect.py  →  api_client.py  →  database
+    fetch every problem, then ~2000 users' histories
+    resumable: dies at minute 40, restarts at minute 40
+  ─────────────────────────────────────────────────────
+                          |
+                    [  database  ]
+                          |
+  WEB APP
+  ─────────────────────────────────────────────────────
+      browser
+         |  enter handle
+         v
+      web.py  ──── starts job ────>  sync.py
+         |                              |
+         |  <── polls "done yet?" ──────┘
+         v
+    progress page
+         |
+         v
+    results page  ←── model.py predicts, picks 5 near target
+  ─────────────────────────────────────────────────────
+                          |
+  SCHEDULER — nightly
+  ─────────────────────────────────────────────────────
+    scheduler.py → re-sync users seen in the last 30 days
+  ─────────────────────────────────────────────────────
+```
+
+Two things drive the shape of this. First, fetching a user with 2000
+submissions takes tens of seconds, and a bulk run takes about an hour —
+neither fits inside a web request, so both must be background jobs with
+progress that the page can poll. Second, any job that long **will** be
+interrupted, so job state lives in the database and work resumes rather than
+restarting.
 
 Training data comes from ~2000 strangers' public histories, not from the
 visitor's own submissions. The visitor's history is used only to locate them
@@ -97,13 +123,12 @@ not slipped in while coding.
 - No social features — no friends, leaderboards, or comparison to others.
 - No hints, editorials, or explanations of problems.
 - No AI chat, of any kind, anywhere.
-- No difficulty ratings for USACO's own problems. That is v2.0 and it needs
-  real users producing data first.
-- No spaced repetition / review scheduling. Also v2.0.
+- No knowledge tracing, bandits, spaced repetition, or USACO problem ratings.
+  All v2.0 — see §11.
 
 ## 6. Data
 
-Three tables. Everything else is computed on demand, not stored, so there is
+Four tables. Everything else is computed on demand, not stored, so there is
 only one copy of the truth.
 
 ```
@@ -126,6 +151,15 @@ submissions
   problem_id     text     — which problem
   verdict        text     — "OK", "WRONG_ANSWER", "TIME_LIMIT_EXCEEDED", ...
   submitted_at   datetime
+
+jobs
+  id             integer
+  kind           text     — "sync" or "collect"
+  target         text     — which handle, or which batch
+  state          text     — "pending", "running", "done", "failed"
+  progress       integer  — how far through, so work can resume
+  started_at     datetime
+  error          text     — why it failed, if it did
 ```
 
 Derived and deliberately not stored: per-topic skill estimates, solve
@@ -139,11 +173,22 @@ probability predictions, recommendation lists.
 | Web framework | Flask | Smallest thing that works; large amount of beginner material |
 | Database | SQLite | A single file on disk. Nothing to install, nothing to run |
 | Pages | Jinja templates (ships with Flask) | Lists and tables. No JavaScript build step needed |
+| Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
+| Scheduling | A timed loop, or the host's cron if it has one | Nightly re-sync |
 | Hosting | Railway or Render | Connects to GitHub, redeploys on push |
 
-Explicitly rejected: React (pages are lists; not worth learning a build system
-for), FastAPI (more concepts before anything runs), PostgreSQL for local
-development (nothing to gain yet).
+Explicitly rejected:
+
+- **React** — pages are lists; not worth learning a build system for.
+- **FastAPI** — more concepts before anything runs.
+- **PostgreSQL locally** — nothing to gain yet.
+- **asyncio / concurrent requests** — the Codeforces API allows roughly one
+  request every two seconds, so the rate limit dominates and concurrency buys
+  nothing. 2000 users takes about an hour either way. Adding async would be
+  complexity with no benefit.
+- **A job queue library (Celery, RQ)** — needs a separate server process and a
+  message broker. One worker thread and a database table does the same job at
+  this scale.
 
 Known risk: most hosting platforms wipe the filesystem on redeploy, which
 would delete a SQLite file. Resolve at v0.1 — either a host with a persistent
@@ -162,7 +207,7 @@ Written down because they are guesses, not facts, and should be revisited.
    techniques. Unknown how large that group is.
 3. **A submission with verdict "OK" means the problem was learned.** Ignores
    solving after reading an editorial, or after five attempts.
-4. **Public Codeforces histories are representative** of the students this is
+4. **Public Codeforces histories are representative** of the users this is
    aimed at. Selection bias is likely: harder problems are attempted mostly by
    stronger users, so naive difficulty estimates will be biased.
 
@@ -204,21 +249,78 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 | Version | Does | Target |
 |---|---|---|
 | v0.1 | Enter a handle, see your submissions. Deployed. | end Aug |
-| v0.2 | Cache API calls | early Sep |
-| v0.3 | Per-topic solve counts | mid Sep |
-| v0.4 | Baseline recommender — rating only | late Sep |
-| v0.5 | Evaluation harness; measure the baseline | early Oct |
-| v0.6 | First real model, scored against the baseline | mid Oct |
-| **v1.0** | **First public release** | **late Oct** |
+| v0.2 | Background job with a progress page; caching | early Sep |
+| v0.3 | Bulk collection of ~2000 users — rate limited, resumable | mid Sep |
+| v0.4 | Per-topic solve counts; rating-only baseline recommender | late Sep |
+| v0.5 | Evaluation harness; the baseline number written down | early Oct |
+| v0.6 | First real model (logistic / Rasch), scored against the baseline | late Oct |
+| v0.7 | Nightly re-sync, logging, error handling, tests | early Nov |
+| **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
-| v2.0 | Rebuild what was wrong, using real usage data | spring |
+| v2.0 | See §11 | spring |
 
-## 11. Open questions
+Dates assume 10–15 hours a week and include no slack. They will slip.
+
+## 11. v2.0 candidates
+
+Recorded so they can be refused now and reconsidered later with real usage
+data. **None of these are v1.0.** Anything here that gets built early comes
+out of the time budget for §9, which is the point of the project.
+
+### Knowledge tracing
+
+v1.0 models a user as a snapshot: "weak at DP." Knowledge tracing models the
+*trajectory*: weak at DP in June, solved eight DP problems in July, moderate
+now, decaying by October without practice.
+
+The standard approach (Bayesian Knowledge Tracing) treats each skill as a
+hidden on/off state with four probabilities — learn, forget, guess, slip — and
+updates the belief after every attempt. This is what makes the "you forgot
+segment trees" idea in §3 actually work, and it is what makes spaced
+repetition possible.
+
+Needs: submission timestamps (already stored) and enough per-user history.
+
+### Bandits (explore vs exploit)
+
+v1.0 always recommends what the model currently thinks is right. But the model
+is most uncertain about topics the user has never attempted — and those are
+exactly where a hidden weakness might be.
+
+That trade-off is the multi-armed bandit problem: exploit what you believe, or
+explore what you don't know. Standard approaches are ε-greedy, UCB (favour
+options you are uncertain about), and Thompson sampling.
+
+Directly useful here, because a recommender that only suggests familiar topics
+will never discover a gap.
+
+### The 70% experiment
+
+Assumption 1 is a guess. With enough users, randomly assign target
+probabilities of 0.60 / 0.70 / 0.80 and measure who improves fastest — an A/B
+test, where randomisation is what makes the result causal rather than
+correlational.
+
+Needs far more users than v1.0 will have. Attempting it at n=20 produces a
+number that means nothing. Calibration (§9) is the version that works at small
+scale and should come first.
+
+### Spaced repetition
+
+Schedule revisits of topics the knowledge-tracing model says have decayed.
+Depends on knowledge tracing existing first.
+
+### USACO problem ratings
+
+USACO publishes no submission data, so ratings would have to come from users
+self-reporting solves. Needs a user base first, which is why it is not v1.0.
+
+## 12. Open questions
 
 - **Cold start.** What is shown to somebody with 3 submissions? Probably fall
   back to the rating-only baseline. Decide at v0.6.
 - **What counts as "solved"?** Solved on the first try, or after five attempts
   and an editorial? The API does not distinguish. Affects everything.
 - **SQLite persistence in production.** See §7.
-- **How USACO problems get ratings at all**, given USACO publishes no
-  submission data. Probably user self-reporting. v2.0.
+- **What happens when a sync job is interrupted mid-user?** Partial data in the
+  database is worse than none. Decide at v0.2.
