@@ -173,13 +173,19 @@ probability predictions, recommendation lists.
 | Web framework | Flask | Smallest thing that works; large amount of beginner material |
 | Database | SQLite | A single file on disk. Nothing to install, nothing to run |
 | Pages | Jinja templates (ships with Flask) | Lists and tables. No JavaScript build step needed |
+| Styling | One CSS file, on top of a classless framework such as Pico.css | Looking credible matters — the incumbent is polished, and the launch screenshot is the pitch. A single stylesheet link achieves that with no npm and no build step |
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
 | Scheduling | A timed loop, or the host's cron if it has one | Nightly re-sync |
 | Hosting | Railway or Render | Connects to GitHub, redeploys on push |
 
 Explicitly rejected:
 
-- **React** — pages are lists; not worth learning a build system for.
+- **React, and React component or animation libraries** — the pages are a
+  form, a progress bar, and a list of five problems. React buys interactivity
+  that is not needed, at the cost of npm, a build step, bundling and
+  deployment complexity. Looking professional is a CSS problem, not a
+  framework problem. Reconsider only for the v1.5 pet system, where animation
+  would actually earn its place.
 - **FastAPI** — more concepts before anything runs.
 - **PostgreSQL locally** — nothing to gain yet.
 - **asyncio / concurrent requests** — the Codeforces API allows roughly one
@@ -255,6 +261,7 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 | v0.5 | Evaluation harness; the baseline number written down | early Oct |
 | v0.6 | First real model (logistic / Rasch), scored against the baseline | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests | early Nov |
+| v0.8 | Visual design pass — see §7 | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
 | v2.0 | See §11 | spring |
