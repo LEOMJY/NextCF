@@ -165,3 +165,28 @@ out of the evaluation harness, which is the reason the project exists.
 ### Name
 
 NextCF.
+
+---
+
+## 2026-08-12 — Pet system considered, scheduled for v1.5
+
+Idea: earn coins by solving recommended problems, spend them on pixel-art pets
+with growth stages. Inspired by Forest.
+
+Kept rather than dismissed, for three reasons. Retention is the weakest of the
+three v1.0 success criteria, and recommendation quality does not drive it — a
+good recommendation makes the user leave for Codeforces. It differentiates
+from the incumbent, which is a clean serious tool rather than a game. And it
+produces a better experiment than the planned 70% difficulty test, because the
+effect is larger and visible within weeks.
+
+The design point that makes it non-trivial: reward has to scale as
+`coins ∝ 1 − P(solve)` using this project's own model, or people farm
+800-rated problems. That makes the economy depend on the probabilities being
+well calibrated, which links the feature to the evaluation work instead of
+sitting beside it.
+
+Deferred to v1.5 because it needs user accounts (§5 currently excludes them),
+because v1.0 is already at mid-November and this would push it into contest
+season, and because gamification amplifies a working product rather than
+rescuing a broken one — the model has to be good first.

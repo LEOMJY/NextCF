@@ -261,11 +261,58 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 
 Dates assume 10–15 hours a week and include no slack. They will slip.
 
-## 11. v2.0 candidates
+## 11. v1.5 and v2.0 candidates
 
 Recorded so they can be refused now and reconsidered later with real usage
 data. **None of these are v1.0.** Anything here that gets built early comes
 out of the time budget for §9, which is the point of the project.
+
+### Pet nurturing system — v1.5, spring
+
+Solving a recommended problem earns coins. Coins buy pixel-art pets, which
+have growth stages and are raised over time.
+
+Why it is worth doing rather than dismissing:
+
+- **It targets the weakest success criterion.** Good recommendations do not
+  cause return visits — a good recommendation makes the user leave for
+  Codeforces. Retention needs a separate mechanism, and gamification is the
+  one that demonstrably works (Forest, Duolingo, Habitica).
+- **It is a genuine differentiator.** The incumbent is a clean, serious tool.
+  This is a different product rather than a worse copy, and the audience is
+  largely teenagers who play games.
+- **It produces a better experiment than the 70% test.** "Does gamification
+  increase problems solved per week?" has a larger effect, appears within
+  weeks rather than months, and is measurable from data already collected.
+
+Design decisions already made:
+
+- **Reward scales with difficulty**, specifically `coins ∝ 1 − P(solve)` using
+  this project's own model. Otherwise users farm 800-rated problems. This also
+  makes the economy depend on the probabilities being well calibrated, which
+  ties the feature to §9 rather than bolting it on.
+- **Shop before chests.** A shop where coins buy a chosen pet is far simpler —
+  no rarity balancing — and avoids frustration. Random chests retain better
+  because variable-ratio reward is strongly habit-forming, which is also a
+  reason to be careful with an audience of teenagers. Add chests only after
+  the shop proves people care.
+
+Why it is not v1.0:
+
+1. **It requires accounts.** A collection tied to a typeable handle is broken;
+   anyone could spend anyone's coins. Verification without passwords is
+   possible — the incumbent has users submit a deliberate compilation error
+   within 60 seconds to prove handle ownership — but sessions and ownership
+   are still real work, and §5 currently excludes accounts.
+2. **Timing.** v1.0 is already mid-November. Adding this pushes into January
+   and collides with USACO contest season, which the calendar exists to avoid.
+3. **Dependency.** Gamification amplifies a working product and cannot rescue
+   a broken one. If the recommendations are poor, rewards feel manipulative.
+   The model has to be good first.
+
+Known risk: art, animation and game feel have no natural stopping point, and
+this is more enjoyable to build than debugging a likelihood function. It needs
+a fixed slot, not an open-ended one.
 
 ### Knowledge tracing
 
