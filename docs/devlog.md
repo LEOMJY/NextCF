@@ -206,17 +206,49 @@ Pinned the version in spec §7, which previously just said "Python". The
 deployed copy will need to match, and hosting platforms want the version
 stated explicitly.
 
-### python-lsp-server: looked at, not installed
+### python-lsp-server: attempted, abandoned, removed
 
 Went looking for `python-lsp-server` thinking it was needed. It is a *language
-server* — a background program an editor talks to for autocomplete, error
-squiggles and go-to-definition, over a shared standard called LSP.
+server* — a background program the editor talks to for autocomplete, error
+squiggles and go-to-definition, over a shared standard called LSP. The editor
+itself is a text box and understands no language; the server does all of it.
 
-Not installed, because VS Code's official Python extension already ships
-Pylance, which does the same job. Running both means two servers analysing the
-same file and duplicate errors on every line. `python-lsp-server` is the right
-answer for editors that cannot use Pylance — Neovim, Helix, Emacs — which is
-not the setup here. Revisit only if the editor changes.
+The install was attempted and failed partway (see WinError 17 below), then
+abandoned once it became clear it was redundant, and the partial install was
+removed.
+
+Redundant because VS Code's Python extension already ships **Pylance**, a
+language server, and it was already installed here — `ms-python.vscode-pylance`
+was in the extension list the whole time. Running two servers on one file means
+every error reported twice.
+
+The thing that made this click: C++ has had exactly the same arrangement on
+this machine for years, invisibly. `ms-vscode.cpptools` bundles an 18 MB
+`cpptools.exe`, which is what produces C++ autocomplete. It is *not* the
+compiler — `g++` lives separately in MSYS2 and only runs on build. Two
+programs, two independent ways to break, which is why "squiggles everywhere but
+it compiles fine" is a real failure mode.
+
+Python's equivalent is split across three extensions rather than one:
+`ms-python.python` (finds interpreters and venvs), `ms-python.vscode-pylance`
+(the language server), `ms-python.debugpy` (the debugger).
+
+`python-lsp-server` is the right answer only for editors that cannot use
+Pylance — Neovim, Helix, Emacs — since Pylance is licensed to Microsoft's build
+of VS Code. Revisit only if the editor changes. The switch, if ever needed, is
+the `python.languageServer` setting, which accepts `Default | Jedi | Pylance |
+None`.
+
+### Open: WinError 17 on pip install --user
+
+`pip install --user` died with `[WinError 17] The system cannot move the file to
+a different disk drive` while renaming a file *inside a single directory* under
+`AppData\Roaming`. `TEMP` and the target are both on `C:`, so the plain
+cross-drive explanation does not hold — something is redirecting that path, most
+likely OneDrive folder backup.
+
+Not diagnosed yet, and it is not cosmetic: the same call fails the same way for
+`pip install flask`. Resolve before setting up the virtual environment.
 
 ### Free-threaded build is the launcher default
 
