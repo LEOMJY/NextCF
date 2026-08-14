@@ -214,15 +214,41 @@ distribution".
 Promoted to an explicit v1.0 goal, not a v0.8 afterthought. The stated target:
 **it must not read as a student project.**
 
-### What actually causes that read
+### Two surfaces, judged differently
 
-Not a lack of animation. Over-animation is a *stronger* amateur signal than
-plainness — scroll-triggered entrances, parallax, particle backgrounds and page
-transitions read as "someone found a library." The polished reference points in
-this space (Stripe's docs, Linear, Vercel, Tailwind's site) are *less*
-interactive than amateur sites, not more.
+An earlier draft of this section said animation reads as amateur. That is wrong
+as stated, and the correction matters. Heavily animated studio work — the kind
+collected in the GSAP showcase — is excellent and is made by professionals. Bad
+animation reads as amateur; animation does not.
 
-What actually causes it, all static:
+The distinction that actually applies here is what a given page is *for*:
+
+```
+LANDING PAGE — before a handle is entered
+  Job: convince a stranger this is worth thirty seconds.
+  This is a marketing surface. Expressive type, a strong colour decision,
+  a memorable visual idea, motion — all legitimate here.
+  It is also the page that appears in the Codeforces blog post screenshot,
+  so it has the highest return of anything in this section.
+
+THE TOOL — progress page, results page
+  Job: return five problems and get out of the way.
+  Someone waiting forty seconds on a job does not want cinema, and someone
+  comparing five problems wants a table they can read. Calm, fast, legible.
+```
+
+Linear's marketing site is animated; the Linear app is not. That is not a
+contradiction, it is two kinds of page.
+
+Realistic constraint, not a matter of taste: the showcase sites are weeks of
+professional work, often with WebGL, custom illustration and custom type. What
+*is* cheap to take from them — and accounts for most of the first impression —
+is large confident typography, one decisive colour choice, generous space, and a
+single clear visual idea.
+
+### What causes the amateur read, on both surfaces
+
+All static, all boring to fix:
 
 - Browser-default fonts and default form controls
 - Spacing chosen ad hoc, so nothing lines up and rhythm is absent
@@ -231,21 +257,29 @@ What actually causes it, all static:
 - **Unhandled states** — a Flask traceback when a handle is mistyped is the
   single loudest tell on this list
 
-### Design tokens — decided once, at v0.1
+### Design tokens — a system, chosen by the author
 
-These are cheap to set now and painful to retrofit across templates later, which
-is why they are v0.1 and not v0.8.
+The requirement is that **a system exists and is not broken**, as CSS custom
+properties in one file. Which system is a design decision and belongs to whoever
+is designing.
 
 ```
-type scale     5 sizes, fixed ratio. Nothing outside the scale.
-spacing scale  4 / 8 / 16 / 24 / 48 / 96. Nothing outside the scale.
-colour         one neutral ramp (not pure black or white) + exactly one accent
-font           one real typeface, self-hosted or system stack chosen deliberately
-radius/shadow  one value each, or none
+type scale     a fixed set of sizes, from a ratio
+spacing scale  a fixed set of steps
+colour         a deliberate palette
+font           a typeface chosen on purpose
+radius/shadow  a decided value, or none
 ```
 
-All of it as CSS custom properties in one file. The rule that makes tokens work
-is that nothing may use a value outside them.
+The reason this is not a constraint on creativity: the boldest sites run the
+tightest systems. A brutal pink-and-yellow showcase site is bold because two
+colours were chosen and then applied without flinching. The opposite — eleven
+spacing values and nine font sizes — does not read as more creative, it reads as
+unfinished, because the eye reads "arbitrary" as "not done yet."
+
+An earlier draft of this section specified exact numbers (a 4/8/16/24/48/96 step
+and exactly one accent colour). Those were a reasonable default presented as a
+rule, and they are withdrawn. Pick the scale; then hold it.
 
 ### Interactivity that is in scope
 
@@ -260,20 +294,27 @@ Three things, each because the product needs it rather than because it decorates
 3. **Solve probability on each recommendation** (v0.4). "70%" is the entire
    pitch; it earns visual weight.
 
-### Explicitly out, for v1.0
+### Out of scope on the tool surface
 
-Scroll-triggered animation, parallax, page transitions, custom cursors,
-particle or gradient backgrounds, animated counters. Reconsidered only for the
-v1.5 pet system, where motion is the feature.
+On the progress and results pages: scroll-triggered animation, parallax, page
+transitions, custom cursors, animated counters. Not because they are amateur,
+but because those pages are read under time pressure by someone who wants to
+leave, and motion there costs attention without returning any.
+
+**The landing page is not covered by this.** Motion is allowed there if it
+carries the visual idea rather than decorating it. The limit on the landing page
+is the budget below, not a rule about technique.
 
 The React rejection in §7 was re-examined against this section and stands: SVG
-rendered from Jinja and a polling progress page need no client framework.
+rendered from Jinja and a polling progress page need no client framework. If the
+landing page ever wants motion, GSAP loaded from a CDN adds no build step.
 
 ### Budget, and what it comes out of
 
-**Design work for v1.0 is capped at roughly 15 hours**, split as: tokens and
-base stylesheet at v0.1 (~3h), progress page (~2h), the breakdown chart
-(~5h), states and polish pass at v0.8 (~5h).
+Design work for v1.0 gets **a fixed number of hours, set before starting, taken
+from §9**. The mechanism is decided; the number is not yet — an earlier draft
+put 15 hours here, but that figure was invented rather than estimated and is
+withdrawn until it is worked out against the actual milestones.
 
 That time comes out of §9. This is the trade being made deliberately: a tool
 nobody trusts the look of does not get used, but §9 is the reason the project
@@ -338,8 +379,8 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 
 | Version | Does | Target |
 |---|---|---|
-| v0.1 | Enter a handle, see your submissions. Design tokens and base stylesheet — see §7.1. Deployed. | end Aug |
-| v0.2 | Background job with a progress page; caching | early Sep |
+| v0.1 | Enter a handle, see your submissions. Deployed. | end Aug |
+| v0.2 | Background job with a progress page; caching. Design tokens and base stylesheet — see §7.1 | early Sep |
 | v0.3 | Bulk collection of ~2000 users — rate limited, resumable | mid Sep |
 | v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down | early Oct |

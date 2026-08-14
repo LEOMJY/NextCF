@@ -323,3 +323,45 @@ people to look. §9 is what they find.
 
 `.py` files in this repo: 0. v0.1 due end of August, and it now includes the
 base stylesheet as well as the handle form.
+
+### Same-day correction to the above
+
+Pushed back on three of the four things that had been written into the spec,
+and was right to on all three.
+
+**"Over-animation reads as amateur" was wrong.** I showed the GSAP showcase —
+bleibtgleich'26, Nodeck, Bombon, Era Residence — and asked whether that counts
+as over-animation. It does not. Those are professional studio sites and they are
+excellent. Bad animation reads as amateur; animation does not.
+
+What replaced the bad rule is a better distinction, and it is the useful thing
+that came out of this: **the landing page and the tool are different surfaces
+with different jobs.** The landing page has to convince a stranger to spend
+thirty seconds, and it is the screenshot that goes in the Codeforces blog post —
+expressive work belongs there. The progress and results pages are read by
+someone under time pressure who wants to leave for Codeforces, and motion there
+costs attention and returns nothing. Linear's marketing site is animated; the
+Linear app is not.
+
+**The exact token numbers were invented.** 4/8/16/24/48/96 and "exactly one
+accent colour" were written in as a rule. They are one reasonable system,
+and the one-accent part is contradicted by the showcase sites, which commit hard
+to two or three. The real requirement is that a system exists and does not get
+broken. Which system is mine to pick.
+
+**Tokens in v0.1 was wrong.** It silently grew v0.1 without changing the
+deadline. Moved to v0.2, where it pairs with the progress page anyway. v0.1
+answers one question: does this run.
+
+**The 15-hour budget was invented too**, so the number is withdrawn until it is
+estimated properly. I kept the mechanism — the budget comes out of §9, and if it
+overruns design stops. That is the strictest option and I chose it deliberately,
+for the reason §11 already gives about the pet system: this kind of work has no
+natural stopping point.
+
+ADR 0001 amended in place with all four corrections and the general lesson: 
+personal defaults stated in the imperative are indistinguishable from
+real constraints, and end up in the spec as if they were.
+
+What I actually want, now written down properly: an expressive landing page, and
+a tool that is fast and calm.
