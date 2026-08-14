@@ -169,7 +169,7 @@ probability predictions, recommendation lists.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Language | Python | Half known already, and every library needed for the modelling later is Python |
+| Language | Python 3.14 | Half known already, and every library needed for the modelling later is Python |
 | Web framework | Flask | Smallest thing that works; large amount of beginner material |
 | Database | SQLite | A single file on disk. Nothing to install, nothing to run |
 | Pages | Jinja templates (ships with Flask) | Lists and tables. No JavaScript build step needed |
@@ -199,6 +199,14 @@ Explicitly rejected:
 Known risk: most hosting platforms wipe the filesystem on redeploy, which
 would delete a SQLite file. Resolve at v0.1 — either a host with a persistent
 disk, or PostgreSQL for the deployed copy only.
+
+Known risk: the local install is Python 3.14, and the `py` launcher currently
+defaults to the free-threaded build (`3.14t`) rather than the standard one.
+Free-threaded builds are a separate binary target, and prebuilt packages for
+numpy/scipy/scikit-learn — needed for the model in §9 — are not always
+published for them. Create environments with the explicit interpreter, not the
+bare launcher default. Revisit if an install ever fails with "no matching
+distribution".
 
 ## 8. Assumptions
 

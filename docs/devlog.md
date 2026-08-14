@@ -190,3 +190,43 @@ Deferred to v1.5 because it needs user accounts (§5 currently excludes them),
 because v1.0 is already at mid-November and this would push it into contest
 season, and because gamification amplifies a working product rather than
 rescuing a broken one — the model has to be good first.
+
+---
+
+## 2026-08-13 — Python installed; a tooling detour
+
+### Python 3.14.7 is in
+
+First task of v0.1 done. Installed from python.org, all-users
+(`C:\Program Files\Python314`), with "Add to PATH" ticked. `pip` 26.2.1,
+`sqlite3` 3.50.4 available from the standard library, so the database layer
+needs nothing installed.
+
+Pinned the version in spec §7, which previously just said "Python". The
+deployed copy will need to match, and hosting platforms want the version
+stated explicitly.
+
+### python-lsp-server: looked at, not installed
+
+Went looking for `python-lsp-server` thinking it was needed. It is a *language
+server* — a background program an editor talks to for autocomplete, error
+squiggles and go-to-definition, over a shared standard called LSP.
+
+Not installed, because VS Code's official Python extension already ships
+Pylance, which does the same job. Running both means two servers analysing the
+same file and duplicate errors on every line. `python-lsp-server` is the right
+answer for editors that cannot use Pylance — Neovim, Helix, Emacs — which is
+not the setup here. Revisit only if the editor changes.
+
+### Free-threaded build is the launcher default
+
+`py --list` shows `3.14t` (free-threaded, no GIL) marked as default ahead of
+the standard build. Free-threaded is a separate binary target and prebuilt
+packages for the scientific stack are not always published for it. Nothing is
+broken today, but a virtual environment created from the bare launcher default
+could fail to install numpy later, with an error that does not obviously point
+at this cause. Recorded as a known risk in spec §7.
+
+### Next
+
+Still v0.1: virtual environment, install Flask, get a page to say hello.
