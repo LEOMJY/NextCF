@@ -535,3 +535,56 @@ Unchanged, and now actually unblocked: virtual environment, Flask, a page that
 says hello. Step one still needs no third-party package at all — `urllib.request`
 and `json` are standard library, so fetching one user's submissions from
 `user.status` can be written first.
+
+---
+
+## 2026-08-14 — First code: `api_client.py`
+
+`.py` files: **1**. The venv exists at the project folder, built with
+`py -3.14` explicitly, and Flask 3.1.3 installed into it without incident.
+
+### Layout decided
+
+Modules sit flat at the repo root, as spec §4 already listed them — not nested
+in a package folder. At eight files a package buys nothing but import
+ceremony. `templates/` and `static/` will be separate directories only because
+Flask requires those exact names.
+
+### The bug worth remembering
+
+First version caught `urllib.error.URLError` and printed
+`could not reach Codeforces: Bad Request` for a handle that does not exist.
+Both halves of that sentence are wrong.
+
+Codeforces does **not** answer `200 OK` with `status: FAILED` for a bad handle,
+which is what the code assumed and what its comment claimed. It answers
+**HTTP 400**, which makes `urlopen` raise before the body is ever parsed — and
+the actual explanation is in the body of that error response:
+
+```
+{"status":"FAILED","comment":"handle: User with handle nosuchuser42qq not found"}
+```
+
+`HTTPError` is itself readable like a response, so the fix is to catch it and
+`.read()` it. Now prints
+`Codeforces rejected the request: handle: User with handle nosuchuser42qq not found`.
+
+This is the failure mode this file is most exposed to: it
+did not crash, it did not produce a stack trace, and the wrong explanation was
+sitting in a code comment that read as authoritative. The only reason it was
+caught is that the bad-handle path was actually run instead of assumed to work.
+
+Also relevant to §7.1, which calls an unhandled traceback on a mistyped handle
+the loudest amateur tell on the site: the message that will eventually reach
+the browser now says what was wrong with the input.
+
+### Scope held
+
+No rate limiting, retries or backoff yet — v0.3, per spec §4. `count=100` is
+hardcoded; paging through a full history comes with `sync.py` at v0.2.
+
+### Next
+
+`requirements.txt` (via `pip freeze`) so a host can rebuild the venv, then
+`web.py` — one route, one template, the handle form. That is v0.1 done bar
+deployment.
