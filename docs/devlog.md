@@ -365,3 +365,57 @@ real constraints, and end up in the spec as if they were.
 
 What I actually want, now written down properly: an expressive landing page, and
 a tool that is fast and calm.
+
+---
+
+## 2026-08-14 — Site structure decided; landing page added to the spec
+
+§4's diagram never had a landing page. It went `browser -> enter handle`, which
+quietly assumed the tool *was* the site. Fixed.
+
+### Five pages
+
+`/`, `/progress/<job>`, `/results/<handle>`, `/how`, `/privacy`. Written up in
+spec §4.1, with reasoning in `docs/decisions/0002-site-structure.md`.
+
+My idea was one landing page holding everything — the pitch, how it works,
+privacy, per-version notes — with a link to skip into the tool if you just want
+to work. Two changes came out of discussing it.
+
+**The handle input goes in the hero itself**, not behind a skip link. The reason
+is §9: it needs 20 people to come back a *second* time, and a returning visitor
+does not want the pitch again. With the input in the hero, one page serves both
+— the returner types immediately and never scrolls, the newcomer scrolls past it
+for the argument. A skip link would charge a click on every visit forever.
+
+The cost, accepted: the hero has to hold a strong visual statement *and* a form
+field at the same time. That is harder to compose than either alone.
+
+**Privacy and how-it-works get their own pages.** A page that is simultaneously a
+sales pitch and a privacy policy is neither, and splitting them lets the pitch
+stay short, which is most of what makes a pitch work.
+
+### `/how` is a v1.0 requirement
+
+Not an appendix. §3 says measurement is the only differentiator, so the §9
+number needs a permanent address on the site instead of living only in a
+Codeforces blog post that scrolls away. Someone deciding whether to trust the
+recommendations should reach that in one click. Scheduled at v0.6, because
+that is when the number first exists.
+
+### Changelog cut
+
+Wanted per-version notes on the site. Cut to v2.0 and written into §5. Nobody
+with 50 users reads release notes — it looks professional while being a way to
+feel productive without shipping. A footer line if I still want it later.
+
+### Style
+
+One token set across both surfaces, used loudly on `/` and quietly in the tool,
+so they read as one product rather than two websites. The failure mode to watch
+for is the two drifting into different visual languages.
+
+### Still true
+
+`.py` files: 0. v0.1 is now two pages instead of one — both allowed to be crude —
+and still due end of August.

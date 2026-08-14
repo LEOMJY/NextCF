@@ -78,7 +78,10 @@ not run at the same times.
                           |
   WEB APP
   ─────────────────────────────────────────────────────
-      browser
+      /  landing page
+         |    the pitch, and the handle input in the hero itself
+         |    scroll past it for how it works; /how and /privacy in nav
+         |
          |  enter handle
          v
       web.py  ──── starts job ────>  sync.py
@@ -111,6 +114,48 @@ inside a model that was learned from the crowd.
 The site never runs or judges anybody's code. Users solve problems on
 Codeforces; this reads the outcome from the public API.
 
+## 4.1 Pages
+
+Five URLs. Two are the tool, three are everything else, and the split matters
+because the landing page has a different job from the tool — see §7.1.
+
+| URL | Job | Milestone |
+|---|---|---|
+| `/` | The pitch, **with the handle input in the hero itself** | v0.1 |
+| `/progress/<job>` | Show a long job making progress without lying about it | v0.2 |
+| `/results/<handle>` | Five problems, the probability on each, the topic breakdown | v0.1 crude, v0.4 real |
+| `/how` | How the model works, and the §9 number | v0.6 |
+| `/privacy` | What data is read, what is stored, how to have it removed | v0.7 |
+
+### Why the input is in the hero, not behind a "start" link
+
+§9 requires 20 people to come back a second time. A returning visitor does not
+need the pitch again — they need to type a handle and leave. Putting the input
+in the hero serves both audiences from one page: the returner types immediately
+and never scrolls, the newcomer scrolls past it for the argument.
+
+The alternative considered was a pure visual statement with a skip link, which
+costs the returning visitor a click on every visit for no gain.
+
+The cost is that the hero has to carry a strong visual statement *and* a form
+field at the same time, which is harder to compose. Accepted.
+
+Nothing on the landing page is compulsory reading. Scrolling is optional; the
+tool is always one action away.
+
+### Why `/how` is not an appendix
+
+§3 states the differentiator is measurement and that it is the only one. The
+number from §9 needs a permanent home on the site, not just a Codeforces blog
+post that scrolls away. A visitor who wants to know whether to trust the
+recommendations should be able to find out in one click.
+
+### Deliberately not a page
+
+**A changelog.** A tool with 50 users has nobody reading release notes. It looks
+professional and is mostly a way to feel productive without shipping anything.
+One line in the footer if wanted; a page is v2.0.
+
 ## 5. What it does NOT do
 
 None of the following are in v1.0, regardless of how good they sound in
@@ -123,6 +168,7 @@ not slipped in while coding.
 - No social features — no friends, leaderboards, or comparison to others.
 - No hints, editorials, or explanations of problems.
 - No AI chat, of any kind, anywhere.
+- No changelog page — see §4.1.
 - No knowledge tracing, bandits, spaced repetition, or USACO problem ratings.
   All v2.0 — see §11.
 
@@ -224,17 +270,22 @@ animation reads as amateur; animation does not.
 The distinction that actually applies here is what a given page is *for*:
 
 ```
-LANDING PAGE — before a handle is entered
+LANDING PAGE — /  (page inventory in §4.1)
   Job: convince a stranger this is worth thirty seconds.
   This is a marketing surface. Expressive type, a strong colour decision,
   a memorable visual idea, motion — all legitimate here.
   It is also the page that appears in the Codeforces blog post screenshot,
   so it has the highest return of anything in this section.
+  Constraint it does not get to ignore: the handle input lives in the hero,
+  so whatever visual idea is chosen has to accommodate a form field.
 
-THE TOOL — progress page, results page
+THE TOOL — /progress, /results
   Job: return five problems and get out of the way.
   Someone waiting forty seconds on a job does not want cinema, and someone
   comparing five problems wants a table they can read. Calm, fast, legible.
+
+Same tokens on both. The landing page uses them loudly and the tool uses them
+quietly, so the two read as one product rather than two websites.
 ```
 
 Linear's marketing site is animated; the Linear app is not. That is not a
@@ -384,8 +435,8 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 | v0.3 | Bulk collection of ~2000 users — rate limited, resumable | mid Sep |
 | v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down | early Oct |
-| v0.6 | First real model (logistic / Rasch), scored against the baseline | late Oct |
-| v0.7 | Nightly re-sync, logging, error handling, tests | early Nov |
+| v0.6 | First real model (logistic / Rasch), scored against the baseline; `/how` | late Oct |
+| v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy` | early Nov |
 | v0.8 | Design polish pass and unhandled states — see §7.1 | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
