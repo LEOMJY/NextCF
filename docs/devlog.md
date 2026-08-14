@@ -419,3 +419,119 @@ for is the two drifting into different visual languages.
 
 `.py` files: 0. v0.1 is now two pages instead of one — both allowed to be crude —
 and still due end of August.
+
+---
+
+## 2026-08-14 — WinError 17 diagnosed; it was never OneDrive
+
+### The previous diagnosis was a guess, and it was wrong
+
+The 08-13 entry blamed OneDrive folder backup for `pip install --user` dying with
+`[WinError 17] The system cannot move the file to a different disk drive`. Not
+true. `%APPDATA%` is `C:\Users\leoma\AppData\Roaming`, and the registry key that
+records folder redirection —
+`HKCU\...\Explorer\User Shell Folders` — redirects only Desktop, Documents and
+Pictures into OneDrive. AppData is untouched.
+
+### What it actually is
+
+The terminal I had been running pip from was hosted inside a **packaged-app
+container** (MSIX): a Windows sandbox that hands an app a private view of the filesystem, so writes to
+some paths are silently redirected somewhere else. Measured directly rather than
+assumed — a file written to
+
+```
+C:\Users\leoma\AppData\Roaming\_vtest\marker.txt
+```
+
+physically appeared at
+
+```
+D:\WpSystem\<SID>\AppData\Local\Packages\<package-id>\LocalCache\Roaming\_vtest\marker.txt
+```
+
+The path says `C:`. The bytes are on `D:`.
+
+That is the whole bug. The last step of every pip install is renaming a staged
+file into its final home. Under AppData one side of that rename resolves to the
+real `C:` and the other to the redirected copy on `D:`. Windows sees a rename
+across two volumes — which is not a rename, it is a copy plus a delete — and
+returns `ERROR_NOT_SAME_DEVICE`, which Python reports as WinError 17.
+
+It also explains the detail that made no sense before: the failure happened
+"inside a single directory". It only looked like a single directory.
+
+A probe over seven rename combinations matches this exactly — every rename with
+one end under AppData failed, every rename with both ends in a plain directory
+succeeded:
+
+| Rename | Result |
+|---|---|
+| within `%TEMP%` (not redirected) | OK |
+| within the project folder on `D:` | OK |
+| within `%APPDATA%` — same directory | **WinError 17** |
+| `%TEMP%` → `%APPDATA%` | **WinError 17** |
+| `%TEMP%` → `%LOCALAPPDATA%` | **WinError 17** |
+| `%APPDATA%` → `%TEMP%` | **WinError 17** |
+| `%TEMP%` → `D:` (a genuine cross-volume move) | **WinError 17** |
+
+### Not yet confirmed: whether my own terminal has this problem at all
+
+Everything above was measured from inside the container, so it says nothing about
+a normal PowerShell window. `pip install --user` may well work fine there. Worth
+one command to find out, but it does not block anything, because the fix below is
+what I wanted regardless.
+
+### The fix, verified end to end
+
+A **virtual environment** — a private folder holding its own copy of Python and
+its own installed packages, so projects cannot break each other — placed inside
+the project on `D:`. It never touches AppData, so the redirection cannot apply.
+
+Created one at `a throwaway folder on `D:`` and installed Flask into it
+with no workarounds, no environment variables, nothing special. Exit code 0.
+Flask 3.1.3 imports and constructs an app object. Probe deleted afterwards.
+
+This also confirms the free-threaded risk recorded in spec §7 is real and is
+handled by naming the interpreter explicitly. The venv built from the standard
+3.14 build pulled `markupsafe-3.0.3-cp314-cp314-win_amd64.whl` — a prebuilt
+binary. `cp314`, not `cp314t`. `py` on its own still defaults to `3.14t`, so
+environments get created with `py -3.14`, never bare `py`.
+
+### Separately: AppData is EFS-encrypted and the key is missing
+
+Turned up while chasing this and unrelated to pip. Both
+`C:\Users\leoma\AppData\Roaming` and `...\AppData\Local` carry the EFS
+(Encrypting File System) attribute, and `cipher /c` reports:
+
+```
+E Roaming
+  Key information cannot be retrieved.
+```
+
+If that is accurate on the real filesystem and not an artifact of the container,
+it is a data-loss risk with nothing to do with this project: files encrypted with
+a key that cannot be produced are unreadable after a Windows reinstall or a
+profile reset. Flagged, not acted on. Check from a normal terminal before doing
+anything about it.
+
+### Added `.gitignore`
+
+The repo had none, and the venv would have been the first thing committed by
+accident. Ignores `.venv/`, `__pycache__/`, `*.db` and `.env`. The database is
+generated data and the venv is rebuilt from `requirements.txt`; neither is source.
+
+### Lesson
+
+Two sessions of "it's probably OneDrive" cost more than ten minutes of measuring
+would have. The tell was there in the original error and got explained away: a
+rename inside one directory cannot fail with a cross-device error, so the
+directory was not one directory. When the evidence contradicts the theory, the
+theory is wrong — do not invent a mechanism to rescue it.
+
+### Next
+
+Unchanged, and now actually unblocked: virtual environment, Flask, a page that
+says hello. Step one still needs no third-party package at all — `urllib.request`
+and `json` are standard library, so fetching one user's submissions from
+`user.status` can be written first.

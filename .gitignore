@@ -1,0 +1,22 @@
+# Virtual environment — recreated from requirements.txt, never committed
+.venv/
+venv/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# The SQLite database is generated data, not source
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+.env
+
+# Editor / OS noise
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
