@@ -173,7 +173,8 @@ probability predictions, recommendation lists.
 | Web framework | Flask | Smallest thing that works; large amount of beginner material |
 | Database | SQLite | A single file on disk. Nothing to install, nothing to run |
 | Pages | Jinja templates (ships with Flask) | Lists and tables. No JavaScript build step needed |
-| Styling | One CSS file, on top of a classless framework such as Pico.css | Looking credible matters — the incumbent is polished, and the launch screenshot is the pitch. A single stylesheet link achieves that with no npm and no build step |
+| Styling | Own CSS built on design tokens. No framework, no build step | Promoted from "classless framework" — see §7.1. A framework gives a floor but also a recognisable look, and "does not read as templated" is now an explicit goal. Three pages of hand-written CSS is roughly 200 lines and is fully ours |
+| Charts | Server-rendered SVG from Jinja | The topic breakdown is the one thing a template cannot give us. SVG generated from the data needs no JavaScript library, no CDN, and no build step, and it renders in the launch screenshot |
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
 | Scheduling | A timed loop, or the host's cron if it has one | Nightly re-sync |
 | Hosting | Railway or Render | Connects to GitHub, redeploys on push |
@@ -207,6 +208,81 @@ numpy/scipy/scikit-learn — needed for the model in §9 — are not always
 published for them. Create environments with the explicit interpreter, not the
 bare launcher default. Revisit if an install ever fails with "no matching
 distribution".
+
+## 7.1 Design
+
+Promoted to an explicit v1.0 goal, not a v0.8 afterthought. The stated target:
+**it must not read as a student project.**
+
+### What actually causes that read
+
+Not a lack of animation. Over-animation is a *stronger* amateur signal than
+plainness — scroll-triggered entrances, parallax, particle backgrounds and page
+transitions read as "someone found a library." The polished reference points in
+this space (Stripe's docs, Linear, Vercel, Tailwind's site) are *less*
+interactive than amateur sites, not more.
+
+What actually causes it, all static:
+
+- Browser-default fonts and default form controls
+- Spacing chosen ad hoc, so nothing lines up and rhythm is absent
+- Pure `#000` on pure `#fff`, or five unrelated colours
+- Undifferentiated walls of text, no type hierarchy
+- **Unhandled states** — a Flask traceback when a handle is mistyped is the
+  single loudest tell on this list
+
+### Design tokens — decided once, at v0.1
+
+These are cheap to set now and painful to retrofit across templates later, which
+is why they are v0.1 and not v0.8.
+
+```
+type scale     5 sizes, fixed ratio. Nothing outside the scale.
+spacing scale  4 / 8 / 16 / 24 / 48 / 96. Nothing outside the scale.
+colour         one neutral ramp (not pure black or white) + exactly one accent
+font           one real typeface, self-hosted or system stack chosen deliberately
+radius/shadow  one value each, or none
+```
+
+All of it as CSS custom properties in one file. The rule that makes tokens work
+is that nothing may use a value outside them.
+
+### Interactivity that is in scope
+
+Three things, each because the product needs it rather than because it decorates:
+
+1. **Topic-breakdown visualisation** (v0.4–v0.5). §1 already promises this and
+   calls it useful on its own. It is also the only element on the site a
+   template cannot produce, and it is the differentiator made visible. Highest
+   return of anything in this section.
+2. **The progress page** (v0.2). Already required — a job running tens of
+   seconds is a product surface, and it is the moment of peak user attention.
+3. **Solve probability on each recommendation** (v0.4). "70%" is the entire
+   pitch; it earns visual weight.
+
+### Explicitly out, for v1.0
+
+Scroll-triggered animation, parallax, page transitions, custom cursors,
+particle or gradient backgrounds, animated counters. Reconsidered only for the
+v1.5 pet system, where motion is the feature.
+
+The React rejection in §7 was re-examined against this section and stands: SVG
+rendered from Jinja and a polling progress page need no client framework.
+
+### Budget, and what it comes out of
+
+**Design work for v1.0 is capped at roughly 15 hours**, split as: tokens and
+base stylesheet at v0.1 (~3h), progress page (~2h), the breakdown chart
+(~5h), states and polish pass at v0.8 (~5h).
+
+That time comes out of §9. This is the trade being made deliberately: a tool
+nobody trusts the look of does not get used, but §9 is the reason the project
+exists, and a beautiful site with no evaluation is the failure mode this whole
+document was written to avoid. If the budget overruns, design stops — not §9.
+
+Worth stating plainly: for *this* product the strongest signal of seriousness is
+not the CSS, it is publishing a number nobody else has published. Design makes
+people willing to look. §9 is what they find.
 
 ## 8. Assumptions
 
@@ -262,14 +338,14 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 
 | Version | Does | Target |
 |---|---|---|
-| v0.1 | Enter a handle, see your submissions. Deployed. | end Aug |
+| v0.1 | Enter a handle, see your submissions. Design tokens and base stylesheet — see §7.1. Deployed. | end Aug |
 | v0.2 | Background job with a progress page; caching | early Sep |
 | v0.3 | Bulk collection of ~2000 users — rate limited, resumable | mid Sep |
-| v0.4 | Per-topic solve counts; rating-only baseline recommender | late Sep |
+| v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down | early Oct |
 | v0.6 | First real model (logistic / Rasch), scored against the baseline | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests | early Nov |
-| v0.8 | Visual design pass — see §7 | early Nov |
+| v0.8 | Design polish pass and unhandled states — see §7.1 | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
 | v2.0 | See §11 | spring |

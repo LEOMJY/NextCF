@@ -267,3 +267,59 @@ Note: the first script does not need Flask or any third-party package.
 `urllib.request` and `json` are both in the standard library, so step one can be
 written and run today despite `pip` being broken — fetch one user's submissions
 from `user.status` and print them.
+
+---
+
+## 2026-08-14 — Design promoted to a v1.0 goal
+
+Decided the site must not read as a high-school project, and that the previous
+plan — Pico.css plus one design pass at v0.8 — was too weak for that.
+
+My instinct was that this needed "interactive things". That turned out to be
+backwards, and it is the useful thing I learned today: **over-animation is a
+stronger amateur signal than plainness.** Scroll-triggered entrances, parallax,
+particle backgrounds and page transitions read as "someone found a library". The
+sites that actually look expensive — Stripe's docs, Linear, Vercel, Tailwind —
+are *less* interactive than amateur ones, not more.
+
+What actually causes the amateur read is static and boring to fix: default
+fonts, ad-hoc spacing, pure black on pure white, no type hierarchy, and
+unhandled states. A Flask traceback when someone mistypes a handle is the
+loudest tell of the lot.
+
+So the changes are mostly about restraint, not addition:
+
+- Design tokens move to **v0.1**, not v0.8 — type scale, spacing scale, one
+  neutral ramp plus one accent, one typeface, nothing outside the scale.
+  Retrofitting spacing across templates later is expensive; polish applied late
+  is cheap.
+- **Dropped Pico.css** in favour of own CSS. A classless framework gives a floor
+  for free but also a recognisable look, and "not templated" is now the goal.
+- **Topic-breakdown chart as server-rendered SVG** from Jinja, no chart library,
+  promoted to a v0.4 deliverable. It is the one element on the site a template
+  cannot produce, and it is the differentiator made visible.
+- Three interactive elements total, all justified by the product: that chart,
+  the progress page, and the solve probability on each recommendation.
+- Everything decorative explicitly out until v1.5.
+
+Written up as `docs/decisions/0001-design-as-a-v1-goal.md` — the first ADR in
+this repo, which the definition of done has been asking for since day one.
+
+### The cost, written down so it cannot be quietly forgotten
+
+Budget is roughly 15 hours and it comes out of §9. The tiebreak is stated in
+both the spec and the ADR: **if the budget overruns, design stops, not §9.**
+
+§11 already warns that the pet system is "more enjoyable to build than debugging
+a likelihood function" and needs a fixed slot rather than an open-ended one.
+Design is the same trap wearing a different costume, arriving seven months
+earlier. Hence the number.
+
+Also worth keeping in view: for this product the strongest signal of seriousness
+is not the CSS, it is publishing a number nobody else has published. Design gets
+people to look. §9 is what they find.
+
+### Still true
+
+`.py` files in this repo: 0. v0.1 due end of August, and it now includes the
+base stylesheet as well as the handle form.
