@@ -262,3 +262,8 @@ at this cause. Recorded as a known risk in spec §7.
 ### Next
 
 Still v0.1: virtual environment, install Flask, get a page to say hello.
+
+Note: the first script does not need Flask or any third-party package.
+`urllib.request` and `json` are both in the standard library, so step one can be
+written and run today despite `pip` being broken — fetch one user's submissions
+from `user.status` and print them.
