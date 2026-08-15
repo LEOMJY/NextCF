@@ -10,14 +10,14 @@ be just hard enough — roughly a 70% chance you solve them.
 
 ## Status: v0.1, in progress
 
-**Nothing on this page is finished yet.** What exists today is a command-line
-script that fetches and prints one user's submissions. There is no web
-interface, no database and no model.
+**Nothing on this page is finished yet.** What exists today is a two-page web
+app that fetches and lists one user's recent submissions, plus the command-line
+script it grew out of. There is no styling, no database and no model.
 
 | | |
 |---|---|
-| Works now | Fetch a handle's submissions from the Codeforces API and print them |
-| Next | A web page with a handle input, deployed |
+| Works now | Enter a handle, see your last 100 submissions. Also runs from the command line |
+| Next | Deploy it |
 | Target for v1.0 | mid-November 2026 |
 
 Full plan in [`docs/spec.md`](docs/spec.md); what has actually been tried and
@@ -52,6 +52,15 @@ py -3.14 -m venv .venv
 ```
 
 ```bash
+.venv\Scripts\python.exe web.py
+```
+
+Then open <http://127.0.0.1:5000> and enter a handle. An unknown handle gets an
+explanation and a way to retry, not a stack trace.
+
+The same fetch also runs from the command line:
+
+```bash
 .venv\Scripts\python.exe api_client.py tourist
 ```
 
@@ -77,6 +86,8 @@ explanation rather than a stack trace.
 ## Layout
 
 ```
+web.py               routes and pages
+templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
 requirements.txt     direct dependencies
 docs/spec.md         what is being built, and what is deliberately excluded
@@ -85,8 +96,7 @@ docs/decisions/      one short file per significant technical decision (ADRs)
 ```
 
 Modules still to come — `db.py`, `sync.py`, `collect.py`, `model.py`,
-`evaluate.py`, `web.py`, `scheduler.py` — are described in
-[spec §4](docs/spec.md).
+`evaluate.py`, `scheduler.py` — are described in [spec §4](docs/spec.md).
 
 ## Stack
 

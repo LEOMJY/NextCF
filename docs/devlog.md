@@ -676,3 +676,101 @@ hardcoded; paging through a full history comes with `sync.py` at v0.2.
 `requirements.txt` (via `pip freeze`) so a host can rebuild the venv, then
 `web.py` — one route, one template, the handle form. That is v0.1 done bar
 deployment.
+
+---
+
+## 2026-08-15 — `web.py`: the site exists
+
+`.py` files: **2**. Two routes, five templates, no CSS. Everything v0.1 asked
+for except being deployed.
+
+```
+GET  /                 the pitch and the handle input
+POST /                 read the field, redirect
+GET  /results/<handle> the table
+```
+
+### The handle goes in the URL, not in the form submission
+
+The obvious version renders the results straight out of the POST. I did the
+POST → redirect → GET version instead, so submitting the form sends the browser
+to `/results/tourist` and the table is served from there.
+
+The reason is that a URL containing the handle is bookmarkable, shareable and
+safe to reload, and one rendered out of a POST is none of those — reloading it
+re-submits the form, which is where the "Confirm Form Resubmission" dialog comes
+from. Spec §4.1 had already written `/results/<handle>` as the URL, so this was
+really just a matter of building what the spec said rather than what was
+shortest.
+
+Used `url_for()` everywhere instead of writing `/results/` as a string. Rename a
+route later and every `url_for` follows it; every hardcoded path silently 404s.
+
+### `required` on the input is not validation
+
+The field has `required` and `maxlength`, and both are enforced by the browser
+and only by the browser. Nothing stops a request arriving at that URL without
+ever loading the page, so the empty check happens again in Python on arrival.
+Obvious once stated, easy to not state.
+
+Same reasoning produced a handle pattern check before the API call — cheap junk
+filter, deliberately permissive, and explicitly not authoritative, since
+Codeforces is what decides whether a handle is real.
+
+### No tracebacks reach the browser
+
+§7.1 calls a Flask traceback on a mistyped handle the loudest amateur tell on
+the site, so the two failure paths from `api_client` get real pages and honest
+status codes:
+
+| What happened | Page says | Status |
+|---|---|---|
+| Handle does not exist | Codeforces' own explanation | 404 |
+| Network unreachable | could not reach Codeforces | 502 |
+
+502 rather than 404 for the network case because the user did nothing wrong —
+4xx means "your request was bad", 5xx means "my end failed". The error page
+brings the form back with the bad value still in it, so a typo is one keystroke
+from fixed.
+
+Ordering trap noted in a comment: `HTTPError` is a *subclass* of `URLError`, so
+if it ever escaped `api_client` the wrong `except` would swallow it. It does
+not today, but that is a fact about the other file.
+
+### Templates stay dumb
+
+Deciding what to show for a missing rating happens in `display_row()` in Python,
+not in the template. A template that makes decisions is program logic living
+somewhere I cannot step through in a debugger.
+
+That does mean the "these fields are sometimes absent" knowledge is now written
+in both `api_client.py` and `web.py`. Fine at two call sites; it comes out into
+one place when `sync.py` becomes the third.
+
+One thing I nearly got wrong: the missing-rating test is `is not none`, not
+`if row.rating`, because `0` is falsy and would print as missing. No Codeforces
+problem is rated 0, so it would have worked — a truth test that happens to work
+on today's data is a bug with a delay on it.
+
+### Verified rather than assumed
+
+Ran all six paths through Flask's test client, including both failures, before
+writing any of this down: `/` renders the form, an empty submission is 400, a
+good one redirects to `/results/tourist`, junk input and a nonexistent handle
+are both 404 with an explanation, `tourist` returns a table of 100 rows. Also
+checked that `/results/<script>` renders escaped — Jinja does that by default,
+which is the actual reason not to build HTML with f-strings.
+
+### Deliberately not done
+
+No stylesheet at all. Design tokens are v0.2 and v0.1 answers one question:
+does this run. Every request also blocks on a Codeforces call for as long as
+that takes — which is exactly the problem the background job and progress page
+exist to solve, also v0.2.
+
+### Next
+
+Deployment, which is the last thing v0.1 needs. `app.run(debug=True)` is the
+local path only — the debug traceback page has an interactive console in it,
+which is remote code execution for anyone who can load it. A host runs the app
+under a production server instead.

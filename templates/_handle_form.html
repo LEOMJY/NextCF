@@ -1,0 +1,29 @@
+{# The handle input on its own, because two pages need it: the landing page,
+   and the error page so a mistyped handle can be retried without going back.
+
+   {% include %} drops this file in wherever it is used. That is the opposite
+   direction from {% extends %}: extends means "I am a variation of that page",
+   include means "paste that fragment here". The leading underscore in the
+   filename is the usual convention for a fragment that is never a page on its
+   own. #}
+<form method="post" action="{{ url_for('index') }}">
+  <label for="handle">Codeforces handle</label>
+  {# name="handle" is the key this value arrives under in request.form.
+     Without a name attribute the field is not submitted at all.
+
+     required, maxlength and autofocus are browser conveniences only. They
+     are not validation -- anything can POST to this URL without ever loading
+     this page, which is why web.py checks the value again on arrival. #}
+  <input
+    type="text"
+    id="handle"
+    name="handle"
+    required
+    maxlength="24"
+    autofocus
+    autocomplete="off"
+    spellcheck="false"
+    placeholder="tourist"
+    value="{{ handle or '' }}">
+  <button type="submit">Show my submissions</button>
+</form>

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{# {{ handle }} is escaped automatically: a handle containing <script> renders
+   as visible text, not as a running script. That protection comes from using
+   render_template instead of building HTML with f-strings. #}
+{% block title %}{{ handle }} &mdash; NextCF{% endblock %}
+
+{% block content %}
+  <h1>{{ handle }}</h1>
+  <p>{{ rows | length }} most recent submissions.</p>
+
+  {# A real account with zero submissions is a valid answer, not an error, and
+     an empty table with no explanation looks like a bug. #}
+  {% if not rows %}
+    <p>No submissions found for this handle.</p>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>Rating</th>
+          <th>Verdict</th>
+          <th>Problem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# for/endfor is Jinja's loop. `row` is one dict from display_row(). #}
+        {% for row in rows %}
+          <tr>
+            {# Explicitly comparing to none, not `if row.rating`, because 0 is
+               falsy and would print as "?" too. No Codeforces problem is rated
+               0 today, but a truth test that happens to work is a bug waiting
+               for the day the data changes. #}
+            <td>{% if row.rating is not none %}{{ row.rating }}{% else %}&mdash;{% endif %}</td>
+            <td>{{ row.verdict }}</td>
+            <td>
+              {% if row.url %}
+                <a href="{{ row.url }}">{{ row.name }}</a>
+              {% else %}
+                {{ row.name }}
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  <p><a href="{{ url_for('index') }}">Try another handle</a></p>
+{% endblock %}

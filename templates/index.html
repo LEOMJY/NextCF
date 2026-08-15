@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}NextCF &mdash; what to solve next on Codeforces{% endblock %}
+
+{% block content %}
+  <h1>Which Codeforces problem should you solve next?</h1>
+
+  <p>
+    Enter your handle. Eventually this reads your submission history, works out
+    which topics you are strong and weak at, and picks problems you have roughly
+    a 70% chance of solving.
+  </p>
+
+  <p>
+    <strong>Right now it does none of that.</strong> v0.1 fetches your last 100
+    submissions and prints them in a table. That is all.
+  </p>
+
+  {# `error` is only passed in when the POST was rejected, and an undefined
+     name is falsy in Jinja rather than an error -- so this block is simply
+     skipped on a normal page load. role="alert" makes a screen reader
+     announce it instead of leaving it to be found by chance. #}
+  {% if error %}
+    <p role="alert"><strong>{{ error }}</strong></p>
+  {% endif %}
+
+  {% include "_handle_form.html" %}
+{% endblock %}

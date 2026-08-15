@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Not found &mdash; NextCF{% endblock %}
+
+{% block content %}
+  <h1>That did not work</h1>
+
+  {# The message is written by web.py, and for a bad handle it is Codeforces'
+     own explanation, e.g. "handle: User with handle nosuchuser42qq not found".
+     Saying what was wrong with the input is the entire point of this page --
+     spec section 7.1 names an unhandled traceback here as the loudest amateur
+     tell on the site. #}
+  <p role="alert">{{ message }}</p>
+
+  {# The form comes back with the bad value still in it, so a typo is one
+     keystroke from fixed rather than retyped from scratch. #}
+  {% include "_handle_form.html" %}
+{% endblock %}

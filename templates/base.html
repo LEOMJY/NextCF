@@ -1,0 +1,33 @@
+{# The shared page skeleton. Every other template starts with
+   {% extends "base.html" %} and fills in the blocks below, so the <head>,
+   the nav and the footer are written once rather than three times.
+
+   A {% block %} is a named hole. Whatever a child template puts in a block
+   of the same name lands here; what is written between the block tags is the
+   default if the child says nothing.
+
+   This is also why {# ... #} is a Jinja comment: it is stripped when the page
+   is rendered, so it never reaches the browser. <!-- --> would be sent. #}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}NextCF{% endblock %}</title>
+  </head>
+  <body>
+    <header>
+      {# url_for("index") asks the routing table for that view's URL instead
+         of hardcoding "/". #}
+      <a href="{{ url_for('index') }}">NextCF</a>
+    </header>
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+      <p><small>v0.1 &mdash; reads public data from the Codeforces API. No accounts.</small></p>
+    </footer>
+  </body>
+</html>
