@@ -76,7 +76,7 @@ def format_submission(sub):
     rating_text = str(rating) if rating is not None else "?"
 
     # f-string alignment: >5 right-aligns in 5 columns, <22 left-aligns in 22.
-    return f"{rating_text:> {RATING_WIDTH}}  {verdict:<22}  {problem['name']}"
+    return f"{rating_text:>{RATING_WIDTH}}  {verdict:<22}  {problem['name']}"
 
 
 def main():
@@ -98,7 +98,7 @@ def main():
         return 1
 
     print(f"{handle}: {len(submissions)} submissions\n")
-    print(f"{'RATING':> {RATING_WIDTH}}  {'VERDICT':<22}  PROBLEM")
+    print(f"{'RATING':>{RATING_WIDTH}}  {'VERDICT':<22}  PROBLEM")
     for sub in submissions:
         print(format_submission(sub))
 
