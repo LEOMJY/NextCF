@@ -538,6 +538,61 @@ and `json` are standard library, so fetching one user's submissions from
 
 ---
 
+## 2026-08-14 — Repo published
+
+<https://github.com/LEOMJY/NextCF> — public, 22 commits of history intact.
+
+Created the empty repo through the browser instead of installing the GitHub CLI.
+One less thing on the machine for a five-minute job. Left "add a README", "add
+.gitignore" and "choose a license" all unticked: any of them puts a commit on
+GitHub's side that my local history does not share, and the push then fails with
+an error about unrelated histories.
+
+Renamed the branch `master` → `main` before pushing, matching what GitHub has
+defaulted to for years.
+
+The point of pushing history rather than uploading files: 22 dated commits are
+the evidence this was built over weeks and revised when the evidence said so.
+Uploading a folder through the web form publishes the code and throws all of
+that away.
+
+### Added before publishing
+
+- `README.md` — says v0.1 plainly. A CLI script, no web interface, no model. Its
+  example output was verified by running the script rather than written from
+  memory, which caught two wrong claims (100 submissions, not 10, and a column
+  a space narrower than written). Writing down output you did not actually see
+  is how a README starts lying.
+- `requirements.txt` — Flask only. pip resolves the other seven.
+- `.gitignore` extended to local editor and tooling config, which was untracked but
+  *not ignored* — a stray `git add .` would have published machine-specific
+  paths. Untracked is not the same as safe.
+
+### Checked before making it public
+
+Audited every tracked file. Nothing sensitive, no keys anywhere. The devlog stays candid about mistakes — it is a
+record, not a brochure, and the mistakes are the part worth reading.
+
+### Known defect, not yet fixed
+
+The results table is misaligned: `RATING` is six characters, the values format
+to five, so every row sits one column left of its header. Two separate `>5`
+literals in `api_client.py` encode one shared value, which is the actual defect —
+they will drift. Wants a module-level constant. Cosmetic now, not cosmetic at
+v0.4 when that table *is* the product.
+
+### Open
+
+No LICENSE file, so the default is "all rights reserved". That directly
+contradicts the spec §9 stretch goal of releasing the dataset and harness for
+other people to measure against — nobody can legally build on a repo with no
+licence. Decide before v1.0.
+
+Hosting is now unblocked: spec §7 picks Railway or Render, and both deploy from
+GitHub on push.
+
+---
+
 ## 2026-08-14 — First code: `api_client.py`
 
 `.py` files: **1**. The venv exists at the project folder, built with
