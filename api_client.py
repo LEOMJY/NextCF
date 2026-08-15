@@ -75,7 +75,7 @@ def format_submission(sub):
 
     rating_text = str(rating) if rating is not None else "?"
 
-    # f-string alignment: >5 right-aligns in 5 columns, <22 left-aligns in 22.
+    # f-string alignment: >N right-aligns in N columns, <22 left-aligns in 22.
     return f"{rating_text:>{RATING_WIDTH}}  {verdict:<22}  {problem['name']}"
 
 
