@@ -6,7 +6,7 @@
 ## Context
 
 §7 already said "looking credible matters — the launch screenshot is the pitch",
-but design was scheduled as a single pass at v0.8 , on the assumption that
+but design was scheduled as a single pass at v0.8, on the assumption that
 "design is not what this project demonstrates."
 
 That is now judged too weak. The stated requirement is that the site must not

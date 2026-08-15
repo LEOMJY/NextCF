@@ -259,6 +259,13 @@ broken today, but a virtual environment created from the bare launcher default
 could fail to install numpy later, with an error that does not obviously point
 at this cause. Recorded as a known risk in spec §7.
 
+### Cleaning up a wrong install
+
+Installed Python 3.13 through winget before settling on 3.14, then removed it
+again. Worth recording that `winget uninstall` is not a complete uninstall: it
+left empty folders and `HKCU\SOFTWARE\Python` registry keys behind, both of
+which had to be cleared by hand. Verified clean afterwards.
+
 ### Next
 
 Still v0.1: virtual environment, install Flask, get a page to say hello.
@@ -267,6 +274,31 @@ Note: the first script does not need Flask or any third-party package.
 `urllib.request` and `json` are both in the standard library, so step one can be
 written and run today despite `pip` being broken — fetch one user's submissions
 from `user.status` and print them.
+
+---
+
+## 2026-08-12 — Where depth matters, and where it does not
+
+Stopped treating every part of this codebase as equally worth understanding
+deeply. Shipping is the priority right now, and the depth-versus-speed
+trade-off is better managed per part than enforced across everything.
+
+The line I actually care about: the skill model, the evaluation harness and the
+data pipeline are mine to understand, because that is the part of this project
+that is not interchangeable, and the part that cannot be debugged without
+understanding it. Flask boilerplate, CSS and page layout are delivery
+mechanism.
+
+What replaced it is a graduated standard. Boilerplate and CSS get
+written and moved past. The API client, rate limiting and background jobs get
+read properly, because their failures are silent and specific to this project.
+The model, harness and calibration get understood line by line, because a log
+loss worse than the baseline cannot be fixed by rewriting the code — that
+debugging requires understanding it.
+
+The point is that a single standard applied to both Flask templates and the
+evaluation harness treats interchangeable plumbing and the actual contribution
+as the same thing, which they are not.
 
 ---
 
@@ -359,9 +391,9 @@ overruns design stops. That is the strictest option and I chose it deliberately,
 for the reason §11 already gives about the pet system: this kind of work has no
 natural stopping point.
 
-ADR 0001 amended in place with all four corrections and the general lesson: 
-personal defaults stated in the imperative are indistinguishable from
-real constraints, and end up in the spec as if they were.
+ADR 0001 amended in place with all four corrections and the general lesson:
+personal defaults stated in the imperative are indistinguishable from real
+constraints, and end up in the spec as if they were.
 
 What I actually want, now written down properly: an expressive landing page, and
 a tool that is fast and calm.
@@ -436,9 +468,9 @@ Pictures into OneDrive. AppData is untouched.
 ### What it actually is
 
 The terminal I had been running pip from was hosted inside a **packaged-app
-container** (MSIX): a Windows sandbox that hands an app a private view of the filesystem, so writes to
-some paths are silently redirected somewhere else. Measured directly rather than
-assumed — a file written to
+container** (MSIX): a Windows sandbox that hands an application a private view
+of the filesystem, so writes to some paths are silently redirected somewhere
+else. Measured directly rather than assumed — a file written to
 
 ```
 C:\Users\leoma\AppData\Roaming\_vtest\marker.txt
@@ -488,7 +520,7 @@ A **virtual environment** — a private folder holding its own copy of Python an
 its own installed packages, so projects cannot break each other — placed inside
 the project on `D:`. It never touches AppData, so the redirection cannot apply.
 
-Created one at `a throwaway folder on `D:`` and installed Flask into it
+Created one in a throwaway folder on `D:` and installed Flask into it
 with no workarounds, no environment variables, nothing special. Exit code 0.
 Flask 3.1.3 imports and constructs an app object. Probe deleted afterwards.
 
@@ -564,14 +596,15 @@ that away.
   a space narrower than written). Writing down output you did not actually see
   is how a README starts lying.
 - `requirements.txt` — Flask only. pip resolves the other seven.
-- `.gitignore` extended to local editor and tooling config, which was untracked but
-  *not ignored* — a stray `git add .` would have published machine-specific
-  paths. Untracked is not the same as safe.
+- `.gitignore` extended to cover local editor and tooling config, which was
+  untracked but *not ignored* — a stray `git add .` would have published
+  machine-specific paths. Untracked is not the same as safe.
 
 ### Checked before making it public
 
-Audited every tracked file. Nothing sensitive, no keys anywhere. The devlog stays candid about mistakes — it is a
-record, not a brochure, and the mistakes are the part worth reading.
+Audited every tracked file. Nothing sensitive, no keys anywhere. The devlog
+stays candid about mistakes — it is a record, not a brochure, and the mistakes
+are the part worth reading.
 
 ### Known defect, not yet fixed
 
@@ -595,7 +628,7 @@ GitHub on push.
 
 ## 2026-08-14 — First code: `api_client.py`
 
-`.py` files: **1**. The venv exists at the project folder, built with
+`.py` files: **1**. The venv exists in the project folder, built with
 `py -3.14` explicitly, and Flask 3.1.3 installed into it without incident.
 
 ### Layout decided
