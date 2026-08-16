@@ -834,3 +834,58 @@ survive". Those are much harder to debug at the same time.
 `.python-version` pins 3.14. If Render does not offer it, dropping to 3.13 costs
 nothing today, since nothing here uses a 3.14 feature — but that should be a
 decision, not whatever the host happens to default to.
+
+---
+
+## 2026-08-15 — v0.1 is live
+
+<https://nextcf.onrender.com>
+
+Deployed on the first attempt, which I did not expect. v0.1 done on 15 August
+against an end-of-August target.
+
+### Verified from outside, not from the browser tab I had open
+
+| Request | Result |
+|---|---|
+| `/` | 200, form renders |
+| `/results/tourist` | 200, 100 rows |
+| `/results/nosuchuser42qq` | 404, error page rather than a crash |
+
+The middle one is the one that mattered. The deployed copy calls the Codeforces
+API from a datacenter address in Oregon rather than from my home connection, and
+that was the failure I thought most likely — plenty of APIs treat cloud IP ranges
+differently. It answered normally. Worth knowing now rather than at v0.3, when
+2000 users get fetched from that same address.
+
+The third confirms the error handling survives the move. A mistyped handle on the
+public site shows an explanation, not a 500.
+
+### The gotcha in the Render form
+
+Render detects Flask and pre-fills a start command using **gunicorn**. Since
+`requirements.txt` has waitress instead, leaving that autofilled value would have
+built successfully and then failed to start — the two steps are separate, and a
+green build says nothing about whether the app runs.
+
+### Not yet observed
+
+The cold start. Everything above was measured within minutes of deploying, so the
+instance was awake; every request came back in under half a second. The ~60s
+wake-up only shows up after a genuine idle period, and I have not seen it yet.
+Not a problem now, and ADR 0003 already says it gets revisited before launch
+rather than before then.
+
+### What v0.1 actually proves
+
+Very little about the product, and that is fine. It answers "does the whole chain
+run" — browser, route, API client, Codeforces, table, on a machine that is not
+mine. Everything the project is *for* is still ahead: no database, no per-topic
+skill estimate, no recommendation, no evaluation. It recommends nothing.
+
+### Next
+
+v0.2: SQLite and `db.py`, fetching moved into a background job with the progress
+page, and the base stylesheet and design tokens. The persistence question from §7
+becomes real the moment `db.py` exists, since a free Render instance has no
+persistent disk — its own pricing page says so.

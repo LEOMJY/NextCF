@@ -1,5 +1,7 @@
 # NextCF
 
+**<https://nextcf.onrender.com>**
+
 Tells a competitive programmer which Codeforces problem to solve next.
 
 You enter your Codeforces handle. It reads your public submission history, works
@@ -8,17 +10,22 @@ be just hard enough — roughly a 70% chance you solve them.
 
 ---
 
-## Status: v0.1, in progress
+## Status: v0.1, live
 
 **Nothing on this page is finished yet.** What exists today is a two-page web
-app that fetches and lists one user's recent submissions, plus the command-line
-script it grew out of. There is no styling, no database and no model.
+app that lists one user's recent submissions. There is no styling, no database
+and no model — so it recommends nothing, which is the entire point of the
+project.
 
 | | |
 |---|---|
-| Works now | Enter a handle, see your last 100 submissions. Also runs from the command line |
-| Next | Deploy it |
+| Works now | Enter a handle, see your last 100 submissions. Deployed |
+| Next (v0.2) | A database, fetching in the background with a progress page, and the base stylesheet |
 | Target for v1.0 | mid-November 2026 |
+
+Hosted on a free instance, which sleeps when idle — the first visit after a
+quiet spell takes about a minute to wake. Why that tradeoff was taken, and when
+it gets revisited, is in [`docs/decisions/0003-hosting.md`](docs/decisions/0003-hosting.md).
 
 Full plan in [`docs/spec.md`](docs/spec.md); what has actually been tried and
 broken is in [`docs/devlog.md`](docs/devlog.md).
@@ -39,9 +46,10 @@ not done until the model scores a lower log loss than a rating-only baseline on
 held-out submissions and **that number is written down publicly**. Skip it and
 this is just a website — see [spec §9](docs/spec.md).
 
-## Running it
+## Running it locally
 
-Requires Python 3.14.
+The deployed copy is at <https://nextcf.onrender.com>. To run your own,
+Python 3.14.
 
 ```bash
 py -3.14 -m venv .venv
