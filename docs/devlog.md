@@ -774,3 +774,63 @@ Deployment, which is the last thing v0.1 needs. `app.run(debug=True)` is the
 local path only — the debug traceback page has an interactive console in it,
 which is remote code execution for anyone who can load it. A host runs the app
 under a production server instead.
+
+---
+
+## 2026-08-15 — Deployment prepared: Render and Waitress
+
+Picked the two things §7 had left open as "Railway or Render", written up in
+`docs/decisions/0003-hosting.md`.
+
+**Render** over Railway, for a boring reason: Railway's free allowance is trial
+credit, and the three months between now and v1.0 are months where nobody is
+visiting. Paying for idle capacity during development is the wrong place to
+spend money on this. The cost of that choice is that Render's free tier sleeps
+when idle, so the first visitor after a quiet spell waits about a minute — and
+that lands in exactly the wrong place, since §9 needs 50 strangers arriving at
+once from a blog post. Recorded as something to revisit *before launch*, not
+before then.
+
+**Waitress** over gunicorn, which is the more standard answer, because gunicorn
+does not run on Windows. That would mean the production setup could only ever be
+tested by deploying it. Waitress runs the same command on both machines, so
+"works locally, breaks on the host" becomes a class of failure I find out about
+before pushing rather than after.
+
+### What was actually missing from the code
+
+Three things, none of them in `web.py`:
+
+1. **A real server.** The dev server warning is not boilerplate — it serves one
+   request at a time, and debug mode's traceback page has an interactive Python
+   console in it.
+2. **The port.** `app.run()` hardcodes 5000. A host assigns a port at launch and
+   announces it in an environment variable, so it has to be read at runtime.
+3. **The interface.** The dev server binds `127.0.0.1`, meaning this machine
+   only. On a host that is invisible from outside; it has to be `0.0.0.0`.
+
+All three live in `serve.py`, which imports `app` from `web.py` and hands it to
+waitress. Importing does not start the dev server, because that call sits behind
+`if __name__ == "__main__"` — so debug mode cannot reach the internet even by
+accident.
+
+`serve.py` is a module §4 never listed. It exists so the start command is in the
+repo instead of typed into a hosting dashboard, where it would be outside
+version control and lost if the service were ever recreated.
+
+### Checked rather than assumed
+
+Pinned `waitress==3.0.2` after querying PyPI for what actually exists, instead
+of writing a plausible-looking version number. Same habit as the README output:
+a pinned version that was never verified is a build failure with a delay on it.
+
+### Deliberately still open
+
+§7's SQLite risk — hosts wipe the filesystem on redeploy — moved from v0.1 to
+v0.2. v0.1 stores nothing, so there is no data to lose yet, and deploying a
+stateless app first splits "does the pipeline work" from "does the data
+survive". Those are much harder to debug at the same time.
+
+`.python-version` pins 3.14. If Render does not offer it, dropping to 3.13 costs
+nothing today, since nothing here uses a 3.14 feature — but that should be a
+decision, not whatever the host happens to default to.

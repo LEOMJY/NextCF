@@ -4,3 +4,8 @@
 # Install:  .venv\Scripts\python.exe -m pip install -r requirements.txt
 
 Flask==3.1.3
+
+# Production WSGI server -- see serve.py. Flask's built-in server is for
+# development only. Pure Python, so it runs on Windows too, which means the
+# deployed setup can be tested locally before pushing.
+waitress==3.0.2

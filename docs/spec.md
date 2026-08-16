@@ -223,7 +223,8 @@ probability predictions, recommendation lists.
 | Charts | Server-rendered SVG from Jinja | The topic breakdown is the one thing a template cannot give us. SVG generated from the data needs no JavaScript library, no CDN, and no build step, and it renders in the launch screenshot |
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
 | Scheduling | A timed loop, or the host's cron if it has one | Nightly re-sync |
-| Hosting | Railway or Render | Connects to GitHub, redeploys on push |
+| Web server | Waitress | Flask's built-in server is development-only. Pure Python, so the deployed setup also runs on Windows and can be tested before pushing |
+| Hosting | Render | Connects to GitHub, redeploys on push. Free tier, at the cost of sleeping when idle — see `docs/decisions/0003-hosting.md` |
 
 Explicitly rejected:
 
@@ -244,8 +245,14 @@ Explicitly rejected:
   this scale.
 
 Known risk: most hosting platforms wipe the filesystem on redeploy, which
-would delete a SQLite file. Resolve at v0.1 — either a host with a persistent
-disk, or PostgreSQL for the deployed copy only.
+would delete a SQLite file. Either a paid persistent disk, or PostgreSQL for
+the deployed copy only.
+
+Moved from v0.1 to **v0.2**, when `db.py` first exists. v0.1 stores nothing, so
+there is no data to lose and the question cannot be answered by testing yet.
+Deploying an app with no database first is deliberate: it separates "does the
+deployment pipeline work" from "does the database survive a redeploy", and
+debugging those together is much harder than debugging them in sequence.
 
 Known risk: the local install is Python 3.14, and the `py` launcher currently
 defaults to the free-threaded build (`3.14t`) rather than the standard one.
