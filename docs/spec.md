@@ -174,42 +174,63 @@ not slipped in while coding.
 
 ## 6. Data
 
-Four tables. Everything else is computed on demand, not stored, so there is
+Five tables. Everything else is computed on demand, not stored, so there is
 only one copy of the truth.
 
 ```
 users
-  handle         text     — Codeforces handle, unique
+  handle         text     — Codeforces handle, unique, primary key
   cf_rating      integer  — their Codeforces rating, may be absent
   target_prob    real     — difficulty target, default 0.70
-  first_seen     datetime
-  last_synced    datetime
+  first_seen     text     — ISO-8601 UTC
+  last_synced    text     — ISO-8601 UTC; NULL until a sync completes
 
 problems
   id             text     — contestId + index, e.g. "1234A"
   name           text
   rating         integer  — Codeforces' own rating, often absent
-  tags           text     — comma separated for now
+
+problem_tags
+  problem_id     text     — which problem
+  tag            text     — one tag, e.g. "dp"
+                            one row per (problem, tag) pair
 
 submissions
-  id             integer  — Codeforces' submission id
+  id             integer  — Codeforces' submission id, primary key
   handle         text     — who submitted
   problem_id     text     — which problem
-  verdict        text     — "OK", "WRONG_ANSWER", "TIME_LIMIT_EXCEEDED", ...
-  submitted_at   datetime
+  verdict        text     — "OK", "WRONG_ANSWER", ...; absent while judging
+  submitted_at   text     — ISO-8601 UTC
 
 jobs
   id             integer
   kind           text     — "sync" or "collect"
   target         text     — which handle, or which batch
   state          text     — "pending", "running", "done", "failed"
-  progress       integer  — how far through, so work can resume
-  started_at     datetime
+  progress       integer  — submissions fetched so far, so work can resume
+  started_at     text     — ISO-8601 UTC
   error          text     — why it failed, if it did
 ```
 
 Derived and deliberately not stored: per-topic skill estimates, solve
 probability predictions, recommendation lists.
+
+**Dates and times are ISO-8601 UTC text**, e.g. `2026-09-07T21:20:00Z`. SQLite
+has no date or time type, so the only choice is text or an integer count of
+seconds since 1970. Text sorts and compares correctly given one fixed format,
+and it is legible when the file is opened by hand — which is most of what
+happens to this file between now and v1.0. The API supplies Unix seconds
+regardless, so exactly one conversion happens on the way in.
+
+**`last_synced` is the completeness flag**, not merely a cache timestamp. It is
+NULL until a user's sync finishes, and it is written inside the same
+transaction as that user's rows, so the two cannot disagree. Anything reading
+submissions treats NULL as "no data for this user" rather than "this user has
+no submissions" — see `docs/decisions/0004-sync-interruption.md`.
+
+**Tags are their own table**, not a comma-separated column, because per-topic
+skill is the axis the entire product works along — see
+`docs/decisions/0005-tags-as-a-table.md`.
 
 ## 7. Stack
 
@@ -559,5 +580,15 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
 - **What counts as "solved"?** Solved on the first try, or after five attempts
   and an editorial? The API does not distinguish. Affects everything.
 - **SQLite persistence in production.** See §7.
-- **What happens when a sync job is interrupted mid-user?** Partial data in the
-  database is worse than none. Decide at v0.2.
+
+### Answered
+
+- **What happens when a sync job is interrupted mid-user?** *(asked 08-11,
+  answered 09-07, at v0.2 as scheduled.)* One transaction per user: the whole
+  history is fetched, then written and `last_synced` set in a single
+  transaction, so an interruption leaves the database exactly as it was. The
+  original framing of the question was subtly wrong. Partial data is not worse
+  than none — partial data *indistinguishable from complete data* is, because
+  every later reader believes it. Making completeness explicit is the fix, and
+  once it is explicit, partial data is strictly better than none. See
+  `docs/decisions/0004-sync-interruption.md`.

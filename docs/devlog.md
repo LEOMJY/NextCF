@@ -932,3 +932,124 @@ resumable background job, the `/progress/<job>` page, and the design tokens plus
 base stylesheet from §7.1 — and §12 has an open question that has to be answered
 while building it: what happens when a sync job is interrupted mid-user, given
 that partial data in the database is worse than none.
+
+---
+
+## 2026-09-07 — Schema decided before any of it was written
+
+`db.py` does not exist yet and deliberately was not started. Three decisions
+had to be made first, because all three change the `CREATE TABLE` text, and
+changing that text after the file holds two million rows is a migration rather
+than an edit.
+
+### Partial data was the wrong way to state the problem
+
+§12 has said since 08-11 that "partial data in the database is worse than
+none." Writing out the actual failure showed the sentence is not quite right,
+and the precise version is what decides the design.
+
+Fetch 300 of a user's 5000 submissions, die, and the database holds 300 rows
+and a fresh `last_synced`. Nothing crashed, nothing was logged, and every later
+reader believes it has the complete history. The model learns the user has
+solved twelve DP problems instead of four hundred, and that lands inside the §9
+number, which is the one output that has to be trustworthy.
+
+The damage is not the missing rows. It is that **nothing records that they are
+missing**. Partial data indistinguishable from complete data is what is worse
+than none. Once the distinction is explicit, partial data is strictly better
+than none, because it is work not repeated.
+
+That reframing changed the goal from "prevent partial writes" to "make
+completeness machine-checkable", and the answer fell out: one transaction per
+user, with `last_synced` written inside it, so the flag and the rows cannot
+disagree. ADR 0004. Resumability lives at the user boundary, which is where §4's
+"dies at minute 40" actually is — that is `collect.py` at v0.3, where the unit
+is one user out of 2000. Redoing one user costs about 100 seconds.
+
+Same lesson as the WinError 17 entry and the cold-start entry, in a third form:
+the sentence I had written down was a guess phrased as a fact, and it did not
+survive being stated precisely.
+
+### Tags moved out of `problems` into their own table
+
+§6 said `tags text — comma separated for now`, and the "for now" was carrying
+the whole argument. Not for the performance reason — 10,000 problems scan in
+under a millisecond and always will. Because topics are the axis the entire
+product works along: §1 promises the breakdown, §3 says it is the
+differentiator, and `model.py` at v0.6 wants "this user's submissions on
+problems tagged X" as its central query.
+
+Worth recording that the migration would have been cheap — the tag strings are
+already stored, so building the table later is one script over rows on disk,
+with no re-fetch and no data loss. It was decided on *when* the cost lands, not
+how big it is: one `CREATE TABLE` in the week the schema is written, versus
+rewriting queries in the week the first model is being fitted. ADR 0005.
+
+### Dates are ISO-8601 UTC text
+
+SQLite has no date type. Text or Unix integer seconds are the only options.
+Picked text because it is legible when the file is opened by hand, which is
+most of what happens to this file over the next two months, and it sorts
+correctly given one fixed format. The API gives Unix seconds either way, so one
+conversion happens on write regardless.
+
+### Things the spec got wrong that its own v0.1 code already knew
+
+`web.py:display_row` handles `contestId` being absent — acmsguru problems have
+none. §6 defines `problems.id` as contestId + index, so under the spec those
+problems cannot be stored at all. The API contradicted the spec and the code
+found it first, a month before the schema did.
+
+Same shape: §6 lists `verdict` as text with four example values, but
+`api_client.format_submission` already substitutes `"TESTING"` because a
+submission still being judged has no verdict at all.
+
+### Still open, to settle while writing `schema.sql`
+
+Not decided yet, listed so they are not silently skipped:
+
+- **Handle casing.** Codeforces handles appear to be case-insensitive for
+  lookup. If so, storing what the visitor typed makes `Tourist` and `tourist`
+  two users with two disjoint histories, which corrupts the §9 dataset quietly.
+  Verify against the API, then store the canonical handle from the response
+  rather than the form input, and put `COLLATE NOCASE` on the column.
+- **`problems.id` when `contestId` is absent.** Skip those problems, or build
+  the id from `problemsetName`. About twenty problems either way.
+- **`participantType`.** The API says whether a submission was in-contest,
+  virtual or practice. §12's "what counts as solved?" and §8's assumption 4
+  both need it eventually. Adding the column later is trivial; *filling it in*
+  later means re-fetching 2000 users at two seconds a request. The rule worth
+  keeping: adding a column is cheap, adding a column that must be backfilled
+  from a slow external source is not.
+- **Indexes.** `submissions(handle)` and `submissions(problem_id)`. Every index
+  gets a comment naming the query it exists for; one that cannot be named
+  should be deleted.
+- **`CHECK` on `jobs.state`**, so a typo'd state is an error at the write
+  rather than a mystery later.
+- **Stale jobs.** A job killed by the host stays `running` forever and
+  `/progress` polls it forever. One worker thread in one process means any job
+  still marked running at startup is orphaned, so `init_db()` marks them
+  failed. Correct only while there is one process — comment it as such.
+- **Two things that will bite on the first run:** `PRAGMA foreign_keys = ON`
+  (off by default, per connection, so `REFERENCES` is decorative without it),
+  and `PRAGMA journal_mode = WAL`, without which the sync thread writing blocks
+  the progress page reading and produces "database is locked". The v0.2
+  architecture is specifically one thread writing while a request reads, so
+  that is not a hypothetical.
+- **Threading.** A `sqlite3` connection cannot be used from a thread other than
+  the one that created it. One connection per thread, created where it is used,
+  never a module-level global.
+
+### Next
+
+`schema.sql`, then `connect()` and `init_db()`, then a throwaway script that
+inserts fake rows and inserts them a second time to prove the count does not
+change. That last check is the one that proves ADR 0004 works, and it is far
+easier to run now than through a background thread later. `nextcf.db` goes in
+`.gitignore` — a binary file in version control produces conflicts that cannot
+be resolved.
+
+Still unanswered and now due: §7's known risk that Render's free tier has no
+persistent disk, so the database is deleted on every redeploy. Not a v0.2
+blocker — losing a local cache of public data costs one re-sync — but it has to
+be answered before v0.3, when what gets wiped is an hour of API calls.
