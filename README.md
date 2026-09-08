@@ -24,8 +24,9 @@ project.
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a
-quiet spell takes about a minute to wake. Why that tradeoff was taken, and when
-it gets revisited, is in [`docs/decisions/0003-hosting.md`](docs/decisions/0003-hosting.md).
+quiet spell takes about half a minute to wake (measured at 31s after three weeks
+of no traffic). Why that tradeoff was taken, and when it gets revisited, is in
+[`docs/decisions/0003-hosting.md`](docs/decisions/0003-hosting.md).
 
 Full plan in [`docs/spec.md`](docs/spec.md); what has actually been tried and
 broken is in [`docs/devlog.md`](docs/devlog.md).
@@ -97,7 +98,9 @@ explanation rather than a stack trace.
 web.py               routes and pages
 templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
+serve.py             production entry point — see docs/decisions/0003-hosting.md
 requirements.txt     direct dependencies
+.python-version      pins the Python version for the host
 docs/spec.md         what is being built, and what is deliberately excluded
 docs/devlog.md       dated entries: what was tried, what broke, what was learned
 docs/decisions/      one short file per significant technical decision (ADRs)

@@ -889,3 +889,46 @@ v0.2: SQLite and `db.py`, fetching moved into a background job with the progress
 page, and the base stylesheet and design tokens. The persistence question from §7
 becomes real the moment `db.py` exists, since a free Render instance has no
 persistent disk — its own pricing page says so.
+
+---
+
+## 2026-09-07 — Three weeks off; the cold start finally measured
+
+Away from the project for three weeks. Nothing was built. Recording it because
+the gap is real and the milestone dates in §10 were written assuming 10–15 hours
+a week, which did not happen.
+
+### The site stayed up
+
+<https://nextcf.onrender.com> answered after three weeks of zero traffic, no
+intervention and no redeploys. That is the third v1.0 criterion in §9 — "it is
+live at a URL and stays up" — holding for the first non-trivial stretch.
+
+### Cold start: 31.5 seconds
+
+The 08-15 entry listed this as not yet observed, because everything had been
+measured minutes after deploying while the instance was awake. Now measured
+properly, on a genuinely idle service:
+
+| | |
+|---|---|
+| First request after 3 weeks idle | **31.5s** |
+| Requests while warm (08-15) | under 0.5s |
+
+ADR 0003 and the README both guessed "about a minute". The real figure is half
+that, so the README has been corrected. Still slow enough to matter on the day
+the Codeforces blog post lands and fifty strangers arrive at once, which is
+exactly when ADR 0003 says to buy a paid instance — that plan is unchanged, and
+now it rests on a measurement rather than an estimate.
+
+Worth noting the guess was wrong in the *pessimistic* direction. Same lesson as
+the WinError 17 entry, cheaper this time: a number nobody measured is not a
+number.
+
+### Where v0.2 stands
+
+Not started. It is four things — `db.py` and the schema from §6, `sync.py` as a
+resumable background job, the `/progress/<job>` page, and the design tokens plus
+base stylesheet from §7.1 — and §12 has an open question that has to be answered
+while building it: what happens when a sync job is interrupted mid-user, given
+that partial data in the database is worse than none.
