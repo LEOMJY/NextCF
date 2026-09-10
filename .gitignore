@@ -7,8 +7,11 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# The SQLite database is generated data, not source
+# The SQLite database is generated data, not source.
+# WAL mode writes two sidecar files next to it that *.db does not match.
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 

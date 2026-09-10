@@ -1053,3 +1053,96 @@ Still unanswered and now due: §7's known risk that Render's free tier has no
 persistent disk, so the database is deleted on every redeploy. Not a v0.2
 blocker — losing a local cache of public data costs one re-sync — but it has to
 be answered before v0.3, when what gets wiped is an hour of API calls.
+
+---
+
+## 2026-09-09 — `schema.sql`
+
+The five tables from §6 exist as a file. No Python yet — `db.py` is next, and
+keeping the schema separate means it can be read, diffed and run on its own.
+
+### Every constraint was checked by making it fail
+
+Writing `CHECK` and `REFERENCES` into a file proves nothing. A constraint that
+is silently not enforced is worse than no constraint, because it reads as a
+guarantee. So each one was tested by attempting the thing it forbids and
+asserting the database refused:
+
+```
+ok  users.handle is case-insensitive (Tourist == tourist)
+ok  STRICT rejects text in an INTEGER column
+ok  CHECK rejects a misspelled job state
+ok  foreign key rejects a submission by an unknown handle
+ok  re-inserting a tag leaves one row
+ok  inserting the same 3 submissions twice leaves 3 rows
+ok  a second pending job for the same handle is refused
+ok  ...but a retry after that job failed is allowed
+ok  an interrupted transaction leaves 0 rows and last_synced NULL
+ok  join across all three tables reads back (inserted as 'Tourist')
+```
+
+Two of those are the ADRs made testable rather than asserted. "Inserting the
+same 3 submissions twice leaves 3 rows" is ADR 0005's dedupe and the property
+that makes a re-run of a sync harmless. "An interrupted transaction leaves 0
+rows and `last_synced` NULL" is ADR 0004 itself — and it checks *both* halves,
+because a rollback that discarded the rows while leaving the completeness flag
+set would be the exact corruption the ADR exists to prevent.
+
+The foreign-key test is the one that would have quietly passed for the wrong
+reason. SQLite has foreign key enforcement **off by default**, per connection.
+Without `PRAGMA foreign_keys = ON` in the test setup, every `REFERENCES`
+clause in the file is decorative and that test would have "passed" by never
+being enforced at all.
+
+### Decisions made while writing it
+
+- **`problems.id` when `contestId` is absent** — the id becomes
+  `problemsetName + index`, e.g. `acmsguru100`. No collision with the normal
+  `1234A` form is possible, since contest ids are numeric and this one starts
+  with letters. `db.py` owns building the string; two callers formatting an id
+  by hand is two chances to format it differently.
+- **`verdict` is nullable rather than storing `"TESTING"`.** A submission
+  still being judged genuinely has no verdict. `"TESTING"` is a display
+  decision and belongs in `display_row`, not in storage.
+- **`finished_at` added to `jobs`.** Without it there is no way to distinguish
+  a job still working from one that stopped.
+- **A partial unique index on `jobs`** — at most one job per target in
+  `pending` or `running`, so two people typing the same handle at the same
+  moment cannot start two syncs. The `WHERE` clause exempts finished and
+  failed rows, so a retry after a failure is still allowed. Both halves are
+  tested above.
+- **`submissions(handle, submitted_at)` rather than `submissions(handle)`.**
+  The results page wants that user's rows newest first, and including the
+  timestamp lets the index serve the sort as well as the filter. SQLite reads
+  an index backwards, so one ascending index covers `DESC` too.
+- **`STRICT` on all five tables.** Without it SQLite treats column types as
+  suggestions and stores `"banana"` in an INTEGER column without complaint.
+
+### `progress` stopped meaning what §6 said it meant
+
+§6 described `jobs.progress` as "how far through, so work can resume". Under
+ADR 0004 an interrupted sync writes nothing, so there is no partial state to
+resume from and the column only drives the progress page. Fixed in §6 rather
+than left to be misread later — the phrasing predated the decision that
+contradicted it.
+
+Also corrected in §6: `participant_type` and `finished_at` are in the schema
+and were not in the document.
+
+### `.gitignore` had a hole
+
+It ignores `*.db`, but WAL mode writes `nextcf.db-wal` and `nextcf.db-shm`
+next to the database, and neither matches that pattern. Added both before the
+first run rather than after wondering what those files were.
+
+### Next
+
+`db.py`: `connect()` and `init_db()`. The two settings deliberately left out
+of `schema.sql` live there, because both belong to a connection rather than to
+the schema — `PRAGMA foreign_keys = ON`, which the test above proved is not
+optional, and `PRAGMA journal_mode = WAL`, without which the sync thread
+writing and the progress page reading collide as "database is locked".
+
+`init_db()` also marks any job still in `running` at startup as `failed`. One
+worker thread in one process means such a job is orphaned by definition. That
+is correct only while there is one process, and needs a comment saying so.

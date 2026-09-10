@@ -196,19 +196,21 @@ problem_tags
                             one row per (problem, tag) pair
 
 submissions
-  id             integer  — Codeforces' submission id, primary key
-  handle         text     — who submitted
-  problem_id     text     — which problem
-  verdict        text     — "OK", "WRONG_ANSWER", ...; absent while judging
-  submitted_at   text     — ISO-8601 UTC
+  id               integer  — Codeforces' submission id, primary key
+  handle           text     — who submitted
+  problem_id       text     — which problem
+  verdict          text     — "OK", "WRONG_ANSWER", ...; absent while judging
+  participant_type text     — "CONTESTANT", "VIRTUAL", "PRACTICE", ...
+  submitted_at     text     — ISO-8601 UTC
 
 jobs
   id             integer
   kind           text     — "sync" or "collect"
   target         text     — which handle, or which batch
   state          text     — "pending", "running", "done", "failed"
-  progress       integer  — submissions fetched so far, so work can resume
+  progress       integer  — submissions fetched so far; drives the progress page
   started_at     text     — ISO-8601 UTC
+  finished_at    text     — ISO-8601 UTC; NULL while the job is unfinished
   error          text     — why it failed, if it did
 ```
 
@@ -231,6 +233,19 @@ no submissions" — see `docs/decisions/0004-sync-interruption.md`.
 **Tags are their own table**, not a comma-separated column, because per-topic
 skill is the axis the entire product works along — see
 `docs/decisions/0005-tags-as-a-table.md`.
+
+**`participant_type` is stored now and unused until v0.6.** It records whether
+a submission was made in-contest, virtually, or in practice, which §12's "what
+counts as solved?" and §8's assumption 4 about selection bias both eventually
+need. It is stored early because adding the column later is trivial while
+*filling it in* later means re-fetching ~2000 users at two seconds a request —
+the v0.3 collection run, done twice. The general rule: adding a column is
+cheap, adding a column that must be backfilled from a slow external source is
+not.
+
+`progress` no longer implies resumption. Under ADR 0004 an interrupted sync
+writes nothing, so there is no partial state to resume from; the column exists
+to drive `/progress/<job>`.
 
 ## 7. Stack
 
