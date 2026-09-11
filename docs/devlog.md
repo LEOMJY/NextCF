@@ -1370,3 +1370,10 @@ The queries, in `db.py`, one function per caller need — the list is in the
   second `strftime` written inside `sync.py`.
 - **The problem id is built in exactly one function**, which raises when an API
   object has neither `contestId` nor `problemsetName`.
+
+One constraint to carry into v0.3. The orphan cleanup is safe only while one
+program uses the database, and §4 plans three — alongside a web app that never
+stops, so §4's "they do not run at the same times" cannot literally hold. The
+comment in `init_db()` first said "one process" and meant only two copies of
+the web app; it now names `collect.py` and `scheduler.py`. §12 has the question
+of which program may run the cleanup, due before `collect.py` touches `jobs`.

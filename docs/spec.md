@@ -620,6 +620,14 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   problem is not always in an adjacent contest (`1230D` appears in the
   problemset only as `1210B`). Decide at v0.4, before the first recommendation
   ships.
+- **Which program may clean up orphaned jobs?** At startup `init_db()` marks
+  every unfinished job failed, on the grounds that no job can be running when
+  the only process has just started. That holds at v0.2, when the web app is
+  the only program. §4 plans three programs on one database and says they "do
+  not run at the same times", which cannot hold literally, because the web app
+  never stops. If `collect.py` or `scheduler.py` ran the same cleanup while the
+  web app was mid-sync, it would fail that live sync. Decide at v0.3, before
+  `collect.py` first touches the `jobs` table.
 
 ### Answered
 

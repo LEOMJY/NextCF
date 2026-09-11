@@ -145,8 +145,13 @@ def init_db(path=DB_PATH):
         # index on jobs refuses a second unfinished job for the same handle,
         # so that user could never be synced again.
         #
-        # CORRECT ONLY WHILE THERE IS ONE PROCESS. Start two copies of the app
-        # on one database and each would fail the other's live jobs.
+        # CORRECT ONLY WHILE ONE PROGRAM USES THE DATABASE. Spec section 4
+        # plans three programs on this one file -- the web app, collect.py and
+        # scheduler.py -- and the web app never stops running. If either of
+        # the others ran this while the web app was mid-sync, it would mark
+        # that live sync failed. Before a second program touches the jobs
+        # table (collect.py, v0.3), decide which program may run this cleanup:
+        # spec section 12.
         with conn:
             cursor = conn.execute(
                 """
