@@ -1146,3 +1146,110 @@ writing and the progress page reading collide as "database is locked".
 `init_db()` also marks any job still in `running` at startup as `failed`. One
 worker thread in one process means such a job is orphaned by definition. That
 is correct only while there is one process, and needs a comment saying so.
+
+---
+
+## 2026-09-11 — `problems.id` checked against the real API
+
+The 09-09 entry named the id format as the one line in `schema.sql` worth
+checking before real data lands, because it becomes the foreign key in roughly
+two million submission rows and changing its shape afterwards means rewriting
+every one of them. So it was checked against the live API instead of reasoned
+about: all 11,385 problems in `problemset.problems`, the 453 in the acmsguru
+archive, tourist's 5,474 submissions, and one Div. 2 contest.
+
+### Unique, but not splittable
+
+No id is produced twice. The format itself is sound.
+
+What the data did break is an assumption nobody had written down: that an id
+can be split back into contest and index at its first letter. The shapes of
+the index field:
+
+| Shape | Problems | Example |
+|---|---|---|
+| one letter | 10,490 | `1234A` |
+| letter and digit | 880 | `1189D1`, the easy/hard version pairs |
+| letter and two digits | 1 | |
+| digits only | 14 | contest 921, indices `01` to `14` |
+
+Those fourteen make ids like `92114`, and nothing in that string says whether
+it is contest 921 problem 14 or contest 9211 problem 4. Nothing collides today.
+But the results page will need the contest number back to build every problem
+link, and a gym filter needs it too, and for these fourteen it cannot be
+recovered by parsing.
+
+Fix: `contest_id` and `problem_index` as columns of their own, so the id is
+never parsed, plus a `CHECK` that the id equals the two joined — two copies of
+one fact can drift, and this makes drift an error at the write. The column is
+`problem_index`, not `index`, because SQLite rejects a column named `index`
+with a syntax error. That was tried rather than assumed. Schema tests are now
+at 14, three of them for this.
+
+### One problem, two ids
+
+When a Div. 1 and a Div. 2 round run together they share problems, and each
+shared problem has an id in both contests. Contest 1293, Codeforces Round 614
+(Div. 2), asked for its own problem list:
+
+```
+1293A  ConneR and the A.R.C. Markland-N   listed in problemset
+1293B  JOE is on TV!                      listed in problemset
+1293C  NEKO's Maze Game                   not listed -- problemset has 1292A
+1293D  Aroma's Search                     not listed -- problemset has 1292B
+1293E  Xenon's Attack on the Gangs        not listed -- problemset has 1292C
+1293F  Chaotic V.                         not listed -- problemset has 1292D
+```
+
+The problemset keeps one copy. A Div. 2 contestant's submissions carry the
+other. In one real Div. 2 participant's full history, **29 of 230 solved
+problems were stored under an id the problemset does not list**. One history
+is an example, not an estimate — but the audience in §2 is mostly Div. 2, so
+it is not a rare case either.
+
+The consequence lands at v0.4: a recommender drawing from the problemset and
+checking "already solved?" by id would offer those 29 problems back to that
+user as new. It also splits the crowd's attempts on one problem across two ids,
+which matters for the per-problem difficulty estimate at v0.6.
+
+This is not a flaw in the id format — any contest-plus-index scheme has it —
+and the schema does not change for it. Storing the id each submission was
+actually made against is the choice that keeps it fixable, because a mapping to
+the problemset's id can be built later from rows already stored. Collapsing
+the two ids at write time would destroy which contest a submission came from,
+which cannot be undone. Now in §12, due at v0.4.
+
+Name matching will not build that mapping on its own. The problemset holds
+seven different problems called "Elections", and reuse is not limited to
+adjacent contests: `1230D` appears in the problemset only as `1210B`.
+
+### The first check was aimed at the wrong source
+
+The first attempt looked for duplicates *inside* `problemset.problems` — same
+name, contests close together, same rating and tags. It reported 69 pairs. They
+were mostly one contest containing seven different problems all named
+"Treasure Hunt". And it could never have found the real case, because the
+problemset had already dropped one copy of every shared problem before the data
+arrived.
+
+What found it was asking the places the data actually comes from: a contest's
+own problem list, and a real user's submissions. Checking a derived dataset
+for a problem its own construction removed says nothing either way.
+
+### Also found
+
+- **acmsguru is 453 problems.** The 09-07 entry said "about twenty". The rule
+  handles all of them, but the number was a guess written as a fact.
+- **`user.status` includes gym submissions.** tourist has 155. Store or skip is
+  a `sync.py` decision; with `contest_id` stored, `contest_id >= 100000` filters
+  them either way.
+- **`contest.standings` refuses paging for non-gym contests.** Anonymous callers
+  get the whole table or HTTP 400. Relevant if `collect.py` at v0.3 finds users
+  through standings.
+- **That 400 first arrived with no reason attached**, because the check script
+  did not read the error body — the exact lesson from `api_client.py` on 08-14,
+  repeated in a throwaway script. The body said precisely what was wrong.
+
+### Next
+
+Unchanged: `db.py`, `connect()` and `init_db()`.

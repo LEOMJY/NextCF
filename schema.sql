@@ -59,21 +59,50 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS problems (
     -- contestId + index, e.g. "1234A".
     --
-    -- A few problems (the acmsguru set) have no contestId at all -- web.py's
+    -- The acmsguru archive (453 problems) has no contestId at all -- web.py's
     -- display_row already handles this -- so for those the id is
-    -- problemsetName + index, e.g. "acmsguru100". No collision is possible,
-    -- because contest ids are numeric and that form starts with letters.
+    -- problemsetName + index, e.g. "acmsguru553". It cannot collide with the
+    -- normal form: contest ids are numeric, and this starts with letters.
     --
-    -- db.py owns building this string. Two callers formatting an id by hand
-    -- is two chances to format it differently.
-    id      TEXT    PRIMARY KEY,
+    -- db.py owns building this string, and raises if the API object has
+    -- neither field, rather than quietly storing "None553".
+    --
+    -- NEVER SPLIT THIS BACK INTO ITS PARTS -- read the two columns below.
+    -- It looks splittable at the first letter, but contest 921 has 14
+    -- problems whose index is a number ("01" to "14"), so their ids look
+    -- like "92114". Nothing in that string says whether it means contest 921
+    -- problem 14, or contest 9211 problem 4.
+    --
+    -- One row per contest a problem appeared in, NOT one per problem. When a
+    -- Div. 1 and a Div. 2 round run together they share problems under
+    -- different ids -- 1292A and 1293C are the same problem -- and each
+    -- submission is stored under the id it was actually made against. Read
+    -- spec section 12 before assuming that one id means one problem.
+    id             TEXT    PRIMARY KEY,
 
-    name    TEXT    NOT NULL,
+    -- The two halves of the id, kept as their own columns so nothing ever
+    -- has to parse the string. Needed to build a problem's link on the
+    -- results page, and to recognise gym problems (contest ids from 100000
+    -- up). NULL for acmsguru.
+    contest_id     INTEGER,
+
+    -- Not named "index": INDEX is an SQL keyword (as in CREATE INDEX), and
+    -- SQLite rejects a column named index with a syntax error unless the
+    -- name is quoted in every statement that touches it.
+    problem_index  TEXT    NOT NULL,
+
+    name           TEXT    NOT NULL,
 
     -- Often absent (spec section 6), so nullable. This is exactly what makes
     -- the rating-only baseline in section 9 non-trivial: a baseline that
     -- cannot score a third of the problemset is not much of a baseline.
-    rating  INTEGER
+    rating         INTEGER,
+
+    -- The id and its two halves are the same fact stored twice, and two
+    -- copies can drift apart. This makes a disagreement an error at the
+    -- write, instead of a broken link months later. || joins two values as
+    -- text; SQLite converts the integer on the way.
+    CHECK (contest_id IS NULL OR id = contest_id || problem_index)
 ) STRICT;
 
 

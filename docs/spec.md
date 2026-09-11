@@ -186,7 +186,9 @@ users
   last_synced    text     — ISO-8601 UTC; NULL until a sync completes
 
 problems
-  id             text     — contestId + index, e.g. "1234A"
+  id             text     — contestId + index, e.g. "1234A"; never parsed back
+  contest_id     integer  — the contest half; absent for acmsguru
+  problem_index  text     — the index half: "A", "E1", or in one contest "14"
   name           text
   rating         integer  — Codeforces' own rating, often absent
 
@@ -233,6 +235,13 @@ no submissions" — see `docs/decisions/0004-sync-interruption.md`.
 **Tags are their own table**, not a comma-separated column, because per-topic
 skill is the axis the entire product works along — see
 `docs/decisions/0005-tags-as-a-table.md`.
+
+**`problems.id` is never parsed back into its parts.** It looks splittable at
+the first letter, but contest 921 numbers its problems `01` to `14`, producing
+ids like `92114` that could equally mean contest 921 or contest 9211.
+`contest_id` and `problem_index` are stored as columns of their own, and a
+`CHECK` rejects any row whose id disagrees with them. There is one row per
+contest a problem appeared in, not one per problem — see §12.
 
 **`participant_type` is stored now and unused until v0.6.** It records whether
 a submission was made in-contest, virtually, or in practice, which §12's "what
@@ -595,6 +604,22 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
 - **What counts as "solved"?** Solved on the first try, or after five attempts
   and an editorial? The API does not distinguish. Affects everything.
 - **SQLite persistence in production.** See §7.
+- **One problem, two ids.** When a Div. 1 and a Div. 2 round run together,
+  each shared problem gets an id in both contests: `1292A` and `1293C` are the
+  same problem. `problemset.problems` lists only one copy, but a Div. 2
+  contestant's submissions carry the other. In one real Div. 2 history checked
+  on 2026-09-11, 29 of 230 solved problems were stored under an id the
+  problemset does not list — one history is an example, not an estimate. A
+  recommender drawing from the problemset would offer those users problems
+  they have already solved, and the audience in §2 is mostly Div. 2. This is
+  not a flaw in the id format, since any contest-plus-index scheme has it.
+  Storing the id each submission actually used is what keeps it fixable: a
+  mapping to the problemset's id can be built later from stored rows, without
+  re-fetching anybody. Name matching alone will not build it correctly — the
+  problemset holds seven different problems called "Elections", and a reused
+  problem is not always in an adjacent contest (`1230D` appears in the
+  problemset only as `1210B`). Decide at v0.4, before the first recommendation
+  ships.
 
 ### Answered
 
