@@ -1250,6 +1250,19 @@ for a problem its own construction removed says nothing either way.
   did not read the error body — the exact lesson from `api_client.py` on 08-14,
   repeated in a throwaway script. The body said precisely what was wrong.
 
+### Handle casing, verified
+
+The 09-07 entry said handles "appear to be" case-insensitive and asked for that
+to be checked against the API before `COLLATE NOCASE` was relied on. It was not
+checked then, and the comment in `schema.sql` went on to state it as fact
+anyway — a guess that hardened into a code comment. Now checked:
+`user.status?handle=TOURIST` answers OK, and the submission it returns names
+the author as `tourist`.
+
+So `COLLATE NOCASE` on both handle columns now rests on a measurement, and the
+second half of that 09-07 item stands: `sync.py` must store the handle the API
+returns, never the one typed into the form.
+
 ### Next
 
 Unchanged: `db.py`, `connect()` and `init_db()`.
