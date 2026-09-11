@@ -1266,3 +1266,107 @@ returns, never the one typed into the form.
 ### Next
 
 Unchanged: `db.py`, `connect()` and `init_db()`.
+
+---
+
+## 2026-09-11 — `db.py`: the settings that are not the schema
+
+`db.py` exists with `connect()` and `init_db()`, plus `utc_now()`, because
+`init_db()` needed a timestamp and the format in §6 only holds if one function
+produces every timestamp. No queries yet, and nothing calls it yet — wiring
+`init_db()` into startup comes with `sync.py`, when something needs the data.
+
+### What it owns
+
+`schema.sql` holds everything that is a property of the tables. `db.py` holds
+what is not:
+
+| Setting | Applies to | Set in |
+|---|---|---|
+| `PRAGMA foreign_keys = ON` | every connection; off by default | `connect()` |
+| rows readable by column name | every connection | `connect()` |
+| `PRAGMA journal_mode = WAL` | the file, and persists | `init_db()`, once |
+| one timestamp shape | every writer | `utc_now()` |
+
+### Checked by making each failure happen
+
+```
+ok  init_db creates all five tables
+ok  running init_db a second time keeps existing data
+ok  the file stays in WAL mode, even for a plain connection
+ok  connect() refuses a submission by an unknown handle
+ok  ...while a plain sqlite3.connect() silently stores the same row
+ok  rows are readable by column name
+ok  startup fails pending and running jobs, spares done ones, unblocks the handle
+ok  a connection used from another thread raises ProgrammingError
+ok  with WAL, a read during a write succeeds and sees 0 uncommitted rows
+ok  ...without WAL, the identical read fails with 'database is locked'
+ok  utc_now() has exactly the spec section 6 shape
+```
+
+Two of those are counterfactuals, run deliberately. A test that `connect()`
+rejects a bad foreign key would also pass if something else happened to reject
+it; sending the identical insert through a plain `sqlite3.connect()` and
+watching it succeed is what proves the pragma is doing the work. Same for WAL:
+the identical read, on the identical schema, with the journal mode left at its
+default, fails with "database is locked" — the error the progress page would
+have hit during every sync.
+
+The WAL test also shows ADR 0004 from the reader's side. While the writer held
+three uncommitted rows, the reader saw zero, not three. A page reading during a
+sync sees the user as they were before it started, never half-written.
+
+The write lock in that test is forced with `BEGIN EXCLUSIVE` so the result does
+not depend on timing. It is the lock every writer holds at the moment it
+commits, so it is the realistic worst case rather than an invented one.
+
+### Orphaned jobs: `pending` too
+
+ADR 0004 said `init_db()` would mark jobs still `running` at startup as failed.
+Writing it exposed a case the ADR missed. A job created but not yet started
+when the process died stays `pending` — and the partial unique index from 09-09
+refuses a second unfinished job for the same handle. So a stale `pending` row
+does not merely sit there: that handle could never be synced again. The cleanup
+covers both states, the test reproduces the lockout before cleanup and confirms
+it is lifted after, and the ADR is amended.
+
+Worth noticing how it happened. The index was right. The cleanup rule was right
+for the case it named. Together they produced a permanent lockout that neither
+shows on its own, and it only surfaced because the test inserted a stale row
+and then tried to start a new job, instead of checking the two in isolation.
+
+### Small things that were decisions
+
+- **Paths resolve from `db.py`'s own location**, not the working directory. A
+  bare `nextcf.db` means "wherever the program was started", which differs
+  between running `web.py` by hand and the host running `serve.py`.
+- **`NEXTCF_DB` overrides the path**, the way `serve.py` reads `PORT`. Where the
+  file lives in production is still the open §7 question; if the answer is a
+  mounted disk, it becomes a host setting rather than a code change.
+- **`utc_now()` uses `strftime`, not `isoformat()`.** `isoformat()` gives
+  `2026-09-11T14:03:00.123456+00:00`, which as text sorts *before*
+  `2026-09-11T14:03:00Z` from the same second, because `.` comes before `Z`.
+  Two shapes in one column would silently break every `ORDER BY` on it.
+- **`connect()` checks that foreign keys actually turned on** rather than
+  trusting the pragma, and **`init_db()` checks the journal mode it got back**.
+  A pragma SQLite does not act on fails silently, and a filesystem that cannot
+  do WAL answers with the old mode instead of raising.
+- **The one f-string in the file formats a table name into SQL**, in `main()`.
+  Placeholders stand in for values, never for names, so there is no
+  alternative — and it is safe only because the names come from
+  `sqlite_master`, not from outside.
+
+Also confirmed the database never reaches git: `python db.py` created
+`nextcf.db`, and `git check-ignore` matches it, `nextcf.db-wal` and
+`nextcf.db-shm`.
+
+### Next
+
+The queries, in `db.py`, one function per caller need — the list is in the
+09-07 entry. Two rules to hold while writing them:
+
+- **Every timestamp goes through `db.py`**, including converting the API's
+  `creationTimeSeconds`. That conversion belongs beside `utc_now()`, not as a
+  second `strftime` written inside `sync.py`.
+- **The problem id is built in exactly one function**, which raises when an API
+  object has neither `contestId` nor `problemsetName`.

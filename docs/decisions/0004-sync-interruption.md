@@ -74,10 +74,14 @@ with more moving parts. Rejected on the same grounds §7 rejects Celery.
   *outside* the user transaction, or its failure record would roll back too.
 - A job killed by the host leaves `state = 'running'` forever, and
   `/progress/<job>` would poll it forever. Because §7 commits to one worker
-  thread in one process, any job still marked running at startup is by
-  definition orphaned, so `init_db()` marks them all failed. This is correct
-  *because* there is a single process, and stops being correct the day there
-  are two.
+  thread in one process, any unfinished job at startup is by definition
+  orphaned, so `init_db()` marks them all failed. This is correct *because*
+  there is a single process, and stops being correct the day there are two.
+- *Amended 2026-09-11:* "unfinished" means `pending` as well as `running`. The
+  first version of this ADR named only `running`. But the partial unique index
+  on `jobs` refuses a second unfinished job for the same handle, so a `pending`
+  row orphaned by a restart would have blocked that handle from ever being
+  synced again — worse than a spinner that never stops.
 - If incremental writes are adopted later, they are safe here only because of a
   property of somebody else's API: `user.status` returns newest first, so
   submissions arriving during a restart shift the paging window such that a

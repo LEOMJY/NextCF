@@ -98,6 +98,8 @@ explanation rather than a stack trace.
 web.py               routes and pages
 templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
+db.py                opening the database correctly, and creating it
+schema.sql           the five tables — see docs/spec.md §6
 serve.py             production entry point — see docs/decisions/0003-hosting.md
 requirements.txt     direct dependencies
 .python-version      pins the Python version for the host
@@ -106,8 +108,8 @@ docs/devlog.md       dated entries: what was tried, what broke, what was learned
 docs/decisions/      one short file per significant technical decision (ADRs)
 ```
 
-Modules still to come — `db.py`, `sync.py`, `collect.py`, `model.py`,
-`evaluate.py`, `scheduler.py` — are described in [spec §4](docs/spec.md).
+Modules still to come — `sync.py`, `collect.py`, `model.py`, `evaluate.py`,
+`scheduler.py` — are described in [spec §4](docs/spec.md).
 
 ## Stack
 
