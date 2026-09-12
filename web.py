@@ -1,13 +1,16 @@
 """NextCF web app.
 
-v0.1 scope: a handle input on `/`, and a plain table of that handle's most
-recent submissions on `/results/<handle>`. Every request calls the Codeforces
-API and waits for the answer.
+v0.2: every page reads from the database, and no request waits on Codeforces.
+Asking for a handle starts a background sync (sync.py) and sends the visitor
+to a progress page, which polls the jobs table until the work is done.
+
+    GET  /                   the pitch, and the handle input
+    POST /                   read the field, send them to /results/<handle>
+    GET  /results/<handle>   the table, out of the database
+    GET  /progress/<job>     a sync in flight, reported honestly
 
 Deliberately not here yet:
-    styling and design tokens      v0.2  -- see docs/spec.md section 7.1
-    background job, progress page  v0.2  -- see docs/spec.md section 4
-    database                       v0.2
+    styling and design tokens      v0.2, and the last thing it needs
     recommendations, the model     v0.4 onwards
 
 Usage:
@@ -16,11 +19,11 @@ Usage:
 """
 
 import re
-import urllib.error
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, g, redirect, render_template, request, url_for
 
-import api_client
+import db
+import sync
 
 # Flask has to find templates/ and static/, and it locates them relative to
 # this file. __name__ is how it works out where this file is. That is the only
@@ -33,6 +36,59 @@ app = Flask(__name__)
 # real handle is, and says HTTP 400 when it is not one. If this pattern is ever
 # wrong it will be wrong by rejecting something valid, so keep it permissive.
 HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,24}$")
+
+# How long a stored history counts as fresh. Opening a results page older than
+# this starts a re-sync instead of showing it.
+#
+# The trade: too short and every visit costs a fetch and a wait; too long and
+# somebody who just solved a problem is shown a page saying they did not. Ten
+# minutes is long enough that reloading never re-fetches, and short enough that
+# coming back after a contest does. It gets cheaper to shorten this once a
+# re-sync can stop early at submissions already stored -- v0.7 work.
+FRESH_FOR_SECONDS = 600
+
+# How many submissions the table shows. The database keeps every one of them --
+# Benq has 8,574 -- but a page carrying 8,574 rows is slow to build, heavy to
+# send and impossible to read. The count of what is NOT shown goes on the page
+# too, because silently truncating a list is its own kind of lying.
+#
+# v0.4 replaces this table with five recommendations, so this is a stopgap.
+RESULTS_LIMIT = 100
+
+# Create the tables if they are missing, and fail any job left behind by a
+# process that died. Runs on import, which means once per server start, before
+# any request is served.
+#
+# Only the web app may do this. It marks EVERY unfinished job failed, so
+# another program calling it while a sync was running would destroy that
+# sync's record -- see spec section 12.
+db.init_db()
+
+
+def get_db():
+    """The database connection for this request, opened on first use.
+
+    A sqlite3 connection belongs to the thread that created it, and the server
+    runs requests on a pool of threads it reuses. So a connection is opened and
+    closed inside a single request rather than shared between them.
+
+    `g` is Flask's scratch space for one request. It is emptied when the
+    request ends, which is what makes the teardown below possible.
+    """
+    if "db" not in g:
+        g.db = db.connect()
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(exception):
+    """Flask calls this when a request ends, whether or not it went well.
+
+    Without it, every request would leak a connection and an open file handle.
+    """
+    conn = g.pop("db", None)
+    if conn is not None:
+        conn.close()
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -64,19 +120,16 @@ def index():
             # 400 = "your request was malformed", which is accurate.
             return render_template("index.html", error="Enter a Codeforces handle."), 400
 
-        # Do not render the results here. Redirect to their own URL instead.
+        # Do not decide anything here beyond where to send them. Whether the
+        # data needs fetching is the results page's question, and asking it in
+        # one place means a link somebody shares behaves the same as the form.
         #
-        # A redirect is a response that says "the thing you want is at this
-        # other address, go there". The browser follows it immediately, so the
-        # user sees /results/tourist in the address bar -- bookmarkable,
-        # shareable, and safe to reload. Rendering results straight out of a
-        # POST instead means reloading the page re-submits the form, which is
-        # the "Confirm Form Resubmission" dialog everyone has seen.
-        #
-        # url_for("results", handle=handle) builds "/results/tourist" by asking
-        # the routing table, rather than hardcoding the string. Change the
-        # route later and every url_for follows; every hardcoded "/results/"
-        # silently 404s.
+        # A redirect is a response saying "the thing you want is at this other
+        # address". The browser follows it, so the visitor sees
+        # /results/tourist in the address bar -- bookmarkable, shareable, and
+        # safe to reload. Rendering out of a POST instead means reloading
+        # re-submits the form, which is the "Confirm Form Resubmission" dialog
+        # everyone has seen.
         return redirect(url_for("results", handle=handle))
 
     return render_template("index.html")
@@ -84,11 +137,14 @@ def index():
 
 @app.route("/results/<handle>")
 def results(handle):
-    """Show one handle's recent submissions.
+    """The submissions table, read from the database.
+
+    Three outcomes: the data is here and fresh, so show it; the data is
+    missing or stale, so start a sync and show its progress; or that is not a
+    handle, so say so.
 
     `<handle>` in the route is a variable part of the path: /results/tourist
-    matches, and "tourist" arrives as the `handle` argument. The names have to
-    agree -- <handle> in the rule, handle in the signature.
+    matches, and "tourist" arrives as the `handle` argument.
     """
     if not HANDLE_PATTERN.match(handle):
         return render_template(
@@ -97,61 +153,96 @@ def results(handle):
             message="That does not look like a Codeforces handle.",
         ), 404
 
-    try:
-        submissions = api_client.fetch_submissions(handle)
-    except RuntimeError as exc:
-        # Codeforces answered and refused. Nearly always a handle that does
-        # not exist, and api_client has already dug the real explanation out
-        # of the error body, so `exc` reads like
-        #     "handle: User with handle nosuchuser42qq not found"
-        # This is exactly the case spec section 7.1 calls the loudest amateur
-        # tell on the site if it reaches the user as a traceback.
-        return render_template("error.html", handle=handle, message=str(exc)), 404
-    except urllib.error.URLError as exc:
-        # The network itself failed: no DNS, no route, timed out, TLS refused.
-        # Nothing the user did wrong, so it is a 5xx, not a 4xx. 502 Bad
-        # Gateway = "I am a server, and the server I depend on let me down."
-        #
-        # Ordering note: urllib.error.HTTPError is a SUBCLASS of URLError, so
-        # if HTTPError ever escaped api_client this clause would swallow it.
-        # It does not -- api_client converts it to RuntimeError -- but that is
-        # a fact about the other file, and worth rechecking if it changes.
+    conn = get_db()
+    user = db.get_user(conn, handle)
+
+    # last_synced is NULL until a sync finishes, so "never synced" and "a sync
+    # that died halfway" are the same case here, which is the point of ADR
+    # 0004. Staleness is a plain text comparison because every timestamp has
+    # the same fixed shape -- see db.utc_ago.
+    if (
+        user is None
+        or user["last_synced"] is None
+        or user["last_synced"] < db.utc_ago(FRESH_FOR_SECONDS)
+    ):
+        # Nothing here waits on Codeforces. start_sync writes one row, hands
+        # the work to a thread, and returns immediately -- and if this handle
+        # is already syncing it returns that job rather than starting a second.
+        return redirect(url_for("progress", job_id=sync.start_sync(handle)))
+
+    rows = db.get_submissions(conn, handle, limit=RESULTS_LIMIT)
+
+    return render_template(
+        "results.html",
+        # The spelling Codeforces uses, not the one that was typed. The two
+        # match for lookups because both columns are COLLATE NOCASE, but the
+        # page should show the real one.
+        handle=user["handle"],
+        rows=[display_row(row) for row in rows],
+        total=db.count_submissions(conn, handle),
+        last_synced=user["last_synced"],
+    )
+
+
+@app.route("/progress/<int:job_id>")
+def progress(job_id):
+    """A sync in flight.
+
+    <int:job_id> matches digits only, so /progress/nonsense is a 404 from the
+    router and never reaches this function.
+    """
+    job = db.get_job(get_db(), job_id)
+
+    if job is None:
         return render_template(
             "error.html",
-            handle=handle,
-            message=f"Could not reach Codeforces: {exc.reason}",
-        ), 502
+            handle=None,
+            message="There is no sync with that number.",
+        ), 404
 
-    rows = [display_row(sub) for sub in submissions]
-    return render_template("results.html", handle=handle, rows=rows)
+    if job["state"] == "done":
+        return redirect(url_for("results", handle=job["target"]))
+
+    if job["state"] == "failed":
+        # 200, not an error status. This request worked perfectly, and the
+        # honest answer to it is a page explaining that the job did not. A
+        # status code describes the request for this page, not the job the
+        # page reports on.
+        return render_template(
+            "error.html",
+            handle=job["target"],
+            message=job["error"] or "The sync stopped without saying why.",
+        )
+
+    return render_template("progress.html", job=job)
 
 
-def display_row(sub):
-    """Turn one raw API submission into just the fields the table shows.
+def display_row(row):
+    """Turn one database row into just the fields the table shows.
 
     This exists so the template stays dumb. A template that decides things --
-    what to show when a field is missing, how to build a URL -- is program
-    logic living somewhere you cannot test, debug or step through.
+    what to show when a value is missing, how to build a URL -- is program
+    logic living somewhere you cannot step through in a debugger.
 
-    The two absent-field cases are the same ones api_client.format_submission
-    handles, and that is now duplicated knowledge across two files. Fine at two
-    call sites; pull it into one place when sync.py becomes the third.
+    Note what is no longer here. The old version read raw API dicts and had to
+    know which Codeforces fields go missing; that knowledge now lives in one
+    place, db.save_sync, which was the plan recorded on 08-15. What is left is
+    a display decision: an unjudged submission has no verdict in the database,
+    and the word "TESTING" belongs on the page rather than in a column.
     """
-    problem = sub["problem"]
-
-    # Unrated, brand new and gym problems have no "rating" (spec section 6),
-    # and a submission still being judged has no "verdict".
-    rating = problem.get("rating")
-    verdict = sub.get("verdict", "TESTING")
-
-    # contestId is absent for a few problem sources, e.g. acmsguru. Without it
-    # there is no problem URL to build, so the template shows plain text.
-    contest_id = problem.get("contestId")
     url = None
-    if contest_id is not None:
-        url = f"https://codeforces.com/contest/{contest_id}/problem/{problem['index']}"
+    if row["contest_id"] is not None:
+        # contest_id and problem_index are separate columns exactly so that
+        # nothing has to split a problem id to build this -- see the comment on
+        # problems.id in schema.sql.
+        url = f"https://codeforces.com/contest/{row['contest_id']}/problem/{row['problem_index']}"
 
-    return {"rating": rating, "verdict": verdict, "name": problem["name"], "url": url}
+    return {
+        "rating": row["rating"],
+        "verdict": row["verdict"] or "TESTING",
+        "name": row["name"],
+        "url": url,
+    }
 
 
 if __name__ == "__main__":
@@ -161,7 +252,7 @@ if __name__ == "__main__":
     #
     # It must never be on for the deployed copy. The debug traceback page
     # includes an interactive Python console, which is remote code execution
-    # for anyone who can load the page. The host will not run this line anyway
-    # -- a real deployment imports `app` and runs it under a production server
-    # (that is the next task), so this block is the local-only path.
+    # for anyone who can load the page. The host does not run this line anyway
+    # -- serve.py imports `app` and runs it under waitress -- so this block is
+    # the local-only path.
     app.run(debug=True)

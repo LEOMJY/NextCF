@@ -1717,3 +1717,101 @@ written for, on real data, without a test having to arrange the situation.
 ### Next
 
 Unchanged: `/progress/<job>`, then the wiring, then the design tokens.
+
+---
+
+## 2026-09-12 — The site reads from the database
+
+`/progress/<job>` exists, and the pages are wired to the database. Nothing in a
+web request waits on Codeforces any more — `web.py` no longer imports
+`api_client` at all. Only `sync.py` talks to the API, from a background thread.
+
+### The shape of it
+
+```
+POST /              ->  redirect to /results/<handle>
+GET  /results/x     ->  fresh data in the database?  show the table
+                        missing, unfinished or stale? start a sync,
+                                                      redirect to /progress/<job>
+GET  /progress/7    ->  running?  the count, and the page reloads itself
+                        done?     redirect to /results/<handle>
+                        failed?   the reason, in a sentence
+```
+
+Deciding in one place matters more than it looks: the form does not decide
+anything, so a link somebody shares behaves exactly like typing the handle.
+
+### A connection per request, not per process
+
+`get_db()` opens one on first use and a teardown closes it when the request
+ends. A sqlite3 connection belongs to the thread that made it, and the server
+runs requests on a pool of threads it reuses, so a connection that outlived a
+request would eventually be used from the wrong one. Flask's `g` is the
+per-request scratch space that makes this three lines.
+
+### The progress page does not invent a percentage
+
+Codeforces never says how many submissions a person has. The only way to find
+out is to keep asking until a page comes back short — which means a percentage
+on this page would be a number nobody knows. §4.1 asks this page to show a long
+job making progress *without lying about it*, so it shows a count that is true
+and no bar that is not.
+
+It reloads itself with `<meta http-equiv="refresh" content="2">`. No
+JavaScript: it is the smallest thing that works, it survives scripting being
+turned off, and when the job finishes the next reload lands on the redirect to
+the results page, so leaving needs no extra code. The cost is the whole page
+re-fetched every two seconds. Replacing it with a small `fetch()` against a
+JSON endpoint is the upgrade, and it belongs with the design pass.
+
+That cost showed up immediately in an unexpected way: a screenshot of the
+progress page times out, because a page that reloads every two seconds never
+finishes rendering. Funny, and a fair warning about what the flicker will look
+like to a person.
+
+### Ten minutes of freshness
+
+Stored data older than ten minutes starts a re-sync instead of being shown;
+inside that window the stored copy is served without touching the API. That is
+the caching §10 asks for in v0.2.
+
+The other option was to show stale data at once and refresh behind the back of
+the page. Better for somebody returning, worse to reason about, and it needs a
+way to tell the page that newer data has arrived. Left for the design pass.
+
+### Run for real
+
+Typed `Benq` into the form in a browser. The progress page counted up —
+`5000 submissions fetched so far` — and then redirected itself to a table of
+8,574 submissions.
+
+Which exposed the next problem: that page was 8,574 table rows and 50KB of
+HTML. The database holding every submission is right; the page showing every
+submission is not. The table now shows the newest hundred **and says what it is
+hiding** — "Showing the 100 most recent of 8574 submissions" — because a list
+quietly cut short reads as "that is all there is".
+
+### The 08-15 plan finished
+
+`display_row` used to read raw API dicts and know which Codeforces fields go
+missing. That knowledge now lives once, in `db.save_sync`, which is exactly
+what the 08-15 entry said should happen when a third caller appeared. What is
+left in `display_row` is a display decision: a submission with no verdict in
+the database is shown as `TESTING`.
+
+### Checked
+
+43 checks: 13 for the web flow, 20 for the database, 7 for the retries, 3 for
+template comments. The web flow ones run against a temporary database with
+`start_sync` replaced, so they touch no network and finish instantly.
+
+One of them failed first time and was right to: two fake submissions had been
+given the same contest and index, which makes them the same problem, so only
+the first name was stored. The fixture was wrong, not the code — but it is
+worth noticing that a test fixture can encode a misunderstanding just as easily
+as code can.
+
+### Next
+
+The last thing v0.2 asks for: the design tokens and the base stylesheet from
+§7.1. Every page so far is unstyled browser default.

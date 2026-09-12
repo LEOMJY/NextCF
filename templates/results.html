@@ -7,7 +7,17 @@
 
 {% block content %}
   <h1>{{ handle }}</h1>
-  <p>{{ rows | length }} most recent submissions.</p>
+  {# The database holds the whole history now, and the table shows the newest
+     slice of it. Saying so is the point: a list quietly cut short reads as
+     "that is all there is". #}
+  <p>
+    {% if total > rows | length %}
+      Showing the {{ rows | length }} most recent of {{ total }} submissions,
+    {% else %}
+      {{ total }} submissions,
+    {% endif %}
+    last synced {{ last_synced }}.
+  </p>
 
   {# A real account with zero submissions is a valid answer, not an error, and
      an empty table with no explanation looks like a bug. #}

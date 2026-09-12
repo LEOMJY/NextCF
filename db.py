@@ -27,7 +27,7 @@ Usage:
 import os
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Both paths are worked out from where THIS file is, not from wherever the
@@ -67,6 +67,17 @@ def utc_now():
     # "2026-09-11T14:03:00Z" from the same second -- "." comes before "Z" --
     # so mixing the two silently breaks every ORDER BY on a time column.
     return datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)
+
+
+def utc_ago(seconds):
+    """The timestamp `seconds` ago, in the same shape as utc_now().
+
+    For "is this older than ten minutes?". Because every timestamp in the
+    database has one fixed shape, that question is a plain text comparison --
+    no parsing, and SQLite can ask it inside a query. That is the payoff for
+    the format decision in spec section 6.
+    """
+    return (datetime.now(timezone.utc) - timedelta(seconds=seconds)).strftime(TIMESTAMP_FORMAT)
 
 
 def connect(path=DB_PATH):
@@ -278,6 +289,19 @@ def get_submissions(conn, handle, limit=None):
         params.append(limit)
 
     return conn.execute(sql, params).fetchall()
+
+
+def count_submissions(conn, handle):
+    """How many submissions are stored for this user.
+
+    The results page shows only the newest hundred, and this is what lets it
+    say "of 8,574" truthfully without fetching 8,574 rows in order to count
+    them. Counting is the database's job and it is fast; loading rows to
+    measure them is neither.
+    """
+    return conn.execute(
+        "SELECT count(*) FROM submissions WHERE handle = ?", (handle,)
+    ).fetchone()[0]
 
 
 def get_job(conn, job_id):

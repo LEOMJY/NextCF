@@ -19,6 +19,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}NextCF{% endblock %}</title>
+    {# A hole for whatever one page needs in the head and the others do not.
+       The progress page puts its own reload instruction here. #}
+    {% block head %}{% endblock %}
   </head>
   <body>
     <header>

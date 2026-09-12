@@ -10,17 +10,17 @@ be just hard enough — roughly a 70% chance you solve them.
 
 ---
 
-## Status: v0.1, live
+## Status: v0.2 in progress
 
-**Nothing on this page is finished yet.** What exists today is a two-page web
-app that lists one user's recent submissions. There is no styling, no database
-and no model — so it recommends nothing, which is the entire point of the
-project.
+**Nothing on this page is finished yet.** What exists today is a three-page web
+app that reads a Codeforces history into a database and lists it back. There is
+no styling and no model — so it recommends nothing, which is the entire point of
+the project.
 
 | | |
 |---|---|
-| Works now | Enter a handle, see your last 100 submissions. Deployed |
-| Next (v0.2) | A database, fetching in the background with a progress page, and the base stylesheet |
+| Works now | Enter a handle; the history is fetched in the background behind a progress page, stored, and listed |
+| Still in v0.2 | Design tokens and the base stylesheet |
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a
