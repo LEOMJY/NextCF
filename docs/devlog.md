@@ -1377,3 +1377,120 @@ stops, so §4's "they do not run at the same times" cannot literally hold. The
 comment in `init_db()` first said "one process" and meant only two copies of
 the web app; it now names `collect.py` and `scheduler.py`. §12 has the question
 of which program may run the cleanup, due before `collect.py` touches `jobs`.
+
+---
+
+## 2026-09-12 — `db.py`: the queries
+
+One function per question a caller actually asks, and none written ahead of a
+caller that asks it. The list is the one from the 09-07 entry and has not grown:
+
+```
+reads        get_user, get_submissions, get_job, get_active_job
+job records  create_job, start_job, set_job_progress, finish_job
+the sync     save_sync
+conversions  problem_id, iso_from_unix
+```
+
+### `save_sync` is one function because ADR 0004 is a promise about a transaction
+
+The ADR says the rows and `last_synced` become permanent together or not at
+all. The only way to keep that promise is to make the whole write a single call
+that nothing can use halfway, so the user, its problems, their tags, the
+submissions and `last_synced` all sit in one `with conn:` block and `sync.py`
+never sees the seams.
+
+The rows are shaped before the transaction opens. A malformed submission then
+raises before anything is written at all, which is better than rolling it back,
+and it keeps the transaction short — a transaction is a lock, and a lock is
+time other threads spend waiting.
+
+### Three decisions that only appeared while writing it
+
+**Submissions update the verdict on conflict rather than being ignored.** ADR
+0004 described `INSERT OR IGNORE`: Codeforces' submission ids are stable, so
+re-inserting one is a no-op. That is right about duplicates and wrong about
+verdicts. A submission fetched while it was still being judged has no verdict
+at all, and `OR IGNORE` would leave it NULL for good, however many times the
+user re-synced. A rejudge or a successful hack can also change a verdict that
+was already there. So the conflict clause updates the verdict and nothing else;
+the other five columns are facts that cannot change. Either way no duplicate
+row is created, which is the property the ADR actually depends on.
+
+**Problems are updated too**, for the same kind of reason. Codeforces gives a
+new problem its rating days or weeks after the contest, so a problem stored
+with `rating` NULL on the day of the round has to pick it up later — the
+rating-only baseline in §9 is built on exactly that column.
+
+**Tags are deleted and re-inserted**, per ADR 0005. Inserting without deleting
+would accumulate every tag a problem has ever had, with nothing marking which
+ones are current.
+
+### `get_submissions` returns three different things
+
+`None` for a handle that was never synced, or whose sync did not finish. `[]`
+for a user who synced fine and genuinely has no submissions. Rows otherwise.
+
+`None` versus `[]` is the same distinction as NULL versus 0, and it is the
+reason nothing else may query the submissions table directly: this is the only
+place ADR 0004's completeness rule is enforced, so there is exactly one
+function that could get it wrong.
+
+### The job functions commit on their own, and that is the point
+
+Each of `create_job`, `start_job`, `set_job_progress` and `finish_job` has its
+own `with conn:`. A job's failure record has to survive the rollback that
+destroyed the work it describes, so it cannot be written inside the transaction
+doing that work. The test for it creates a job, lets a sync fail, and checks
+the job row is still there and can be marked failed while the user it was
+syncing is still absent.
+
+The cost is a footgun, now written above those functions in capitals: calling
+one inside another `with conn:` would commit the enclosing transaction too, and
+make half a user permanent — the exact thing ADR 0004 exists to prevent.
+
+### Checked
+
+19 now, 8 of them new:
+
+```
+ok  problem_id builds both forms and refuses to invent a third
+ok  save_sync stores user, problem, tags and submissions, newest first
+ok  syncing twice: no duplicates, verdict and rating updated, tags replaced, first_seen kept
+ok  the same handle in another casing updates one user, not two
+ok  one broken submission leaves the whole sync unwritten
+ok  None for never-synced and half-synced, [] for synced with nothing
+ok  job lifecycle: one active at a time, retry after it finishes
+ok  a job's failure record survives the sync that rolled back
+```
+
+The casing one turns yesterday's API measurement into a property of the code:
+`save_sync` called with `tourist` and then `TOURIST` updates one row instead of
+creating a second user.
+
+### Where the API's shape now lives
+
+The 08-15 entry recorded that "these fields are sometimes absent" was written
+down in both `api_client.py` and `web.py`, and said it should move into one
+place when `sync.py` became the third caller. That place is `save_sync`, which
+takes the raw dicts the API sent and is the only code that knows `verdict`,
+`rating`, `contestId` and `problemsetName` can be missing.
+
+The cost is that `db.py` now knows Codeforces' field names. The alternative was
+a third module translating between the two, which is more ceremony than one
+function is worth at this size. The day a second data source appears, that
+trade stops being right.
+
+`web.py` still has its own copy in `display_row`, because it still reads from
+the API directly. That goes when the results page starts reading from the
+database instead — the same change that wires `init_db()` into startup.
+
+### Next
+
+`sync.py`: fetch the pages, update progress as they arrive, call `save_sync`
+once at the end. Then `/progress/<job>`, then the design tokens.
+
+Two things it has to do that nothing enforces yet. Pass the handle the API
+returned, not the one typed into the form. And call `get_active_job` before
+`create_job`, so a second visitor typing a handle that is already syncing joins
+that job instead of hitting the unique index.

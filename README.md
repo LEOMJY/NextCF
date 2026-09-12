@@ -98,7 +98,7 @@ explanation rather than a stack trace.
 web.py               routes and pages
 templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
-db.py                opening the database correctly, and creating it
+db.py                the database: opening it, creating it, and every query
 schema.sql           the five tables — see docs/spec.md §6
 serve.py             production entry point — see docs/decisions/0003-hosting.md
 requirements.txt     direct dependencies
