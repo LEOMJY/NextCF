@@ -1,6 +1,6 @@
 {# The shared page skeleton. Every other template starts with
    {% extends "base.html" %} and fills in the blocks below, so the <head>,
-   the nav and the footer are written once rather than three times.
+   the nav and the footer are written once rather than four times.
 
    A {% block %} is a named hole. Whatever a child template puts in a block
    of the same name lands here; what is written between the block tags is the
@@ -19,23 +19,40 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}NextCF{% endblock %}</title>
+
+    {# One typeface, two weights, from a CDN -- no build step, which is the
+       same reason spec section 7 tolerates a CDN at all.
+
+       preconnect opens the connection while this HTML is still being read, so
+       the font arrives sooner. display=swap draws the text immediately in a
+       fallback mono and swaps when the real font lands, so a slow or blocked
+       CDN costs a different mono rather than a blank page. #}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+    {# url_for('static', ...) rather than a hardcoded "/static/style.css":
+       Flask knows where it serves static files from, and this follows it. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
     {# A hole for whatever one page needs in the head and the others do not.
        The progress page puts its own reload instruction here. #}
     {% block head %}{% endblock %}
   </head>
   <body>
-    <header>
+    <header class="site-head">
       {# url_for("index") asks the routing table for that view's URL instead
          of hardcoding "/". #}
-      <a href="{{ url_for('index') }}">NextCF</a>
+      <a class="brand" href="{{ url_for('index') }}">NextCF</a>
+      <span class="version">v0.2</span>
     </header>
 
     <main>
       {% block content %}{% endblock %}
     </main>
 
-    <footer>
-      <p><small>v0.1 &mdash; reads public data from the Codeforces API. No accounts.</small></p>
+    <footer class="site-foot">
+      <p>Reads public data from the Codeforces API. No accounts.</p>
     </footer>
   </body>
 </html>

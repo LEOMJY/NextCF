@@ -6,7 +6,7 @@
   {# The page reloads itself every two seconds. No JavaScript: a meta refresh
      is the smallest thing that works, it survives a browser with scripting
      turned off, and when the job finishes the next reload lands on the
-     redirect to the results page, so no extra code is needed to leave.
+     redirect to the results page, so leaving needs no extra code.
 
      The cost is a whole page re-fetched every two seconds and a visible
      flicker. Replacing it with a small fetch() against a JSON endpoint is the
@@ -15,24 +15,30 @@
 {% endblock %}
 
 {% block content %}
-  <h1>Reading {{ job.target }}&rsquo;s submissions</h1>
+  {# A quiet surface, but the one moment of peak attention on the site
+     (spec section 7.1), so the number itself gets the display size that the
+     landing page uses for its headline. Nothing else here competes with it. #}
+  <div class="tool">
+    <h1>Reading {{ job.target }}&rsquo;s submissions</h1>
 
-  <p><strong>{{ job.progress }}</strong> submissions fetched so far.</p>
+    <p class="progress-count">{{ job.progress }}</p>
+    <p class="meta">submissions fetched so far</p>
 
-  {# No percentage, and no progress bar, deliberately. Codeforces never says
-     how many submissions a person has -- the only way to find out is to keep
-     asking until a page comes back short. Any percentage on this page would
-     therefore be invented, and spec section 4.1 asks this page to show a long
-     job making progress WITHOUT LYING ABOUT IT. A number that is true beats a
-     bar that is not. #}
-  <p>
-    A few seconds for most people, up to a minute for somebody with thousands
-    of submissions. This page updates itself; the results appear when it is
-    finished.
-  </p>
+    {# No percentage, and no progress bar, deliberately. Codeforces never says
+       how many submissions a person has -- the only way to find out is to keep
+       asking until a page comes back short. Any percentage here would be
+       invented, and spec section 4.1 asks this page to show a long job making
+       progress WITHOUT LYING ABOUT IT. A number that is true beats a bar that
+       is not. #}
+    <p class="caveat">
+      A few seconds for most people, up to a minute for somebody with thousands
+      of submissions. This page updates itself; the table appears when it is
+      finished.
+    </p>
 
-  <p>
-    <small>Sync {{ job.id }}, started {{ job.started_at }}. This address is
-    safe to reload or share.</small>
-  </p>
+    <p class="meta">
+      Sync {{ job.id }}, started {{ job.started_at }}. This address is safe to
+      reload or to share.
+    </p>
+  </div>
 {% endblock %}

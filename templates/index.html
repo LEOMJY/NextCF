@@ -3,26 +3,34 @@
 {% block title %}NextCF &mdash; what to solve next on Codeforces{% endblock %}
 
 {% block content %}
-  <h1>Which Codeforces problem should you solve next?</h1>
+  {# The loud surface, spec section 7.1. It uses the same tokens as the tool
+     pages at full volume: the display size appears here and nowhere else, the
+     accent colour is on the headline and the button, and the spacing steps
+     are the large ones. #}
+  <div class="hero">
+    <p class="eyebrow">// measured, not guessed</p>
 
-  <p>
-    Enter your handle. Eventually this reads your submission history, works out
-    which topics you are strong and weak at, and picks problems you have roughly
-    a 70% chance of solving.
-  </p>
+    <h1>Which Codeforces problem should you solve <span class="accent">next?</span></h1>
 
-  <p>
-    <strong>Right now it does none of that.</strong> v0.1 fetches your last 100
-    submissions and prints them in a table. That is all.
-  </p>
+    <p class="lede">
+      Enter your handle. Eventually this reads your submission history, works out
+      which topics you are strong and weak at, and picks problems you have roughly
+      a 70% chance of solving.
+    </p>
 
-  {# `error` is only passed in when the POST was rejected, and an undefined
-     name is falsy in Jinja rather than an error -- so this block is simply
-     skipped on a normal page load. role="alert" makes a screen reader
-     announce it instead of leaving it to be found by chance. #}
-  {% if error %}
-    <p role="alert"><strong>{{ error }}</strong></p>
-  {% endif %}
+    <p class="caveat">
+      <strong>Right now it does none of that.</strong> It reads your submission
+      history into a database and prints it in a table. That is all.
+    </p>
 
-  {% include "_handle_form.html" %}
+    {# `error` is only passed in when the POST was rejected, and an undefined
+       name is falsy in Jinja rather than an error -- so this block is simply
+       skipped on a normal page load. role="alert" makes a screen reader
+       announce it instead of leaving it to be found by chance. #}
+    {% if error %}
+      <p class="form-error" role="alert">{{ error }}</p>
+    {% endif %}
+
+    {% include "_handle_form.html" %}
+  </div>
 {% endblock %}

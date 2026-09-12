@@ -6,7 +6,7 @@
    include means "paste that fragment here". The leading underscore in the
    filename is the usual convention for a fragment that is never a page on its
    own. #}
-<form method="post" action="{{ url_for('index') }}">
+<form class="handle-form" method="post" action="{{ url_for('index') }}">
   <label for="handle">Codeforces handle</label>
   {# name="handle" is the key this value arrives under in request.form.
      Without a name attribute the field is not submitted at all.

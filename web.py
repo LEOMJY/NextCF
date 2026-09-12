@@ -240,6 +240,12 @@ def display_row(row):
     return {
         "rating": row["rating"],
         "verdict": row["verdict"] or "TESTING",
+        # What counts as a solve is program logic and belongs here; which CSS
+        # class that turns into is presentation and belongs in the template.
+        # Assumption 3 in spec section 8: "OK" means solved, and that
+        # assumption is worth being able to find in one place when v0.6 has to
+        # revisit it.
+        "ok": row["verdict"] == "OK",
         "name": row["name"],
         "url": url,
     }

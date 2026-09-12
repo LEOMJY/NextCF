@@ -1,18 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Not found &mdash; NextCF{% endblock %}
+{% block title %}That did not work &mdash; NextCF{% endblock %}
 
 {% block content %}
-  <h1>That did not work</h1>
+  {# A quiet surface, and the one spec section 7.1 singles out: an unhandled
+     traceback here is named as the loudest amateur tell on the site. So this
+     page gets the same care as the others -- a heading, the real reason, and
+     a way to carry on without going back. #}
+  <div class="tool">
+    <h1>That did not work</h1>
 
-  {# The message is written by web.py, and for a bad handle it is Codeforces'
-     own explanation, e.g. "handle: User with handle nosuchuser42qq not found".
-     Saying what was wrong with the input is the entire point of this page --
-     spec section 7.1 names an unhandled traceback here as the loudest amateur
-     tell on the site. #}
-  <p role="alert">{{ message }}</p>
+    {# The message is written by web.py. For a bad handle it is Codeforces'
+       own explanation, e.g. "handle: User with handle nosuchuser42qq not
+       found"; for a failed sync it is whatever sync.py recorded. Saying what
+       went wrong, in words, is the entire point of this page. #}
+    <div class="notice">
+      <p role="alert"><code>{{ message }}</code></p>
+    </div>
 
-  {# The form comes back with the bad value still in it, so a typo is one
-     keystroke from fixed rather than retyped from scratch. #}
-  {% include "_handle_form.html" %}
+    {# The form comes back with the bad value still in it, so a typo is one
+       keystroke from fixed rather than retyped from scratch. #}
+    {% include "_handle_form.html" %}
+  </div>
 {% endblock %}

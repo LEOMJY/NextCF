@@ -386,6 +386,11 @@ An earlier draft of this section specified exact numbers (a 4/8/16/24/48/96 step
 and exactly one accent colour). Those were a reasonable default presented as a
 rule, and they are withdrawn. Pick the scale; then hold it.
 
+**Picked on 2026-09-12**, from three directions built as working pages — see
+`docs/decisions/0006-design-direction.md`. The system lives in
+`static/style.css`: one monospace typeface, five type sizes, five spacing
+steps, a dark canvas with a single accent, 3px radius, no shadow.
+
 ### Interactivity that is in scope
 
 Three things, each because the product needs it rather than because it decorates:

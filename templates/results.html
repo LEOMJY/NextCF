@@ -6,54 +6,73 @@
 {% block title %}{{ handle }} &mdash; NextCF{% endblock %}
 
 {% block content %}
-  <h1>{{ handle }}</h1>
-  {# The database holds the whole history now, and the table shows the newest
-     slice of it. Saying so is the point: a list quietly cut short reads as
-     "that is all there is". #}
-  <p>
-    {% if total > rows | length %}
-      Showing the {{ rows | length }} most recent of {{ total }} submissions,
+  {# The quiet surface. Same tokens as the landing page, turned down: the
+     heading is the head size rather than the display size, rows are tight,
+     and the accent colour appears only on a verdict that says OK -- which is
+     the one thing somebody scanning this table is looking for. #}
+  <div class="tool">
+    <h1>{{ handle }}</h1>
+
+    {# The database holds the whole history now, and the table shows the newest
+       slice of it. Saying so is the point: a list quietly cut short reads as
+       "that is all there is". #}
+    <p class="meta">
+      {% if total > rows | length %}
+        Showing the {{ rows | length }} most recent of {{ total }} submissions,
+      {% else %}
+        {{ total }} submissions,
+      {% endif %}
+      {# <time> is the element for a machine-readable instant, and it is what
+         keeps the timestamp from being broken across two lines -- ISO-8601
+         has no spaces, so a browser breaks it at the hyphens instead. #}
+      last synced <time datetime="{{ last_synced }}">{{ last_synced }}</time>.
+    </p>
+
+    {# A real account with zero submissions is a valid answer, not an error, and
+       an empty table with no explanation looks like a bug. #}
+    {% if not rows %}
+      <p>No submissions found for this handle.</p>
     {% else %}
-      {{ total }} submissions,
+      {# The wrapper is what scrolls on a narrow screen, so a wide table never
+         pushes the whole page sideways. #}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rating</th>
+              <th>Verdict</th>
+              <th>Problem</th>
+            </tr>
+          </thead>
+          <tbody>
+            {# for/endfor is Jinja's loop. `row` is one dict from display_row(). #}
+            {% for row in rows %}
+              <tr>
+                {# Explicitly comparing to none, not `if row.rating`, because 0 is
+                   falsy and would print as a dash too. No Codeforces problem is
+                   rated 0 today, but a truth test that happens to work is a bug
+                   waiting for the day the data changes. #}
+                <td class="rating">{% if row.rating is not none %}{{ row.rating }}{% else %}&mdash;{% endif %}</td>
+
+                {# row.ok is decided in display_row, not here. What counts as a
+                   solve is program logic; which class carries the accent colour
+                   is presentation. #}
+                <td class="verdict {% if row.ok %}verdict-ok{% endif %}">{{ row.verdict }}</td>
+
+                <td>
+                  {% if row.url %}
+                    <a href="{{ row.url }}">{{ row.name }}</a>
+                  {% else %}
+                    {{ row.name }}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% endif %}
-    last synced {{ last_synced }}.
-  </p>
 
-  {# A real account with zero submissions is a valid answer, not an error, and
-     an empty table with no explanation looks like a bug. #}
-  {% if not rows %}
-    <p>No submissions found for this handle.</p>
-  {% else %}
-    <table>
-      <thead>
-        <tr>
-          <th>Rating</th>
-          <th>Verdict</th>
-          <th>Problem</th>
-        </tr>
-      </thead>
-      <tbody>
-        {# for/endfor is Jinja's loop. `row` is one dict from display_row(). #}
-        {% for row in rows %}
-          <tr>
-            {# Explicitly comparing to none, not `if row.rating`, because 0 is
-               falsy and would print as "?" too. No Codeforces problem is rated
-               0 today, but a truth test that happens to work is a bug waiting
-               for the day the data changes. #}
-            <td>{% if row.rating is not none %}{{ row.rating }}{% else %}&mdash;{% endif %}</td>
-            <td>{{ row.verdict }}</td>
-            <td>
-              {% if row.url %}
-                <a href="{{ row.url }}">{{ row.name }}</a>
-              {% else %}
-                {{ row.name }}
-              {% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
-
-  <p><a href="{{ url_for('index') }}">Try another handle</a></p>
+    <p class="meta"><a href="{{ url_for('index') }}">Try another handle</a></p>
+  </div>
 {% endblock %}

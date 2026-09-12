@@ -1815,3 +1815,94 @@ as code can.
 
 The last thing v0.2 asks for: the design tokens and the base stylesheet from
 §7.1. Every page so far is unstyled browser default.
+
+---
+
+## 2026-09-12 — The design system, and v0.2 is finished
+
+### Three directions, built rather than described
+
+§7.1 says the token system is a design decision belonging to whoever is
+designing. Describing fonts and colours in words is a bad way to make that
+decision, so three complete directions were built as working HTML — editorial,
+terminal, product — each rendering both surfaces §7.1 distinguishes, using the
+site's real copy and a real 8,574-row history. A design decision made against
+lorem ipsum is a decision about lorem ipsum.
+
+Terminal was chosen. ADR 0006 has the alternatives and why they lost.
+
+```
+type     IBM Plex Mono, five sizes: 13 / 16 / 20 / 25 / clamp(34, 5.2vw, 64)
+space    five steps: 8 / 16 / 32 / 64 / 96
+colour   canvas #0b0d10, ink #e8ecf1, muted #79838f, accent #7cf03d
+radius   3px
+shadow   none
+```
+
+### Same tokens, two volumes
+
+The landing page uses the display size, the accent on the headline and the
+button, and the two largest spacing steps. The tool pages use the same file:
+heading down from display to head, rows tightened from 1.6 to 1.45, and the
+accent only on a verdict that says OK — which is the one thing somebody
+scanning a table of 100 rows is looking for.
+
+That is what §7.1 means by one product rather than two websites, and it is
+cheap to check: the tool pages import no CSS of their own.
+
+### Two things the browser found that reading could not
+
+Both appeared the moment a real page was on screen with real data:
+
+- **The problem names were links and did not look like links.** The underline
+  used `--line`, which is the near-invisible colour meant for borders on a dark
+  canvas. Discoverable by hovering, which is no use to anyone scanning. They
+  are underlined in `--muted` now.
+- **The timestamp broke across two lines** — `2026-09-` on one, `12T06:02:52Z`
+  on the next. ISO-8601 has no spaces, so the browser broke it at a hyphen. It
+  is wrapped in a `<time>` element now, which is the right element anyway, with
+  `white-space: nowrap`.
+
+Neither would have been caught by reading the CSS, and neither is the kind of
+thing a test can assert without knowing to look for it.
+
+### One piece of motion, on purpose
+
+A blinking block cursor after the number on the progress page. §7.1 rules
+scroll-triggered animation and page transitions out of the tool surface because
+those pages are read under time pressure — but it also names the progress page
+as the one moment of peak attention, and a cursor that blinks is the honest way
+to say "still working" without inventing a percentage. It stops blinking under
+`prefers-reduced-motion`.
+
+### The type is the one external dependency
+
+The font comes from a CDN, which adds no build step and matches what §7 already
+tolerates. A visitor who cannot reach it gets the fallback mono stack and the
+same design in a different face, which is a degradation rather than a break.
+
+Worth knowing, and now in ADR 0006: that CDN is blocked in mainland China, and
+a real share of Codeforces users are there. Self-hosting the two weights is the
+fix if it ever matters.
+
+### v0.2 is done
+
+| | |
+|---|---|
+| `db.py` and the schema from §6 | done |
+| `sync.py` as a background job | done |
+| `/progress/<job>` and the wiring | done |
+| Design tokens and base stylesheet | done |
+
+43 checks: 13 web flow, 20 database, 7 retry, 3 render. All four scratch check
+scripts still live outside the repository, which is now the largest untidy
+thing in this project — §10 puts tests at v0.7, and that is three milestones
+away from where the coverage actually is.
+
+### Next
+
+v0.3: bulk collection of ~2000 users, rate limited and resumable — the first
+job that really does run for an hour, and therefore the first place where the
+resume boundary in ADR 0004 earns its keep. Two things already written down
+that it needs: rate limiting shared across callers in `api_client`, and a
+decision about which program may run `init_db`'s orphan cleanup (§12).

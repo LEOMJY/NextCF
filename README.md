@@ -19,8 +19,8 @@ the project.
 
 | | |
 |---|---|
-| Works now | Enter a handle; the history is fetched in the background behind a progress page, stored, and listed |
-| Still in v0.2 | Design tokens and the base stylesheet |
+| Works now | Enter a handle; the history is fetched in the background behind a progress page, stored, listed, and styled |
+| Next (v0.3) | Bulk collection of ~2000 users, rate limited and resumable |
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a
@@ -100,6 +100,7 @@ templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
 db.py                the database: opening it, creating it, and every query
 sync.py              fetches one user's history in the background
+static/style.css     the whole design system — see docs/decisions/0006-design-direction.md
 schema.sql           the five tables — see docs/spec.md §6
 serve.py             production entry point — see docs/decisions/0003-hosting.md
 requirements.txt     direct dependencies
