@@ -17,18 +17,21 @@ API_BASE = "https://codeforces.com/api"
 RATING_WIDTH = 6
 
 
-def fetch_submissions(handle, count=100):
-    """Return a list of submission dicts for `handle`, newest first.
+def call(method, **params):
+    """Call one Codeforces API method and return its "result".
 
     Raises RuntimeError if Codeforces answers but refuses the request.
     Raises urllib.error.URLError if the network itself fails.
+
+    Every method shares the same failure modes, so they are handled once here
+    rather than copied into each one.
     """
 
-    # urlencode escapes anything awkward in the handle. A handle containing a
+    # urlencode escapes anything awkward in a value. A handle containing a
     # space or an "&" would otherwise corrupt the query string silently --
     # the request would succeed and return the wrong user's data.
-    query = urllib.parse.urlencode({"handle": handle, "from": 1, "count": count})
-    url = f"{API_BASE}/user.status?{query}"
+    query = urllib.parse.urlencode(params)
+    url = f"{API_BASE}/{method}?{query}"
 
     # The timeout is not optional. Without it a hung connection blocks forever,
     # and at v0.3 this same call runs ~2000 times unattended overnight.
@@ -59,6 +62,35 @@ def fetch_submissions(handle, count=100):
         raise RuntimeError(payload.get("comment", "Codeforces returned FAILED"))
 
     return payload["result"]
+
+
+def fetch_submissions(handle, count=100, from_index=1):
+    """One page of `handle`'s submissions, newest first.
+
+    `from_index` is 1-based and counts from the newest submission, so page two
+    of 100 starts at 101. Paging through a long history is what sync.py does;
+    the web page asks for one page of 100 and stops.
+
+    "from" is a Python keyword, so it cannot be written as a keyword argument
+    and is passed in a dict instead.
+    """
+    return call("user.status", handle=handle, count=count, **{"from": from_index})
+
+
+def fetch_user(handle):
+    """One user's profile: the canonical spelling of the handle, and a rating.
+
+    Two things sync.py needs and user.status does not give. Codeforces handles
+    are case-insensitive, so a visitor typing "TOURIST" must still be stored
+    under the spelling the API returns -- otherwise the same person can end up
+    displayed three different ways.
+
+    "rating" is absent for anyone who has never competed, so read it with
+    .get(), never with [].
+    """
+    # user.info takes "handles", plural, and answers with a list in the same
+    # order. One handle in, one user out.
+    return call("user.info", handles=handle)[0]
 
 
 def format_submission(sub):

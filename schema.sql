@@ -193,8 +193,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     -- silently matches nothing three weeks later.
     kind         TEXT    NOT NULL CHECK (kind IN ('sync', 'collect')),
 
-    -- Which handle, or which batch.
-    target       TEXT    NOT NULL,
+    -- Which handle, or which batch. COLLATE NOCASE for the same reason as
+    -- users.handle: without it "Tourist" and "tourist" are different targets,
+    -- the unique index below would happily allow one unfinished job of each,
+    -- and the same person would be fetched twice at the same time.
+    target       TEXT    NOT NULL COLLATE NOCASE,
 
     state        TEXT    NOT NULL DEFAULT 'pending'
                          CHECK (state IN ('pending', 'running', 'done', 'failed')),

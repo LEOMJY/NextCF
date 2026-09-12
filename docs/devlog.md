@@ -1494,3 +1494,125 @@ Two things it has to do that nothing enforces yet. Pass the handle the API
 returned, not the one typed into the form. And call `get_active_job` before
 `create_job`, so a second visitor typing a handle that is already syncing joins
 that job instead of hitting the unique index.
+
+---
+
+## 2026-09-12 — `sync.py`, and a comment that was printing itself on the live site
+
+### The page has been saying this since 08-15
+
+A screenshot of the landing page, above the title:
+
+```
+is a Jinja comment: it is stripped when the page is rendered, so it never
+reaches the browser. would be sent. #}
+```
+
+`base.html` opened with a comment explaining what a Jinja comment is — and to
+explain it, it wrote one out in the middle of itself. Jinja comments do not
+nest: they end at the first closing marker. So the comment ended halfway
+through its own explanation, and the rest of the sentence became page content.
+The `<!-- -->` it mentioned turned into a real HTML comment, which is the hole
+in the middle of the sentence.
+
+Every visitor since 08-15 has seen it. Nothing caught it because it is not a
+syntax error, the page still answers 200, and every check written so far asked
+about status codes and table contents — never about what the page actually
+says. The 08-15 entry claimed all six paths were "verified rather than
+assumed"; they were, for everything except the words on the screen.
+
+There is now a check that renders `/`, the error page and a rejected POST, and
+fails if the HTML contains `{#`, `#}`, `{%`, or any wording from that comment.
+It would have caught this on the day. Like the schema and db checks it is a
+scratch script rather than part of the repository — tests are v0.7 in §10, and
+that gap is now three scripts and 23 checks wide.
+
+The comment now explains the rule without writing the marker, and says why.
+
+### `sync.py`
+
+`user.info` first, for the two things `user.status` does not give: the
+canonical spelling of the handle, and the Codeforces rating. Everything after
+that uses the API's spelling, never the one typed into the form. Then it pages
+through the history writing nothing but `jobs.progress`, and hands the whole
+list to `save_sync` in one call.
+
+Run against the live API:
+
+```
+job 1: syncing tourist
+  1000 submissions fetched
+  ...
+  5474 submissions fetched
+done
+5474 submissions stored
+
+  jobs           1 rows
+  problem_tags   9029 rows
+  problems       3134 rows
+  submissions    5474 rows
+  users          1 rows
+```
+
+### Page size is a trade between requests and progress
+
+`PAGE_SIZE = 1000`. One request for everything is fastest and leaves the
+progress bar at zero until it is over. 100 at a time gives the finest progress
+and needs 55 requests for a history this size, at an API that asks for one
+request every two seconds. 1000 puts almost every user in a single request and
+still moves the bar for the heavy ones; tourist took six requests and about
+fifteen seconds.
+
+The two-second wait between pages lives in `sync.py`, not `api_client`, and
+that is temporary. Real rate limiting — shared by every caller, with retries
+and backoff — belongs in `api_client` at v0.3, where `collect.py` will need it
+for 2000 users in a row.
+
+### The paging loop is correct because of how somebody else sorts
+
+`user.status` answers newest first, so a submission made *during* the loop
+shifts everything down one place and the next page repeats a row already
+collected. Repeats are harmless: `save_sync` keys submissions by Codeforces'
+own id. If the API answered oldest first, the identical shift would *skip* a
+row instead, and nothing in this code would notice. The loop looks equally
+correct either way, which is exactly why it is written in a comment there.
+
+### `except Exception` on purpose
+
+`run_sync` catches everything. Normally that hides bugs. Here the opposite: the
+thread's only way to tell anybody anything is the `jobs` row, so an exception
+that escaped would kill the thread in silence and leave the job marked
+`running` forever, with a visitor watching a progress page that will never move
+or explain itself. The visitor gets a sentence; the real error goes to the log.
+
+### Two visitors, one handle
+
+`start_sync` looks for an unfinished job first and returns it if there is one.
+If two requests both look and both find nothing, the unique index refuses the
+second insert and the loser reads back the winner's job. The check is an
+optimisation; the index is the guard.
+
+`jobs.target` gained `COLLATE NOCASE`, for the same reason `users.handle` has
+it: without it `Tourist` and `tourist` are different targets, the index would
+allow one unfinished job of each, and the same person would be fetched twice at
+the same time.
+
+### Changing `schema.sql` after a database exists
+
+That `COLLATE NOCASE` never reached the local `nextcf.db`. Every statement in
+`schema.sql` is `CREATE TABLE IF NOT EXISTS`, and the table already existed, so
+the change was silently skipped. The file was deleted and rebuilt, which costs
+nothing today: it holds a cache of public data, and no local copy matters.
+
+That stops being true the first time a database holds something worth keeping.
+From then on a change to `schema.sql` needs a migration — a script that
+transforms existing data into the new shape — and `IF NOT EXISTS` will quietly
+do nothing at all. Worth knowing before the deployed copy holds data, which is
+the same §7 question due before v0.3.
+
+### Next
+
+`/progress/<job>`, and the wiring: `web.py` calls `init_db()` at startup,
+starts a sync instead of blocking on the API, and the results page reads from
+the database. That last change is also when `display_row`'s copy of "these
+fields are sometimes absent" finally goes away.

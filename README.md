@@ -99,6 +99,7 @@ web.py               routes and pages
 templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
 db.py                the database: opening it, creating it, and every query
+sync.py              fetches one user's history in the background
 schema.sql           the five tables — see docs/spec.md §6
 serve.py             production entry point — see docs/decisions/0003-hosting.md
 requirements.txt     direct dependencies
@@ -108,7 +109,7 @@ docs/devlog.md       dated entries: what was tried, what broke, what was learned
 docs/decisions/      one short file per significant technical decision (ADRs)
 ```
 
-Modules still to come — `sync.py`, `collect.py`, `model.py`, `evaluate.py`,
+Modules still to come — `collect.py`, `model.py`, `evaluate.py`,
 `scheduler.py` — are described in [spec §4](docs/spec.md).
 
 ## Stack

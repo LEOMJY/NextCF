@@ -6,8 +6,13 @@
    of the same name lands here; what is written between the block tags is the
    default if the child says nothing.
 
-   This is also why {# ... #} is a Jinja comment: it is stripped when the page
-   is rendered, so it never reaches the browser. <!-- --> would be sent. #}
+   This block is itself a Jinja comment: it is stripped when the page is
+   rendered and never reaches the browser, which an HTML comment would.
+
+   Never write a comment's closing marker inside a comment. Jinja comments do
+   not nest, so the first one ends the comment right there, and the rest of
+   the sentence is printed onto the page for every visitor to read. That is
+   exactly what this comment did, on the live site, from 08-15 to 09-12. #}
 <!doctype html>
 <html lang="en">
   <head>
