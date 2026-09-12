@@ -1616,3 +1616,104 @@ the same §7 question due before v0.3.
 starts a sync instead of blocking on the API, and the results page reads from
 the database. That last change is also when `display_row`'s copy of "these
 fields are sometimes absent" finally goes away.
+
+---
+
+## 2026-09-12 — Retries, and a contradiction that sat in §4 for five days
+
+### The spec was arguing with itself
+
+ADR 0004 decided on 09-07 that an interrupted sync writes nothing and simply
+runs again. §6 and §12 were updated to match. §4's module list was not:
+
+```
+sync.py         fetch one user's history, as a resumable background job
+```
+
+So for five days the repository held the decision in one file and the opposite
+claim in another — and §4 is the part anybody reads first. Nothing caught it
+because nothing checks documents against each other; it surfaced only when
+somebody remembered §4 and asked why the code did not match.
+
+Both now agree, and §4's paragraph about interruption says which job resumes
+and which one restarts.
+
+### What resumability is worth here, measured rather than assumed
+
+The question behind the re-examination: if a user has 10,000 submissions and
+the fetch dies at 8,000, is all that work wasted?
+
+tourist's 5,474 submissions are six requests and about fifteen seconds. At that
+rate:
+
+| history | requests | fetch time |
+|---|---|---|
+| 500, which is most people | 1 | about a second |
+| 5,000 | 5 | about 13 seconds |
+| 10,000 | 10 | about 28 seconds |
+| 20,000 | 20 | about a minute |
+
+The wasted work is tens of seconds. The hour-long job people picture is
+`collect.py` at v0.3 — 2,000 users — and that resumes at the user it died on,
+losing at most one user's fetch.
+
+### Retrying beats resuming
+
+Three ways not to waste work, in order of value:
+
+1. **Retry the failed request.** Prevents the loss instead of limiting it, and
+   covers what actually goes wrong: a blip, a 503, a rate limit.
+2. **Stop early on a re-sync**, when the pages reach submissions already
+   stored. At v0.7's nightly re-sync this is the difference between six
+   requests and one for a 5,000-submission user with three new solves — across
+   2,000 users, between an hour and minutes.
+3. **Resume mid-user.** Saves tens of seconds, and only when the process was
+   killed rather than the request refused.
+
+One more thing that makes the third weaker than it looks: even with
+incremental writes the data stays unusable until the sync finishes, because
+`last_synced` is still NULL. Resuming saves fetching time; it never makes the
+page work sooner.
+
+So `api_client` retries now, and `sync.py` is unchanged.
+
+### What is retried, and what must not be
+
+| Failure | Retried | Why |
+|---|---|---|
+| HTTP 5xx | yes | their end is broken, not the request |
+| dropped connection, timeout | yes | nothing about it is permanent |
+| "Call limit exceeded" | yes | our fault, and waiting is exactly the fix |
+| handle does not exist | **no** | it will not exist in six seconds either |
+| any other 4xx | **no** | the request is wrong; repeating it is pointless |
+
+Three attempts, waiting 2 seconds then 4.
+
+The distinction is carried by `TemporaryFailure`, a subclass of `RuntimeError`
+on purpose: `web.py` and `sync.py` already catch `RuntimeError`, so one
+escaping after the last attempt is handled correctly by code written before
+this existed.
+
+Checked without touching the network, by replacing `urlopen` with a script of
+prepared answers and `sleep` with a counter — 7 checks, instant, including that
+a nonexistent handle is asked exactly once and waits zero seconds. Retrying
+that one would make a visitor wait six seconds to be told the same thing.
+
+### The re-sync proved itself by accident
+
+Running `sync.py tourist` a second time, only to confirm the retry change had
+not broken the normal path:
+
+```
+first run:   5474 submissions, 3134 problems, 9029 tags
+second run:  5476 submissions, 3135 problems, 9033 tags
+```
+
+tourist had submitted twice in the fifteen minutes in between. The second run
+stored the two new submissions and the one new problem, and duplicated none of
+the 5,474 already there. That is the `ON CONFLICT` clause doing the job it was
+written for, on real data, without a test having to arrange the situation.
+
+### Next
+
+Unchanged: `/progress/<job>`, then the wiring, then the design tokens.

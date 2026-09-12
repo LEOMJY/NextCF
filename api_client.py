@@ -9,23 +9,72 @@ Usage:
 
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
 API_BASE = "https://codeforces.com/api"
+
+# How many times one request is tried before giving up, and how long to wait
+# after the first failure. The wait doubles: 2 seconds, then 4.
+#
+# Only failures that waiting can fix are retried -- see TemporaryFailure.
+# Three attempts and six seconds of waiting rides out a blip, and is short
+# enough that somebody watching a progress page has not given up. Rate
+# limiting shared across callers is still v0.3 work (spec section 4).
+MAX_ATTEMPTS = 3
+RETRY_SECONDS = 2.0
 RATING_WIDTH = 6
+
+
+class TemporaryFailure(RuntimeError):
+    """A failure that waiting might fix: Codeforces unwell, or asked too fast.
+
+    Deliberately a subclass of RuntimeError, so callers that already catch
+    RuntimeError -- web.py and sync.py both do -- keep working unchanged when
+    one of these escapes after the last attempt.
+    """
 
 
 def call(method, **params):
     """Call one Codeforces API method and return its "result".
 
-    Raises RuntimeError if Codeforces answers but refuses the request.
-    Raises urllib.error.URLError if the network itself fails.
+    Retries the failures that waiting can fix, and gives up at once on the
+    ones it cannot. A handle that does not exist will still not exist in two
+    seconds; a 503, or a complaint that we are asking too fast, very often
+    will not be there any more.
 
-    Every method shares the same failure modes, so they are handled once here
+    Raises RuntimeError if Codeforces answers and refuses the request.
+    Raises urllib.error.URLError if the network itself keeps failing.
+
+    Every method shares these failure modes, so they are handled once here
     rather than copied into each one.
     """
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            return _call_once(method, params)
+
+        except (TemporaryFailure, urllib.error.URLError) as exc:
+            # HTTPError is a subclass of URLError and would land here too --
+            # but _call_once always converts it first, which is exactly why
+            # this clause only ever sees a real network failure.
+            if attempt == MAX_ATTEMPTS:
+                raise
+
+            # Wait longer each time. If Codeforces is busy, or is telling us
+            # to slow down, asking again immediately is part of the problem.
+            wait = RETRY_SECONDS * 2 ** (attempt - 1)
+            print(
+                f"{method}: {exc} -- retrying in {wait:.0f}s"
+                f" (attempt {attempt + 1} of {MAX_ATTEMPTS})",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+
+
+def _call_once(method, params):
+    """One attempt at one API call. The retrying lives in call()."""
 
     # urlencode escapes anything awkward in a value. A handle containing a
     # space or an "&" would otherwise corrupt the query string silently --
@@ -35,6 +84,7 @@ def call(method, **params):
 
     # The timeout is not optional. Without it a hung connection blocks forever,
     # and at v0.3 this same call runs ~2000 times unattended overnight.
+    status_code = None
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
             # .read() gives raw bytes; json.loads turns them into ordinary Python
@@ -47,19 +97,34 @@ def call(method, **params):
         #     {"status":"FAILED","comment":"handle: User ... not found"}
         # HTTPError is itself readable like a response, so the message is one
         # .read() away. Skip this and all you ever see is "Bad Request".
+        status_code = exc.code
         try:
             payload = json.loads(exc.read())
         except (json.JSONDecodeError, UnicodeDecodeError):
-            # Not JSON at all -- Codeforces down, or a proxy/error page in the
-            # way. Nothing useful to extract, so report the status code.
-            raise RuntimeError(f"HTTP {exc.code} from Codeforces: {exc.reason}") from exc
+            # Not JSON at all -- Codeforces down, or a proxy or error page in
+            # the way. Nothing useful to extract, so report the status code.
+            message = f"HTTP {exc.code} from Codeforces: {exc.reason}"
+            if exc.code >= 500:
+                # 5xx means the far end is broken, not the request. Worth
+                # asking again.
+                raise TemporaryFailure(message) from exc
+            raise RuntimeError(message) from exc
 
     # The real outcome lives in this field, and it is checked on every call.
     # When it says FAILED there is no "result" key at all, so reading
     # payload["result"] below would raise KeyError instead of telling you what
     # was actually wrong with the request.
     if payload["status"] != "OK":
-        raise RuntimeError(payload.get("comment", "Codeforces returned FAILED"))
+        comment = payload.get("comment", "Codeforces returned FAILED")
+
+        # Two kinds of no, needing opposite responses. Asking too fast is our
+        # fault and waiting fixes it; a 5xx is theirs and waiting usually
+        # fixes it too. A handle that does not exist is neither, and retrying
+        # it only makes a visitor wait six seconds for the same answer.
+        if (status_code is not None and status_code >= 500) or "limit exceeded" in comment.lower():
+            raise TemporaryFailure(comment)
+
+        raise RuntimeError(comment)
 
     return payload["result"]
 

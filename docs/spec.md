@@ -58,7 +58,7 @@ not run at the same times.
 ```
   api_client.py   Codeforces API — rate limiting, retries, backoff
   db.py           schema and queries
-  sync.py         fetch one user's history, as a resumable background job
+  sync.py         fetch one user's history as a background job, all or nothing
   collect.py      bulk collection of ~2000 users, run manually
   model.py        skill estimation and solve-probability prediction
   evaluate.py     the harness — train/test split, scoring
@@ -104,8 +104,10 @@ Two things drive the shape of this. First, fetching a user with 2000
 submissions takes tens of seconds, and a bulk run takes about an hour —
 neither fits inside a web request, so both must be background jobs with
 progress that the page can poll. Second, any job that long **will** be
-interrupted, so job state lives in the database and work resumes rather than
-restarting.
+interrupted, so job state lives in the database. What that buys differs by
+job: a bulk run resumes at the user it died on, while one user's sync is
+written in a single transaction and simply runs again, because redoing it
+costs tens of seconds — see `docs/decisions/0004-sync-interruption.md`.
 
 Training data comes from ~2000 strangers' public histories, not from the
 visitor's own submissions. The visitor's history is used only to locate them

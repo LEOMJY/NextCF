@@ -93,3 +93,13 @@ with more moving parts. Rejected on the same grounds §7 rejects Celery.
 - `/results/<handle>` needs a real page for a user who is mid-sync, since the
   gatekeeping function will decline to serve one. That page is v0.2 work
   anyway, alongside `/progress/<job>`.
+- *Amended 2026-09-12:* the cheaper defence against wasted work turned out to
+  be retrying, not resuming. Most interruptions are a failed request rather
+  than a killed process, so `api_client` now retries the failures that waiting
+  can fix — a 5xx, a dropped connection, a complaint that we are asking too
+  fast — three times, waiting twice as long each time. That prevents the loss
+  instead of limiting it. The loss it would have limited is small anyway: a
+  5,474-submission history is six requests and about fifteen seconds, so
+  redoing a whole user costs tens of seconds, not the hour that `collect.py`
+  puts at risk. §4 described `sync.py` as resumable until this was noticed;
+  that line now matches this decision.
