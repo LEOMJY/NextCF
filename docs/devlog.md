@@ -1801,9 +1801,9 @@ the database is shown as `TESTING`.
 
 ### Checked
 
-43 checks: 13 for the web flow, 20 for the database, 7 for the retries, 3 for
-template comments. The web flow ones run against a temporary database with
-`start_sync` replaced, so they touch no network and finish instantly.
+57 checks: 14 schema, 20 database, 7 retry, 3 render, 13 web flow. The web
+flow ones run against a temporary database with `start_sync` replaced, so they
+touch no network and finish instantly.
 
 One of them failed first time and was right to: two fake submissions had been
 given the same contest and index, which makes them the same problem, so only
@@ -1894,10 +1894,18 @@ fix if it ever matters.
 | `/progress/<job>` and the wiring | done |
 | Design tokens and base stylesheet | done |
 
-43 checks: 13 web flow, 20 database, 7 retry, 3 render. All four scratch check
-scripts still live outside the repository, which is now the largest untidy
-thing in this project — §10 puts tests at v0.7, and that is three milestones
-away from where the coverage actually is.
+57 checks: 14 schema, 20 database, 7 retry, 3 render, 13 web flow. All five
+scratch check scripts still live outside the repository, which is now the
+largest untidy thing in this project — §10 puts tests at v0.7, and that is
+three milestones away from where the coverage actually is.
+
+*Corrected 2026-09-12, after counting:* both totals above first said 43, and
+said four scripts. There are five, and 57 checks — `check_schema.py` was left
+out of the sum, twice, by adding up the scripts that had been run most recently
+instead of running all of them. The commit messages of the day still say 43;
+they are history and stay as they are. Same lesson as the cold start and the
+acmsguru count, in the cheapest possible form: a number nobody measured is not
+a number, and that includes numbers about your own work.
 
 ### Next
 
