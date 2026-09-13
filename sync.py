@@ -1,15 +1,17 @@
 """Fetch one user's whole Codeforces history, as a background job.
 
-This cannot happen inside a web request. A user with a few thousand
-submissions needs several API calls and tens of seconds, and a browser cannot
-be held open for that. So web.py starts one of these and immediately returns a
-progress page, which polls the `jobs` row this file keeps up to date.
+This cannot happen inside a web request. A sync is two API calls, and every
+call waits for a two-second turn shared with everybody else syncing at the
+same moment -- a few seconds alone, much longer in a queue -- and a browser
+request cannot be held open for that. So web.py starts one of these and
+immediately returns a progress page, which polls the `jobs` row this file
+keeps up to date.
 
 ADR 0004: an interrupted sync writes NOTHING. Everything is fetched into
 memory first, then handed to db.save_sync, which writes it in one transaction.
 If the process dies at any point before that, the database is untouched and
-the next attempt starts from the beginning. `jobs.progress` exists to move a
-progress bar, not to resume from.
+the next attempt starts from the beginning. `jobs.state` is what the progress
+page follows; `jobs.progress` records how many submissions arrived.
 
 Usage:
     .venv\\Scripts\\python.exe sync.py tourist
@@ -24,54 +26,34 @@ import urllib.error
 import api_client
 import db
 
-# How many submissions to ask for per request.
+# One request per sync, for the whole history.
 #
-# The trade is requests against progress. Asking for everything at once is
-# fastest and leaves the progress bar at zero until it is over; asking 100 at
-# a time gives the finest progress and needs 55 requests for a history like
-# tourist's, which is slow and rude to an API that asks for one request every
-# two seconds. 1000 puts almost every user in a single request and still moves
-# the bar for the heavy ones.
-PAGE_SIZE = 1000
-
-# No pause between pages here. api_client paces every request, from every
-# thread, one every two seconds -- so a second pause in this loop would stack
-# on top of that and slow every long history down for nothing.
+# This used to page 1000 at a time so the progress page could count upwards.
+# Once api_client made every request wait for a two-second turn, each extra
+# page cost two seconds: jiangly's 11,148 submissions were 13 requests and
+# about 26 seconds, against 2 requests and about 5 in one go. Most people are a
+# single page either way -- 18 of 25 random users rated 1000-1900 had under
+# 1000 submissions -- so the saving lands on long histories, and on everybody
+# queued behind them. The progress page lost its count in exchange, and a
+# count that goes from nothing to everything in one step was not worth
+# keeping. Paging, and the ordering trap that came with it, are gone with it.
 
 
 def fetch_history(handle, job_id, conn):
-    """Page through a user's whole history, reporting progress as it goes.
+    """Fetch a user's whole history in one request.
 
     Returns the raw list of submission dicts, newest first.
 
     Nothing is written to the database here except the progress number. That
     is the whole point: the history exists only in memory until save_sync.
     """
-    submissions = []
-    from_index = 1
+    submissions = api_client.fetch_submissions(handle)
 
-    while True:
-        page = api_client.fetch_submissions(handle, count=PAGE_SIZE, from_index=from_index)
-        submissions.extend(page)
+    # Recorded for the jobs table, not for the progress page: with one request
+    # there is no moment between "none" and "all", so the page shows no number.
+    db.set_job_progress(conn, job_id, len(submissions))
 
-        # Progress is written outside any transaction, one small commit at a
-        # time, so the progress page can actually see it while the job runs.
-        db.set_job_progress(conn, job_id, len(submissions))
-
-        # A short page means there was nothing more to send.
-        if len(page) < PAGE_SIZE:
-            return submissions
-
-        # Paging is by position in a list that is ordered newest first, so a
-        # submission made DURING this loop shifts everything down by one and
-        # the next page repeats a row already collected. That is harmless:
-        # save_sync keys submissions by Codeforces' own id, so a repeat
-        # collapses. It would not be harmless in the other direction -- if the
-        # API answered oldest first, the same shift would skip a row instead,
-        # and nothing would notice. This loop is correct because of how
-        # somebody else's API happens to sort. If that changes, this breaks
-        # silently.
-        from_index += PAGE_SIZE
+    return submissions
 
 
 def run_sync(handle, job_id):

@@ -103,3 +103,16 @@ with more moving parts. Rejected on the same grounds §7 rejects Celery.
   redoing a whole user costs tens of seconds, not the hour that `collect.py`
   puts at risk. §4 described `sync.py` as resumable until this was noticed;
   that line now matches this decision.
+- *Amended 2026-09-13:* a sync is now one request for the whole history —
+  `user.status` with no count — instead of pages of 1000. Once every request
+  waited for a two-second turn, each extra page cost two seconds; two long
+  histories synced together went from 23 requests and 44 seconds to 4 requests
+  and 8.9. The decision above is unchanged and simpler to hold: there are no
+  pages, so there is no half-fetched state even in memory. Two consequences
+  listed above no longer apply to `sync.py`. The newest-first ordering that
+  made paging safe matters only if paging or incremental writes come back, and
+  the comment it asked for went with the loop. `jobs.progress` is written once
+  and no longer shown, because one request has no count between none and all.
+  The incremental option remains the upgrade path, but it now saves no request
+  — `user.info` plus one call either way — and fetching only new submissions
+  would miss verdicts that change after they were stored (§12).

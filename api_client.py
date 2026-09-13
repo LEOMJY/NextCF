@@ -208,17 +208,21 @@ def _call_once(method, params):
     return payload["result"]
 
 
-def fetch_submissions(handle, count=100, from_index=1):
-    """One page of `handle`'s submissions, newest first.
+def fetch_submissions(handle, count=None):
+    """`handle`'s submissions, newest first: all of them, or the newest `count`.
 
-    `from_index` is 1-based and counts from the newest submission, so page two
-    of 100 starts at 101. Paging through a long history is what sync.py does;
-    the web page asks for one page of 100 and stops.
+    With no count, Codeforces sends the whole history in one response. That
+    is what sync.py and collect.py want: every request waits for a two-second
+    turn, so one request for 11,148 submissions (6.3 MB, 2.6 s, measured
+    2026-09-13) beats twelve pages of 1000 by twenty-odd seconds.
 
-    "from" is a Python keyword, so it cannot be written as a keyword argument
-    and is passed in a dict instead.
+    The timeout in _call_once does not cap how long a big download may take.
+    It is how long to wait for the NEXT piece of data, so a response that keeps
+    arriving never times out, however large.
     """
-    return call("user.status", handle=handle, count=count, **{"from": from_index})
+    if count is None:
+        return call("user.status", handle=handle)
+    return call("user.status", handle=handle, count=count)
 
 
 def fetch_user(handle):
@@ -261,7 +265,8 @@ def main():
     handle = sys.argv[1] if len(sys.argv) > 1 else "tourist"
 
     try:
-        submissions = fetch_submissions(handle)
+        # The newest 100 only: this prints a table, and 8,000 rows is not one.
+        submissions = fetch_submissions(handle, count=100)
     except urllib.error.URLError as exc:
         # Network-level failure: no DNS, no route, timed out, TLS refused.
         print(f"could not reach Codeforces: {exc.reason}")

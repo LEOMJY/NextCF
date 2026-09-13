@@ -107,10 +107,10 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   ─────────────────────────────────────────────────────
 ```
 
-Two things drive the shape of this. First, fetching a user with 2000
-submissions takes tens of seconds, and a bulk run takes about an hour —
-neither fits inside a web request, so both must be background jobs with
-progress that the page can poll. Second, any job that long **will** be
+Two things drive the shape of this. First, a sync waits for its turn behind
+everybody else's requests — a few seconds alone, much longer in a queue — and a
+bulk run takes over an hour; neither fits inside a web request, so both must be
+background jobs whose state the page can poll. Second, any job that long **will** be
 interrupted, so job state lives in the database. What that buys differs by
 job: a bulk run resumes at the user it died on, while one user's sync is
 written in a single transaction and simply runs again, because redoing it
@@ -233,7 +233,8 @@ jobs
                             nothing writes since ADR 0007
   target         text     — which handle, or which batch
   state          text     — "pending", "running", "done", "failed"
-  progress       integer  — submissions fetched so far; drives the progress page
+  progress       integer  — submissions fetched; written once, when the history
+                            arrives. Recorded, not shown
   started_at     text     — ISO-8601 UTC
   finished_at    text     — ISO-8601 UTC; NULL while the job is unfinished
   error          text     — why it failed, if it did
@@ -276,8 +277,10 @@ cheap, adding a column that must be backfilled from a slow external source is
 not.
 
 `progress` no longer implies resumption. Under ADR 0004 an interrupted sync
-writes nothing, so there is no partial state to resume from; the column exists
-to drive `/progress/<job>`.
+writes nothing, so there is no partial state to resume from. Since 2026-09-13 it
+no longer drives `/progress/<job>` either: a sync is one request for the whole
+history, so the count jumps from nothing to everything, and the page follows
+`state` and shows no number. The column stays as a record of how much arrived.
 
 ## 7. Stack
 
@@ -466,7 +469,47 @@ is the budget below, not a rule about technique.
 The React rejection in §7 was re-examined against this section and stood at
 v0.2 (reopened 2026-09-12, §12): SVG
 rendered from Jinja and a polling progress page need no client framework. If the
-landing page ever wants motion, GSAP loaded from a CDN adds no build step.
+landing page ever wants motion, GSAP adds no build step — served from this site
+rather than a CDN, per the next section.
+
+### Heavy effects: three layers, loaded by what the device can do
+
+Nothing on the site is heavy today: one stylesheet, one typeface, a blinking
+cursor. This is the rule for when something is — real-time 3D, video, a large
+animation library — written down now so the first heavy thing is built to it
+instead of having it retrofitted. Decided 2026-09-13.
+
+```
+layer 3   the effect itself            added only if this device can run it
+layer 2   a still image of the effect  shown whenever layer 3 is not
+layer 1   plain HTML: the form, and    always present; needs no JavaScript
+          a real link for everything
+          clickable in the effect
+```
+
+Each layer works when the one above it fails. The handle input lives in layer
+1, so §4.1's promise that the tool is always one action away never depends on
+a graphics card. A canvas is also invisible to keyboards and screen readers,
+which is a second reason every clickable thing inside an effect needs a real
+link in layer 1.
+
+Which layer a visitor gets is decided as the page loads, in this order:
+
+1. The system asks for reduced motion (`prefers-reduced-motion`) → layer 2, and
+   a click goes straight to its destination with no camera flight.
+2. The browser cannot draw 3D (no WebGL) → layer 2.
+3. The browser reports that it is saving data → layer 2.
+4. Otherwise load layer 3 — only now, with a dynamic `import()`, so a device
+   that stopped at layer 2 never downloads the library — run it for a second or
+   two and measure the frame rate. Under 30 frames a second: lower the
+   resolution, drop reflections, draw fewer objects. Still under: layer 2.
+
+**Everything a layer needs is served from this site, not a CDN.** Google Fonts,
+jsDelivr and cdnjs are all blocked or unreliable in mainland China, where a
+large share of Codeforces users are; ADR 0006 already records this for the
+typeface. A missing font degrades. A missing 3D library leaves the landing page
+without its visual idea — layer 2 catches that, but it should be the
+exception, not what every visitor in one country sees.
 
 ### Budget, and what it comes out of
 
@@ -685,33 +728,43 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   documentation says requests are allowed "at most 1 time per two seconds"; an
   API key only unlocks private data, not a higher limit. Every request from the
   web app waits its turn (`api_client.RateLimiter`), so visitors syncing at the
-  same time share that pace. Measured 2026-09-13: two histories synced together
-  alternated requests and took 44 seconds between them. Those were two of the
-  longest histories on Codeforces, 8,585 and 11,147 submissions in 23 requests;
-  a visitor with fewer than 1000 submissions needs two requests. §9's launch is
-  a blog post, which sends people at once, and ten visitors with long histories
-  would leave the last one waiting minutes while the progress page says
-  "0 submissions fetched".
+  same time share that pace. Measured 2026-09-13, while syncs still paged 1000
+  at a time: two long histories synced together, 8,585 and 11,147 submissions,
+  alternated 23 requests and took 44 seconds between them. §9's launch is a blog
+  post, which sends people at once.
   The pace cannot be raised, and spreading requests over several addresses to
   get around it would break Codeforces' rules. A visitor waits for the requests
   queued ahead of them, two seconds each, so what can change is how many there
   are and in what order:
+  (d) **One request per history — done 2026-09-13.** `user.status` with no
+  count returns the whole history in one response, so every sync is exactly
+  two requests (`user.info`, then everything), however long the history. The
+  same two long histories now finish in 8.9 seconds instead of 44. Ten
+  visitors arriving together is 20 requests, 40 seconds for the last. The
+  progress page lost its count in exchange, because one request has no true
+  moment between "none" and "all"; see §6.
   (a) **Order.** The limiter interleaves everybody's requests, so everybody
   finishes near the end. Finishing one visitor's job before starting the next
   leaves the last visitor's wait unchanged and cuts the average: ten visitors
   with two requests each finish after 22 seconds on average instead of 31, and
-  the first after 4 instead of 22. Shortest job first minimises the average, but
-  a job's size is unknown until its first page arrives.
-  (b) **Fewer requests for a returning visitor.** Fetch only the newest page and
-  stop at a submission already stored: one request. This changes ADR 0004, which
-  fetches the whole history every time.
-  (c) **Show a stored history straight away**, and re-sync behind it.
-  (b) and (c) only work if the server still has the visitor's rows. On the free
-  instance a spin-down after 15 idle minutes wipes them (§7), so a visitor
-  returning the next day is almost always synced from scratch. Both depend on
-  the storage decision in "Where do visit records live?"; (a) does not.
-  Whichever is chosen, the progress page also has to say something true while a
-  job waits for its turn. Decide at v0.7, with error handling.
+  the first after 4 instead of 22. That arithmetic holds because (d) makes
+  every job the same size. Were jobs of different sizes again, finishing one at
+  a time would let a long job at the front hold up everyone behind it —
+  simulated with one ten-request job ahead of nine two-request jobs, the average
+  rises from 34 seconds interleaved to 38.
+  (c) **Show a stored history straight away**, and re-sync behind it. Only
+  works if the server still has the visitor's rows. On the free instance a
+  spin-down after 15 idle minutes wipes them (§7), so a visitor returning the
+  next day is almost always synced from scratch. Depends on the storage decision
+  in "Where do visit records live?"; (a) and (d) do not.
+  *Dropped:* fetching only a returning visitor's newest submissions. Under (d)
+  it saves no request — still `user.info` plus one call — only a few seconds of
+  download, and it carries a silent bug: stopping at the first submission
+  already stored skips one that was stored while still being judged, so its
+  verdict never arrives, and an accepted solution hacked after a contest keeps
+  saying OK. A full fetch gets both right for free.
+  Whichever is chosen, the progress page has to keep saying something true while
+  a job waits for its turn. Decide at v0.7, with error handling.
 - **One problem, two ids.** When a Div. 1 and a Div. 2 round run together,
   each shared problem gets an id in both contests: `1292A` and `1293C` are the
   same problem. `problemset.problems` lists only one copy, but a Div. 2

@@ -16,23 +16,24 @@
 
 {% block content %}
   {# A quiet surface, but the one moment of peak attention on the site
-     (spec section 7.1), so the number itself gets the display size that the
-     landing page uses for its headline. Nothing else here competes with it. #}
+     (spec section 7.1). The display-size element that used to hold a count
+     now holds only the blinking cursor from style.css: still working, and
+     nothing else claimed. #}
   <div class="tool">
     <h1>Reading {{ job.target }}&rsquo;s submissions</h1>
 
-    <p class="progress-count">{{ job.progress }}</p>
-    <p class="meta">submissions fetched so far</p>
+    <p class="progress-cursor" aria-hidden="true"></p>
+    <p class="meta">fetching from Codeforces</p>
 
-    {# No percentage, and no progress bar, deliberately. Codeforces never says
-       how many submissions a person has -- the only way to find out is to keep
-       asking until a page comes back short. Any percentage here would be
-       invented, and spec section 4.1 asks this page to show a long job making
-       progress WITHOUT LYING ABOUT IT. A number that is true beats a bar that
-       is not. #}
+    {# No count, no percentage and no progress bar, deliberately. A sync is one
+       request for the whole history, so there is no true moment between
+       "none" and "all" to report, and spec section 4.1 asks this page to show
+       a long job WITHOUT LYING ABOUT IT. A simulated bar would be a lie that
+       usually gets caught -- stuck at 99%. #}
     <p class="caveat">
-      A few seconds for most people, up to a minute for somebody with thousands
-      of submissions. This page updates itself; the table appears when it is
+      A few seconds on its own. Longer if other people are syncing at the same
+      moment: Codeforces allows one request every two seconds, and everyone
+      takes turns. This page updates itself; the table appears when it is
       finished.
     </p>
 

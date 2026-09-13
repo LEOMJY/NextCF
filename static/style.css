@@ -345,7 +345,7 @@ tbody tr:hover td {
 
 /* ----------------------------------------------------------- progress page */
 
-.progress-count {
+.progress-cursor {
   margin-top: var(--s3);
   font-size: var(--text-display);
   font-weight: 600;
@@ -356,7 +356,7 @@ tbody tr:hover td {
 
 /* A blinking block cursor: the one piece of motion on the site, and it is on
    the one page where the honest thing to say is "still working". */
-.progress-count::after {
+.progress-cursor::after {
   content: "";
   display: inline-block;
   width: 0.55em;
@@ -376,7 +376,7 @@ tbody tr:hover td {
 /* Some people get motion sickness from movement on a screen, and browsers let
    them say so. The cursor stays; it simply stops blinking. */
 @media (prefers-reduced-motion: reduce) {
-  .progress-count::after {
+  .progress-cursor::after {
     animation: none;
   }
 }

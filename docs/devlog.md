@@ -2263,3 +2263,100 @@ but a `git commit -a` would have deleted the rate-limiting entry for good.
 
 Unchanged: `collect.py`, starting with which 2000 users, and now also how few
 requests per user it can manage.
+
+---
+
+## 2026-09-13 — One request per history
+
+### Measured before deciding
+
+Three things were guessed in the previous entries. All three measured today:
+
+| Request | Result | Size | Time |
+|---|---|---|---|
+| `user.status` jiangly, no count | 11,148 submissions | 6.3 MB | 2.6 s |
+| `user.status` Um_nik, no count | 7,369 submissions | 4.1 MB | 2.2 s |
+| `user.ratedList`, active only | 40,929 users; 20,544 rated 1000–1900 | 15.2 MB | 3.6 s |
+
+And 25 random active users rated 1000–1900, whole histories through the real
+rate limiter: median 685 submissions, 18 of 25 under 1000, the largest 6,594.
+Paging 1000 at a time would have been 41 requests for those 25; whole histories
+were 25. The slowest single download was 3.0 seconds.
+
+One worry disappears with the numbers. A 10-second timeout looked too short for
+a response of several megabytes, but `urlopen`'s timeout is how long to wait for
+the *next* piece of data, not a cap on the whole download. A big response that
+keeps arriving never trips it.
+
+### Why sync paged at all
+
+Pages of 1000 existed for one reason: so `/progress/<job>` could count upwards.
+At v0.2 that cost almost nothing, because nothing made a request wait. Since the
+rate limiter, every page is another two-second turn — jiangly was 13 requests
+and about 26 seconds, against 2 requests and about 5 in one go. Most people are
+a single page either way, so the saving lands on long histories and on
+everybody queued behind them.
+
+So a sync is now `user.info` and one `user.status` with no count. The same two
+long histories synced together, request start times logged:
+
+```
+  0.02s  user.info    Benq
+  2.02s  user.info    jiangly
+  4.02s  user.status  Benq
+  6.02s  user.status  jiangly
+  6.06s  Benq done       8,585 stored
+  8.87s  jiangly done   11,149 stored
+```
+
+8.9 seconds and 4 requests, where the paged version took 44.6 seconds and 23.
+In the browser, Um_nik's 7,369 submissions went from the progress page to the
+results table in 4 seconds.
+
+### The progress page lost its number, on purpose
+
+With one request there is no true moment between "none" and "all", so the count
+went. The alternative was a simulated bar that estimates progress. §4.1 asks
+this page to show a job "without lying about it", and a simulated bar is a lie
+that usually gets caught — stuck at 99%. On a product whose pitch is a number
+people can trust, the first number a visitor sees should not be invented.
+
+The page now shows the blinking cursor alone at display size, "fetching from
+Codeforces", and a sentence that says why it can take longer: everyone takes
+turns. The CSS class that held the count was `.progress-count`; it holds no
+count any more, so it is `.progress-cursor` now.
+
+### Dropped: fetching only what is new
+
+§12 listed topping up a returning visitor with only their newest submissions.
+Under one-request syncs it saves no request — still `user.info` plus one call —
+only a couple of seconds of download. And it hid a silent bug. Stop at "the
+first submission already stored", and the one stored while it was still being
+judged is skipped, so its verdict never arrives. An accepted solution hacked
+after an Educational round would keep saying OK for the same reason. A full
+fetch gets both right with no extra code. Recorded in §12 as dropped, with the
+reason, so it is not proposed again without it.
+
+### For later heavy effects: three layers
+
+Nothing on the site is heavy yet. The rule for when something is — the balloon
+experiment, video, anything with a big library — is now in §7.1: plain HTML
+underneath, a still image above it, the effect on top only when the device can
+run it, and everything served from this site rather than a CDN, because the
+common CDNs and Google Fonts are blocked or unreliable in mainland China.
+
+68 checks: 14 schema, 22 database, 7 retry, 9 rate limit and request count,
+3 render, 13 web flow.
+
+### What I learned
+
+"Asking for everything at once is fastest" was written in `sync.py` on 09-12 and
+was true the whole time. What changed was the cost on the other side of the
+trade: a progress count was cheap when pages were free and expensive once each
+one waited two seconds. A trade-off written down with its reason is worth
+rereading when one side of it moves.
+
+### Next
+
+`collect.py`, starting with which 2000 users. `user.ratedList` gives 20,544
+active candidates in the target range, with ratings, in one request.
