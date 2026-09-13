@@ -2360,3 +2360,74 @@ rereading when one side of it moves.
 
 `collect.py`, starting with which 2000 users. `user.ratedList` gives 20,544
 active candidates in the target range, with ratings, in one request.
+
+---
+
+## 2026-09-13 — The typeface moves in
+
+### What was actually known about China
+
+ADR 0006 said the font CDN "is blocked" in mainland China. Checked against
+GreatFire, which tests addresses from inside the country: `fonts.googleapis.com`
+is *unreliable* — one of its last two conclusive tests, on 2026-08-18, showed
+interference — and `fonts.gstatic.com`, which serves the files, was reachable
+when last tested in March. So a visitor there sometimes gets IBM Plex Mono and
+sometimes does not. "Blocked" was stronger than the evidence.
+
+The part that mattered more was not in the ADR at all. The link to Google's
+stylesheet sits in `<head>` and blocks rendering: the browser draws nothing until
+that request resolves. When interference means a connection that hangs rather
+than one that fails, the whole page stays blank until it times out.
+
+### Is self-hosting slower?
+
+Probably not, and the one advantage people remember for Google Fonts is gone.
+A browser used to reuse a font another site had already downloaded from Google;
+since 2020 every major browser keeps a separate cache per site, so each site
+downloads its own copy anyway. What is left is Google's servers being closer to
+most visitors, against two fewer connections to open before the text is final.
+Not measured — an estimate of tens to hundreds of milliseconds either way, once
+per visitor.
+
+Also a privacy point for `/privacy` at v0.7: every page view used to send the
+visitor's address to Google. It does not now.
+
+### Which files
+
+IBM publishes Plex Mono split into subsets by alphabet. "Latin1" covers ASCII,
+Western European letters, curly quotes and dashes — every handle, and nearly
+every problem name. 17,544 and 17,872 bytes for the two weights, about what
+Google was sending. Both were checked against the hashes in IBM's repository
+after downloading; `LICENSE.txt` failed that check the first time only because
+Git on Windows converts line endings before hashing, and matched with
+`--no-filters`. The SIL Open Font License asks for that file to travel with the
+fonts, so it sits beside them. `.gitattributes` marks `*.woff2` binary so no
+line-ending conversion ever touches a font.
+
+### What falls outside the subset
+
+All 11,401 problem names from `problemset.problems`, checked character by
+character against the subset's `unicode-range`: 51 names (0.4%) have at least one
+character it does not cover. Nearly all are Russian titles; the rest are `√`,
+`⅓`, `θ`, `⟩`, `š` and `ō`.
+
+`unicode-range` in the `@font-face` rule sends each such character to the next
+font in `--mono`, one character at a time. On Windows that is Consolas. Rendered
+next to Plex, it reads fine and stays aligned, but a Russian title is visibly a
+different face — thinner, rounder — and a name that mixes Cyrillic and Latin
+letters, like `⅓ оf а Рrоblеm`, shows the change mid-word. IBM's Cyrillic,
+Latin2 and Pi subsets would cover all of those except `θ` and `⟩`, which Plex
+Mono does not have at all; a browser downloads a subset only when a page uses a
+character from it.
+
+### Checked
+
+Two new render checks: no page loads a stylesheet, font or script from another
+server, and every `url()` in an `@font-face` is a real file that starts with the
+woff2 signature and is served as `font/woff2`. The second exists because a typo
+in a font path fails silently — the browser just uses the fallback and says
+nothing. In the browser both weights report `loaded`, from `/static/fonts/`,
+with no request to Google.
+
+70 checks: 14 schema, 22 database, 7 retry, 9 rate limit and request count,
+5 render, 13 web flow.

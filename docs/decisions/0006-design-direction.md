@@ -71,6 +71,15 @@ the exact failure §7.1 exists to avoid.
   system degrades instead of breaking. Self-hosting the two weights is the fix
   if it ever matters, and it may — a real share of Codeforces users are in
   places where that CDN is blocked.
+  *Amended 2026-09-13: self-hosted.* The degradation above was milder than the
+  real risk. The stylesheet link to Google Fonts blocks rendering, and
+  GreatFire's tests from inside mainland China show that address interfered
+  with intermittently, so the page itself could stall, not only the font.
+  Both weights of IBM's "Latin1" subset (17,544 and 17,872 bytes, checked
+  against IBM's repository) now live in `static/fonts/` with the SIL Open Font
+  License beside them, and no page loads anything from another server. The
+  fallback stack still draws characters outside the subset: 51 of 11,401
+  Codeforces problem names have one, mostly Russian titles.
 - **Every page now depends on one file.** Changing a token changes the whole
   site, which is the point, and also means a careless change is site-wide.
 - §7.1's design budget, which it says comes out of §9, is still an unset

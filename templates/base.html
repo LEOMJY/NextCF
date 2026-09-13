@@ -20,16 +20,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}NextCF{% endblock %}</title>
 
-    {# One typeface, two weights, from a CDN -- no build step, which is the
-       same reason spec section 7 tolerates a CDN at all.
-
-       preconnect opens the connection while this HTML is still being read, so
-       the font arrives sooner. display=swap draws the text immediately in a
-       fallback mono and swaps when the real font lands, so a slow or blocked
-       CDN costs a different mono rather than a blank page. #}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    {# Nothing in this head comes from another server. The typeface is
+       declared inside style.css and served from static/fonts/ -- see the top
+       of that file for why it left the font CDN. #}
 
     {# url_for('static', ...) rather than a hardcoded "/static/style.css":
        Flask knows where it serves static files from, and this follows it. #}

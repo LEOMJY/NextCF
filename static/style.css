@@ -25,12 +25,51 @@
  * rather than adding one exception.
  */
 
+/* ------------------------------------------------------------------- fonts */
+
+/* IBM Plex Mono, served from this site rather than a font CDN. Google Fonts
+   is unreliable in mainland China, and a stylesheet link to it could hold the
+   whole page blank until it timed out (spec section 7.1, ADR 0006). Licence:
+   static/fonts/LICENSE.txt, the SIL Open Font License, which asks for exactly
+   that file to travel with the fonts.
+
+   Only IBM's "Latin1" subset, 17 KB per weight: ASCII, Western European
+   letters, curly quotes, dashes. unicode-range tells the browser which
+   characters these files cover, so a character outside it -- 51 of 11,401
+   Codeforces problem names have one, mostly Russian titles -- is drawn from
+   the next font in --mono instead, one character at a time.
+
+   font-display: swap draws text at once in a fallback mono and swaps when the
+   file arrives, so a slow download costs a moment of a different mono, never
+   invisible text. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/IBMPlexMono-Regular-Latin1.woff2") format("woff2");
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA,
+    U+02DC, U+2013-2014, U+2018-201A, U+201C-201E, U+2020-2022, U+2026, U+2030,
+    U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/IBMPlexMono-SemiBold-Latin1.woff2") format("woff2");
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA,
+    U+02DC, U+2013-2014, U+2018-201A, U+201C-201E, U+2020-2022, U+2026, U+2030,
+    U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+}
+
 /* ------------------------------------------------------------------ tokens */
 
 :root {
   /* One typeface. The fallbacks are the mono fonts already on Windows, macOS
-     and Linux, so a visitor who cannot reach the font CDN gets the same
-     design in a different mono rather than a broken page. */
+     and Linux: they draw any character the Plex files above do not cover,
+     and everything, for the moment before those files arrive. */
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Five sizes, named for what they are for. Not nine. */
