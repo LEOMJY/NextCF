@@ -2473,3 +2473,24 @@ there.
 Real-time 3D, if the balloon experiment gets that far, is React Three Fiber —
 the same three.js renderer, with ready-made pieces for dropping quality on weak
 devices that §7.1's layers need. Whether balloons ship is still v0.8.
+
+---
+
+## 2026-09-13 — Russian titles in the same face
+
+The fallback for characters outside Latin1 looked acceptable on paper and not on
+screen. Rendered in the browser next to Plex, a Russian title came out in
+Consolas — aligned, readable, and obviously a different typeface — and a name
+mixing Cyrillic and Latin letters changed face in the middle of a word.
+
+IBM's Cyrillic, Latin2 and Pi subsets cover every such character in the 11,401
+problem names except `θ` and `⟩`, which Plex Mono does not have at all. Six more
+files, two weights each, 86,504 bytes in the repository, every one checked
+against IBM's hashes. The `@font-face` rules were generated from IBM's own CSS
+rather than copied by hand, because a mistyped `unicode-range` fails silently.
+
+Measured in the browser: a page in plain English downloads only the two Latin1
+files. Put a Russian title, a `√` and an `ō` on it, and exactly the files for
+those characters follow — Cyrillic in both weights because one line was bold,
+Latin2 and Pi in regular only. Visitors pay for an alphabet only when they see
+it.

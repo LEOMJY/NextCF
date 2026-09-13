@@ -77,9 +77,12 @@ the exact failure §7.1 exists to avoid.
   with intermittently, so the page itself could stall, not only the font.
   Both weights of IBM's "Latin1" subset (17,544 and 17,872 bytes, checked
   against IBM's repository) now live in `static/fonts/` with the SIL Open Font
-  License beside them, and no page loads anything from another server. The
-  fallback stack still draws characters outside the subset: 51 of 11,401
-  Codeforces problem names have one, mostly Russian titles.
+  License beside them, and no page loads anything from another server. 51 of
+  11,401 Codeforces problem names have a character outside that subset, mostly
+  Russian titles, which the fallback mono drew in a visibly different face; the
+  same day IBM's Cyrillic, Latin2 and Pi subsets were added, each downloaded
+  only by a page that uses one of its characters. Only θ and ⟩ are in no Plex
+  Mono file.
 - **Every page now depends on one file.** Changing a token changes the whole
   site, which is the point, and also means a careless change is site-wide.
 - §7.1's design budget, which it says comes out of §9, is still an unset
