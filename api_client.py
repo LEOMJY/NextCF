@@ -10,6 +10,7 @@ Usage:
     .venv\\Scripts\\python.exe api_client.py [handle]
 """
 
+import http.client
 import json
 import sys
 import threading
@@ -188,6 +189,20 @@ def _call_once(method, params):
                 # asking again.
                 raise TemporaryFailure(message) from exc
             raise RuntimeError(message) from exc
+    except (TimeoutError, ConnectionError, http.client.IncompleteRead) as exc:
+        # The connection worked and the body did not arrive. Measured
+        # 2026-09-13: a server that goes quiet halfway through a body makes
+        # read() raise TimeoutError, and one that hangs up early raises
+        # IncompleteRead -- neither of them a URLError, so call() did not retry
+        # them, and sync.py reported "Something went wrong on our side" for
+        # what was only a slow network. With whole histories of several
+        # megabytes, this is the likeliest way a long collection is
+        # interrupted.
+        #
+        # Re-raised as the URLError every caller already treats as "could not
+        # reach Codeforces", which is what it is. ConnectionError covers a
+        # connection reset partway through.
+        raise urllib.error.URLError(exc) from exc
 
     # The real outcome lives in this field, and it is checked on every call.
     # When it says FAILED there is no "result" key at all, so reading
@@ -239,6 +254,38 @@ def fetch_user(handle):
     # user.info takes "handles", plural, and answers with a list in the same
     # order. One handle in, one user out.
     return call("user.info", handles=handle)[0]
+
+
+def fetch_rating_changes(handle):
+    """Every rating change `handle` has had, oldest first: one per rated contest.
+
+    Each is a dict with contestId, rank, ratingUpdateTimeSeconds, oldRating and
+    newRating (plus contestName and handle, which are not stored). An empty
+    list for someone who has never finished a rated contest.
+
+    collect.py needs this so an old submission can be predicted from the rating
+    its author had at the time rather than today's (ADR 0009).
+    """
+    return call("user.rating", handle=handle)
+
+
+def fetch_rated_list():
+    """Every rated user active in the last month, with their current rating.
+
+    One response of about 15 MB (40,929 users on 2026-09-13), which is where
+    collect.py draws its sample from. Inactive and retired users are left out,
+    the same choice ADR 0009 was measured against.
+    """
+    return call("user.ratedList", activeOnly="true", includeRetired="false")
+
+
+def fetch_problemset():
+    """The whole problemset: {"problems": [...], "problemStatistics": [...]}.
+
+    Includes problems nobody in the sample has attempted, which is why
+    collect.py fetches it as well as the histories.
+    """
+    return call("problemset.problems")
 
 
 def format_submission(sub):
