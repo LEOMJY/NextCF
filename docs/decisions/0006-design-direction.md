@@ -1,7 +1,8 @@
 # 0006 — Design direction: terminal
 
 **Date:** 2026-09-12
-**Status:** accepted
+**Status:** accepted as the working direction. Not necessarily final: the
+final direction is revisited at v0.8 (spec §12).
 
 ## Context
 

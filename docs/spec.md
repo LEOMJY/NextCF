@@ -281,6 +281,7 @@ Explicitly rejected:
   deployment complexity. Looking professional is a CSS problem, not a
   framework problem. Reconsider only for the v1.5 pet system, where animation
   would actually earn its place.
+  *Reopened 2026-09-12, before v1.0 rather than at v1.5 — see §12.*
 - **FastAPI** — more concepts before anything runs.
 - **PostgreSQL locally** — nothing to gain yet.
 - **asyncio / concurrent requests** — the Codeforces API allows roughly one
@@ -391,6 +392,12 @@ rule, and they are withdrawn. Pick the scale; then hold it.
 `static/style.css`: one monospace typeface, five type sizes, five spacing
 steps, a dark canvas with a single accent, 3px radius, no shadow.
 
+That is the **working** direction: it makes the v0.2 pages usable and
+legible, and it is not necessarily the final look. The final direction is
+revisited at the v0.8 design pass — see §12. Because every value is a token in
+one file, changing type, colour and spacing later is a one-file change.
+Changing layout is not, so layout is where a late change of direction costs.
+
 ### Interactivity that is in scope
 
 Three things, each because the product needs it rather than because it decorates:
@@ -415,7 +422,8 @@ leave, and motion there costs attention without returning any.
 carries the visual idea rather than decorating it. The limit on the landing page
 is the budget below, not a rule about technique.
 
-The React rejection in §7 was re-examined against this section and stands: SVG
+The React rejection in §7 was re-examined against this section and stood at
+v0.2 (reopened 2026-09-12, §12): SVG
 rendered from Jinja and a polling progress page need no client framework. If the
 landing page ever wants motion, GSAP loaded from a CDN adds no build step.
 
@@ -635,6 +643,25 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   never stops. If `collect.py` or `scheduler.py` ran the same cleanup while the
   web app was mid-sync, it would fail that live sync. Decide at v0.3, before
   `collect.py` first touches the `jobs` table.
+- **React for the front end?** §7 rejected it. Reopened 2026-09-12: a
+  restrained use of React, with components and nothing showy, may be worth
+  it for a site that is meant to have real design. What React changes is
+  how interactive state in the browser is organised; how the site looks is
+  still a CSS question either way. Three options:
+  (a) stay with Jinja, own CSS, and small plain JavaScript or GSAP where
+  needed. No build step.
+  (b) React only for the interactive pieces (topic chart, results filtering,
+  later the pet system), mounted into pages Flask still renders. Needs Node
+  and a build step for one bundle; routes and templates stay.
+  (c) React for the whole front end, with Flask returning JSON only. Every
+  template is rewritten, the web-flow checks change, and deployment gains a
+  build.
+  Decide at v0.4, before the topic-breakdown chart is built. It is the first
+  component where the answer changes what gets written.
+- **Final design direction.** Terminal (ADR 0006) is the working direction,
+  not necessarily the last one. Decide at v0.8, inside the design budget in
+  §7.1. If (b) or (c) above is chosen, decide the stack first, because it
+  changes what the design pass can do cheaply.
 
 ### Answered
 

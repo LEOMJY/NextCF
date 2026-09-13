@@ -1914,3 +1914,28 @@ job that really does run for an hour, and therefore the first place where the
 resume boundary in ADR 0004 earns its keep. Two things already written down
 that it needs: rate limiting shared across callers in `api_client`, and a
 decision about which program may run `init_db`'s orphan cleanup (§12).
+
+---
+
+## 2026-09-12 — Two decisions that were written down harder than they were made
+
+Rereading the design records at the end of v0.2 turned up two places where the
+documents said more than I meant.
+
+**The terminal direction is the working look, not the final one.** ADR 0006
+said "accepted" with nothing qualifying it. What was actually decided was a
+system good enough to make the v0.2 pages usable and legible. The final
+direction is now an open question for v0.8. The token file makes that cheap
+for type, colour and spacing. Layout is where a late change costs, so that is
+the part to leave loose until then.
+
+**React is open again.** §7 rejected it, and §7.1 said the rejection "stands".
+I think a restrained use of React, components without showing off, can be
+worth it for a site that is supposed to have real design. Written down as three
+options in §12 instead of being decided on a feeling: stay on Jinja, React for
+the interactive pieces only, or React for everything. The deadline is v0.4,
+because the topic chart is the first thing where the choice changes the code.
+
+What I learned: "accepted" in an ADR reads as permanent to anyone who opens it
+later, including me. If a decision is only for now, the status line has to say
+so.
