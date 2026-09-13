@@ -289,9 +289,10 @@ history, so the count jumps from nothing to everything, and the page follows
 | Language | Python 3.14 | Half known already, and every library needed for the modelling later is Python |
 | Web framework | Flask | Smallest thing that works; large amount of beginner material |
 | Database | SQLite | A single file on disk. Nothing to install, nothing to run |
-| Pages | Jinja templates (ships with Flask) | Lists and tables. No JavaScript build step needed |
+| Pages | Jinja templates (ships with Flask) | Every page is rendered on the server first, so it works before and without any JavaScript — layer 1 in §7.1 |
+| Interactive parts | React components mounted into those pages, from v0.4. Node builds them into one bundle, served from this site | Pieces that react to each other in the browser — a topic chart that filters a table, a target-probability control that re-ranks both, later the pet system — are where hand-written DOM updates tangle. Not the whole front end. See `docs/decisions/0008-react-islands.md` |
 | Styling | Own CSS built on design tokens. No framework, no build step | Promoted from "classless framework" — see §7.1. A framework gives a floor but also a recognisable look, and "does not read as templated" is now an explicit goal. Three pages of hand-written CSS is roughly 200 lines and is fully ours |
-| Charts | Server-rendered SVG from Jinja | The topic breakdown is the one thing a template cannot give us. SVG generated from the data needs no JavaScript library, no CDN, and no build step, and it renders in the launch screenshot |
+| Charts | Server-rendered SVG from Jinja, taken over by a React component where the chart is interactive | The topic breakdown is the one thing a template cannot give us. SVG generated from the data needs no chart library and renders in the launch screenshot, and it is still there if the React bundle never loads |
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
 | Scheduling | A timed loop in a thread inside the web app | Nightly re-sync. Not the host's cron: a cron service on Render cannot read another service's disk, and a second program would break the job-cleanup rule — ADR 0007 |
 | Web server | Waitress | Flask's built-in server is development-only. Pure Python, so the deployed setup also runs on Windows and can be tested before pushing |
@@ -299,13 +300,14 @@ history, so the count jumps from nothing to everything, and the page follows
 
 Explicitly rejected:
 
-- **React, and React component or animation libraries** — the pages are a
-  form, a progress bar, and a list of five problems. React buys interactivity
-  that is not needed, at the cost of npm, a build step, bundling and
-  deployment complexity. Looking professional is a CSS problem, not a
-  framework problem. Reconsider only for the v1.5 pet system, where animation
-  would actually earn its place.
-  *Reopened 2026-09-12, before v1.0 rather than at v1.5 — see §12.*
+- **React for the whole front end, with Flask returning JSON only** — every
+  template rewritten, the web-flow checks rewritten, and a page that shows
+  nothing without JavaScript, which breaks layer 1 of §7.1 unless
+  server-side rendering is added on top. *History:* React as a whole was
+  rejected here until 2026-09-12, reopened in §12, and adopted for the
+  interactive parts only on 2026-09-13 — ADR 0008. What this bullet used to
+  say still holds for the parts that stay plain: looking professional is a CSS
+  problem, not a framework problem.
 - **FastAPI** — more concepts before anything runs.
 - **PostgreSQL locally** — nothing to gain yet.
 - **asyncio / concurrent requests** — the Codeforces API allows at most one
@@ -467,7 +469,9 @@ carries the visual idea rather than decorating it. The limit on the landing page
 is the budget below, not a rule about technique.
 
 The React rejection in §7 was re-examined against this section and stood at
-v0.2 (reopened 2026-09-12, §12): SVG
+v0.2; React was adopted for interactive components only on 2026-09-13 (ADR
+0008), and it does not change the rule that styling is the tokens in one
+stylesheet. What does not need it still does not: SVG
 rendered from Jinja and a polling progress page need no client framework. If the
 landing page ever wants motion, GSAP adds no build step — served from this site
 rather than a CDN, per the next section.
@@ -781,25 +785,17 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   problem is not always in an adjacent contest (`1230D` appears in the
   problemset only as `1210B`). Decide at v0.4, before the first recommendation
   ships.
-- **React for the front end?** §7 rejected it. Reopened 2026-09-12: a
-  restrained use of React, with components and nothing showy, may be worth
-  it for a site that is meant to have real design. What React changes is
-  how interactive state in the browser is organised; how the site looks is
-  still a CSS question either way. Three options:
-  (a) stay with Jinja, own CSS, and small plain JavaScript or GSAP where
-  needed. No build step.
-  (b) React only for the interactive pieces (topic chart, results filtering,
-  later the pet system), mounted into pages Flask still renders. Needs Node
-  and a build step for one bundle; routes and templates stay.
-  (c) React for the whole front end, with Flask returning JSON only. Every
-  template is rewritten, the web-flow checks change, and deployment gains a
-  build.
-  Decide at v0.4, before the topic-breakdown chart is built. It is the first
-  component where the answer changes what gets written.
+- **How does the React bundle get built, and tested?** ADR 0008 adds a Node
+  build step. Either the host runs it on every deploy — Render would need
+  Node in the build of a Python service — or it runs on the author's machine
+  and the built file is committed, which is simpler and puts generated code in
+  the repository. The Python checks cannot see inside a React component, so a
+  JavaScript test tool is needed too. Decide at v0.4, before the first
+  component.
 - **Final design direction.** Terminal (ADR 0006) is the working direction,
   not necessarily the last one. Decide at v0.8, inside the design budget in
-  §7.1. If (b) or (c) above is chosen, decide the stack first, because it
-  changes what the design pass can do cheaply.
+  §7.1. The stack under it is settled: React for interactive parts (ADR 0008),
+  styling still the tokens in one stylesheet.
   A second round on 2026-09-13 built four landing directions from things the
   audience already knows (a problem statement, the rank colours, a calibration
   plot, ICPC balloons). Preferred: rank colours, then balloons. The rank colours
@@ -817,8 +813,11 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   protects, and the tool pages are meant to stay calm (§7.1).
   Three ways to build it, at very different cost: real-time 3D in the browser,
   3D rendered offline and played back as video or frames, or a no-code 3D tool
-  with its own runtime. Decide at v0.8, after a prototype with a fixed time
-  limit shows whether the material quality is reachable inside the budget.
+  with its own runtime. Real-time is the route for the prototype, written with
+  React Three Fiber inside the React build (ADR 0008); an offline render is
+  still where layer 2's still image comes from (§7.1). Whether balloons ship
+  at all is decided at v0.8, after a prototype with a fixed time limit shows
+  whether the material quality is reachable inside the budget.
 
 ### Answered
 
@@ -846,3 +845,12 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   answered 09-13.)* The server's database is a cache that is allowed to vanish;
   the training set lives in `dataset.db` on the author's machine; data that
   exists only on the server waits for v0.7, above. Details in §7.
+- **React for the front end?** *(reopened 09-12, due at v0.4, answered 09-13.)*
+  Option (b): React components for the interactive parts, mounted into pages
+  Flask still renders; not (a), plain JavaScript, and not (c), React for
+  everything. The results page is expected to grow pieces that change each
+  other — tables, the topic chart, a probability control — and the pet system
+  follows at v1.5. (a) would have worked until the first of those, and adding
+  (b) then would have been additive rather than a rewrite; the author chose to
+  set it up once, before the first interactive component, rather than switch
+  in the middle of building one. See `docs/decisions/0008-react-islands.md`.

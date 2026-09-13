@@ -115,8 +115,10 @@ Modules still to come — `collect.py`, `model.py`, `evaluate.py`,
 
 ## Stack
 
-Python 3.14, Flask, SQLite, hand-written CSS. No JavaScript build step, no
-frontend framework. Reasoning, and the list of things explicitly rejected, is in
+Python 3.14, Flask, SQLite, hand-written CSS. Today there is no JavaScript
+build step and no frontend framework; from v0.4, React components handle the
+interactive parts of pages Flask still renders
+([ADR 0008](docs/decisions/0008-react-islands.md)). Reasoning, and the list of things explicitly rejected, is in
 [spec §7](docs/spec.md).
 
 ## Notes

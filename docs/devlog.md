@@ -2431,3 +2431,45 @@ with no request to Google.
 
 70 checks: 14 schema, 22 database, 7 retry, 9 rate limit and request count,
 5 render, 13 web flow.
+
+---
+
+## 2026-09-13 — React for the interactive parts
+
+§12 had React open with three options and a v0.4 deadline. Decided early, at
+v0.3: **(b)**, React components mounted into pages Flask still renders. ADR 0008
+has the alternatives.
+
+### What a table does and does not need
+
+My first reason was "there will be tables". That is not a reason on its own:
+the results page has had a 100-row table since v0.2, drawn by Jinja with no
+JavaScript at all. React earns its place when pieces in the browser change each
+other — pick a topic in the chart and the table filters; move the target
+probability and both re-rank. Written by hand, every change has to be pushed
+into every place that shows it, and the bug is the one place forgotten. That is
+what the results page is heading towards, and the pet system at v1.5 is more of
+the same.
+
+### The honest version of the other reason
+
+I also did not want to switch from (a) to (b) later. Moving later would have
+added a build and a mount point without rewriting templates or routes, so this
+does not avoid a rewrite; it moves the setup cost forward to before the first
+interactive component instead of the middle of one. I would rather pay it once
+there.
+
+### What it costs, written down so it is not a surprise at v0.4
+
+- Node and a build step. How the bundle reaches the server is open in §12.
+- A JavaScript test tool, because the Python checks cannot see inside a
+  component.
+- Layer 1 from §7.1 still applies: Jinja draws the page first, and a component
+  takes a piece of it over. If the bundle fails, the page still works.
+- No Tailwind or component kit comes with it. `style.css` stays the only
+  styling system.
+- The hours come out of the same budget as §9.
+
+Real-time 3D, if the balloon experiment gets that far, is React Three Fiber —
+the same three.js renderer, with ready-made pieces for dropping quality on weak
+devices that §7.1's layers need. Whether balloons ship is still v0.8.
