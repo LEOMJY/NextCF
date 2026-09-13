@@ -2551,3 +2551,84 @@ a test attempt without it.
 
 `collect.py` itself, and the two tables `dataset.db` needs that `nextcf.db` does
 not have yet: rating changes, and the record of the draw.
+
+---
+
+## 2026-09-13 — `collect.py`
+
+Written, checked, and tried for real on ten users. The full two-hour run has not
+started: the tables it fills were shown first, because changing them after two
+hours of collection means collecting again.
+
+### Three commands
+
+`draw` fetches the rated list and stores every stratum's shuffled order. `run`
+fetches the problemset, then collects users — whole history and rating changes,
+two requests, one transaction — until each stratum has 400. `status` prints the
+table. `draw` refuses a second draw, before downloading anything, because a
+second draw would silently change who is in the dataset.
+
+### Decisions inside the code
+
+- **The whole shuffled order is stored**, about 21,000 candidates, not just the
+  2000. A handle that has vanished is replaced by the next in line; the row
+  count per stratum is the population the §9 weighting needs; and a stopped run
+  resumes in the same order. Each pool is sorted before shuffling, because the
+  API does not promise to list users in the same order twice, and the same seed
+  over a differently ordered list gives a different draw.
+- **Round-robin across strata.** One user per stratum per round, not stratum
+  1000 to completion first. A run stopped after an hour leaves every stratum
+  about equally full, instead of a half-dataset of low-rated users that looks
+  usable and is biased.
+- **Only "not found" skips a user.** Any other refusal — a 403, a proxy's
+  error page — stops the run. Recording those as unavailable could empty every
+  stratum in minutes while looking like progress.
+- **"Collected" is not a column.** It is `users.last_synced`, written in the
+  user's own transaction; `sample_strata`, a view, joins the two.
+
+### A bug found on the way, in `api_client`
+
+A history is several megabytes, so a download that stalls halfway is the
+likeliest interruption of a two-hour run. Tested against a local server that
+sends headers and then goes quiet: `read()` raises `TimeoutError`, and a server
+that hangs up early raises `IncompleteRead`. Neither is a `URLError`, so neither
+was retried — and in `sync.py` both fell through to "Something went wrong on our
+side" for what was only a slow network. They are now retried and, if they
+persist, reported as the network failure they are.
+
+### Testing the tests
+
+All thirteen collect checks passed on the first implementation, which after the
+rate-limiter lock proves nothing on its own. So `collect.py` was broken on
+purpose three ways, each in a throwaway copy:
+
+| Broken how | Caught by |
+|---|---|
+| fill strata one after another | "a run stopped halfway leaves the strata within one user" — `[3, 3, 1, 0, 0]` |
+| shuffle without sorting first | "the same seed draws the same order even if the API lists users differently" |
+| treat any refusal as "not found" | "a refusal that is not 'handle not found' stops the run" |
+
+The first attempt at the first mutation changed a counter that the next round
+recomputed from the database, so it broke nothing, and "not caught" meant a
+broken mutant rather than a missing check. A mutation needs checking as much as
+a test does.
+
+### The trial
+
+`draw --per-stratum 2` into a throwaway file, then `run`: ten users, 40 seconds,
+4 seconds each — 2000 users is about 2 hours 13 minutes. 11,578 problems
+(11,401 from the problemset, the rest ids only seen in histories), 307 rating
+changes.
+
+The rating changes did what they are for. One collected user is rated 1843 today
+and attempted a 1700 problem in May 2023 at 1515; predicting that attempt with
+1843 would have been exactly the leakage ADR 0009 describes. Their first
+submissions came before their first rated contest, where "rating then" is
+nothing at all — a case v0.5 has to decide, not a zero.
+
+75 checks: 14 schema, 22 database, 9 retry, 9 rate limit and request count,
+5 render, 13 web flow, 13 collect.
+
+### Next
+
+The real draw and run, once the tables are agreed.

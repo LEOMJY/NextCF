@@ -197,8 +197,10 @@ not slipped in while coding.
 
 ## 6. Data
 
-Five tables. Everything else is computed on demand, not stored, so there is
-only one copy of the truth.
+Eight tables and one view. Everything else is computed on demand, not stored,
+so there is only one copy of the truth. Both database files use the same
+schema (ADR 0007); the last three tables are filled only in `dataset.db`, by
+`collect.py`, and stay empty on the server.
 
 ```
 users
@@ -239,7 +241,54 @@ jobs
   started_at     text     — ISO-8601 UTC
   finished_at    text     — ISO-8601 UTC; NULL while the job is unfinished
   error          text     — why it failed, if it did
+
+rating_changes                                          dataset.db only
+  handle         text     — whose rating
+  contest_id     integer  — which rated contest; one row per (handle, contest)
+  place          integer  — their place in it; the API calls this "rank"
+  old_rating     integer
+  new_rating     integer
+  rated_at       text     — ISO-8601 UTC; when new_rating took effect
+
+samples                                                 dataset.db only
+  id             integer
+  seed           integer  — the shuffle's seed (ADR 0009)
+  source         text     — which list the users came from
+  source_fetched_at text  — when that list was fetched
+  rating_min     integer  — 1000
+  rating_max     integer  — 1999
+  stratum_width  integer  — 200
+  per_stratum    integer  — 400
+
+sample_candidates                                       dataset.db only
+  sample_id      integer
+  stratum        integer  — the stratum's lower bound: 1000, 1200, ... 1800
+  position       integer  — 0, 1, 2 ... within the stratum, after the shuffle
+  handle         text
+  rating_when_drawn integer — decides the stratum; never updated
+  unavailable    text     — NULL, or Codeforces' reason the handle is gone
+
+sample_strata    (a view) — per stratum: population, wanted, collected,
+                            unavailable
 ```
+
+**Rating changes exist so an old submission is judged by the rating its author
+had then.** The rating at time T is the latest `new_rating` with `rated_at` at
+or before T. A submission from before a user's first rated contest has no
+rating at all, and the analysis has to decide what that means — it is not the
+same as a rating of zero. Measured on the first trial collection: one user
+rated 1843 today attempted a 1700 problem in 2023 at 1515.
+
+**The whole shuffled order of every stratum is stored**, about 21,000 rows,
+not only the 2000 collected. The sample is "the first `per_stratum` available
+candidates of each stratum", so a vanished handle is replaced by the next in
+line without redrawing; a stratum's row count is its population, which is the
+weight §9's total needs; and a stopped collection resumes in the same order.
+
+**Whether a candidate was collected is not a column.** It is
+`users.last_synced`, which is already written in the user's own transaction; a
+second copy in `sample_candidates` could disagree with it. `sample_strata`
+joins the two.
 
 Derived and deliberately not stored: per-topic skill estimates, solve
 probability predictions, recommendation lists.

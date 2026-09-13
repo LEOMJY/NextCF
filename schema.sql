@@ -1,7 +1,13 @@
 -- NextCF database schema.
 --
--- Five tables, per spec section 6. Run once at startup via db.py's init_db();
--- every statement is IF NOT EXISTS, so running it again is harmless.
+-- Eight tables and one view, per spec section 6. Run once at startup via
+-- db.py's init_db(); every statement is IF NOT EXISTS, so running it again is
+-- harmless -- and also means a CHANGE to an existing table here does nothing
+-- to a database that already has it.
+--
+-- Both database files use this one schema (ADR 0007). The last three tables
+-- and the view are filled only in dataset.db, by collect.py; on the server
+-- they exist and stay empty.
 --
 -- Two settings that are NOT here, because they belong to the connection
 -- rather than to the schema, and live in db.py:
@@ -229,3 +235,137 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_active_per_target
     ON jobs(kind, target)
     WHERE state IN ('pending', 'running');
+
+
+-- ============================================================ the dataset
+--
+-- Everything below is written by collect.py into dataset.db (ADR 0009).
+-- Changing it after the two-hour collection means collecting again, so these
+-- columns were chosen before the first real run, not after.
+
+
+-- Every change to a collected user's rating: one row per rated contest, from
+-- user.rating. This is what lets an old submission be predicted from the
+-- rating its author had THEN rather than today -- without it, the evaluation
+-- would know how strong a user later became (data leakage, ADR 0009).
+CREATE TABLE IF NOT EXISTS rating_changes (
+    -- ON DELETE CASCADE, as for submissions: removing a user removes their
+    -- whole record, not most of it.
+    handle      TEXT    NOT NULL COLLATE NOCASE
+                        REFERENCES users(handle) ON DELETE CASCADE,
+
+    contest_id  INTEGER NOT NULL,
+
+    -- The user's place in that contest. The API calls it "rank", a word that
+    -- on Codeforces also means a title such as "expert", hence the rename.
+    -- Not needed by the rating-only
+    -- baseline, but it is in the response already, and it is the one thing a
+    -- model of contest performance would want that cannot be rebuilt from
+    -- submissions. Same reasoning as submissions.participant_type: storing it
+    -- now is free, and filling it in later is two thousand requests.
+    place       INTEGER NOT NULL,
+
+    old_rating  INTEGER NOT NULL,
+    new_rating  INTEGER NOT NULL,
+
+    -- When the new rating took effect, converted from ratingUpdateTimeSeconds.
+    -- A submission made before this moment was made at old_rating -- including
+    -- every submission during the contest itself, since ratings update after
+    -- it ends.
+    rated_at    TEXT    NOT NULL,
+
+    -- A user has at most one rating change per contest, so a second one for
+    -- the same pair is a bug to catch at the write, not a duplicate to average.
+    PRIMARY KEY (handle, contest_id)
+) STRICT;
+
+-- For "this user's rating at time T": the latest change with rated_at <= T.
+-- The primary key is ordered by contest, not by time, so it cannot answer
+-- that; this index can, without a scan.
+CREATE INDEX IF NOT EXISTS idx_rating_changes_time
+    ON rating_changes(handle, rated_at);
+
+
+-- How a sample was drawn. One row per draw -- collect.py refuses a second,
+-- because a second draw would silently change who is in the dataset.
+CREATE TABLE IF NOT EXISTS samples (
+    id                 INTEGER PRIMARY KEY,
+
+    -- random.Random(seed).shuffle over the candidates sorted by handle. The
+    -- seed makes the draw repeatable from the same list; the stored order in
+    -- sample_candidates is the real record, because the list itself changes
+    -- every day and is not kept.
+    seed               INTEGER NOT NULL,
+
+    -- Which list the users came from, and when it was fetched. The sample
+    -- describes that day's active users, not Codeforces in general.
+    source             TEXT    NOT NULL,
+    source_fetched_at  TEXT    NOT NULL,
+
+    -- The strata: rating_min to rating_max inclusive, in steps of
+    -- stratum_width, per_stratum users wanted from each. 1000, 1999, 200 and
+    -- 400 in ADR 0009.
+    rating_min         INTEGER NOT NULL,
+    rating_max         INTEGER NOT NULL,
+    stratum_width      INTEGER NOT NULL,
+    per_stratum        INTEGER NOT NULL,
+
+    CHECK (rating_min <= rating_max AND stratum_width > 0 AND per_stratum > 0)
+) STRICT;
+
+
+-- Every user in range on the day of the draw -- all ~21,000 of them, not only
+-- the 2000 collected -- in the order the seeded shuffle put them.
+--
+-- Keeping the whole order is what makes three things simple. The sample is
+-- "the first per_stratum available candidates in each stratum", so a handle
+-- that has vanished is replaced by the next in line, deterministically. The
+-- count of candidates per stratum is that stratum's population, which is the
+-- weight section 9's total needs. And a stopped collection resumes exactly
+-- where it was, because the order does not depend on anything that changes.
+CREATE TABLE IF NOT EXISTS sample_candidates (
+    sample_id          INTEGER NOT NULL REFERENCES samples(id),
+
+    -- The stratum's lower bound: 1000, 1200, 1400, 1600 or 1800.
+    stratum            INTEGER NOT NULL,
+
+    -- 0, 1, 2, ... within the stratum, after the shuffle.
+    position           INTEGER NOT NULL,
+
+    handle             TEXT    NOT NULL COLLATE NOCASE,
+
+    -- Their rating in the list on the day of the draw. It decides the stratum,
+    -- and it stays fixed even if their rating changes before they are
+    -- collected -- otherwise a user could move between strata mid-collection.
+    rating_when_drawn  INTEGER NOT NULL,
+
+    -- NULL, or why this candidate could not be collected, in Codeforces' own
+    -- words ("handle: User with handle ... not found"). Only answers that
+    -- will not change are recorded here; a network failure is not, so a
+    -- stopped run never turns into a skipped user.
+    --
+    -- Whether a candidate WAS collected is deliberately not a column: that
+    -- fact already lives in users.last_synced, and a second copy could
+    -- disagree with the first.
+    unavailable        TEXT,
+
+    PRIMARY KEY (sample_id, stratum, position),
+    UNIQUE (sample_id, handle),
+    CHECK (position >= 0)
+) STRICT;
+
+
+-- Per stratum: how many users were in range (the weight), how many are
+-- wanted, how many are collected, how many turned out unavailable. What
+-- `collect.py status` prints, and what section 9's weighted total reads.
+CREATE VIEW IF NOT EXISTS sample_strata AS
+SELECT c.sample_id,
+       c.stratum,
+       count(*)             AS population,
+       s.per_stratum        AS wanted,
+       count(u.handle)      AS collected,
+       count(c.unavailable) AS unavailable
+  FROM sample_candidates c
+  JOIN samples s ON s.id = c.sample_id
+  LEFT JOIN users u ON u.handle = c.handle AND u.last_synced IS NOT NULL
+ GROUP BY c.sample_id, c.stratum;

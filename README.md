@@ -100,8 +100,10 @@ templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
 db.py                the database: opening it, creating it, and every query
 sync.py              fetches one user's history in the background
+collect.py           draws and collects the 2000-user dataset — see docs/decisions/0009-dataset-sample.md
 static/style.css     the whole design system — see docs/decisions/0006-design-direction.md
-schema.sql           the five tables — see docs/spec.md §6
+static/fonts/        IBM Plex Mono, served from this site, with its licence
+schema.sql           the tables and the view — see docs/spec.md §6
 serve.py             production entry point — see docs/decisions/0003-hosting.md
 requirements.txt     direct dependencies
 .python-version      pins the Python version for the host
@@ -110,8 +112,29 @@ docs/devlog.md       dated entries: what was tried, what broke, what was learned
 docs/decisions/      one short file per significant technical decision (ADRs)
 ```
 
-Modules still to come — `collect.py`, `model.py`, `evaluate.py`,
-`scheduler.py` — are described in [spec §4](docs/spec.md).
+Modules still to come — `model.py`, `evaluate.py`, `scheduler.py` — are
+described in [spec §4](docs/spec.md).
+
+### Collecting the dataset
+
+Runs on your own machine, into `dataset.db`, never on the server. Draw once,
+then run until done — a full run is a little over two hours, and it resumes
+where it stopped:
+
+```bash
+.venv\Scripts\python.exe collect.py draw
+```
+
+```bash
+.venv\Scripts\python.exe collect.py run
+```
+
+```bash
+.venv\Scripts\python.exe collect.py status
+```
+
+Do not use the local site while it runs: each program keeps its own
+two-second pace, and together they would go twice as fast as Codeforces allows.
 
 ## Stack
 

@@ -1,8 +1,9 @@
 """Database access for NextCF.
 
-v0.2 scope so far: open a connection correctly, create the database, and
-answer the questions web.py and sync.py actually ask of it -- one function per
-question, and none written ahead of a caller that needs it.
+Open a connection correctly, create the database, and answer the questions
+web.py, sync.py and collect.py actually ask of it -- one function per question,
+and none written ahead of a caller that needs it. The same functions serve
+both database files (ADR 0007); every one takes a path or a connection.
 
 Every table, column and constraint lives in schema.sql, not here. This file
 owns what is NOT a property of the schema:
@@ -14,6 +15,7 @@ owns what is NOT a property of the schema:
     how a problem id is built   problem_id()
     what "synced" means         get_submissions(), and only there
     ADR 0004's one transaction  save_sync(), which is why it is one function
+    the sample (ADR 0009)       save_draw(), next_candidate(), get_strata(), ...
 
 Two startup functions, because they are safe for different programs:
     init_db()               any program, any time
@@ -412,7 +414,7 @@ def finish_job(conn, job_id, error=None):
 # halfway.
 
 
-def save_sync(conn, handle, cf_rating, submissions):
+def save_sync(conn, handle, cf_rating, submissions, rating_changes=None):
     """Write one user's entire history in a single transaction. ADR 0004.
 
     `submissions` is the raw list from api_client.fetch_submissions -- the
@@ -427,6 +429,11 @@ def save_sync(conn, handle, cf_rating, submissions):
     `cf_rating` may be None: the API omits it for anyone who has never
     competed.
 
+    `rating_changes` is the raw list from api_client.fetch_rating_changes, or
+    None when the caller did not fetch it. When given, it replaces this user's
+    stored rating changes inside the same transaction, so in dataset.db a set
+    last_synced means the history AND the rating changes are complete.
+
     Either everything here is stored or nothing is. Returns how many
     submission rows this user has afterwards.
     """
@@ -437,40 +444,39 @@ def save_sync(conn, handle, cf_rating, submissions):
     # better than rolling one back, and it keeps the transaction as short as
     # possible -- a transaction is a lock, and a lock is time other threads
     # spend waiting.
-    problems = {}
-    tags = []
-    rows = []
-    for sub in submissions:
-        problem = sub["problem"]
-        pid = problem_id(problem)
-
-        # The same problem appears on many of a user's submissions. A dict
-        # keyed by id collapses those to one row each.
-        if pid not in problems:
-            problems[pid] = (
-                pid,
-                problem.get("contestId"),
-                problem["index"],
-                problem["name"],
-                # Absent for unrated, very new, and gym problems.
-                problem.get("rating"),
-            )
-            for tag in problem.get("tags", []):
-                tags.append((pid, tag))
-
-        rows.append(
-            (
-                sub["id"],
-                handle,
-                pid,
-                # Absent while a submission is still being judged. NULL is the
-                # honest value; "TESTING" is a display decision, and web.py
-                # makes it.
-                sub.get("verdict"),
-                sub.get("author", {}).get("participantType"),
-                iso_from_unix(sub["creationTimeSeconds"]),
-            )
+    problems, tags = _shape_problems(sub["problem"] for sub in submissions)
+    rows = [
+        (
+            sub["id"],
+            handle,
+            problem_id(sub["problem"]),
+            # Absent while a submission is still being judged. NULL is the
+            # honest value; "TESTING" is a display decision, and web.py
+            # makes it.
+            sub.get("verdict"),
+            sub.get("author", {}).get("participantType"),
+            iso_from_unix(sub["creationTimeSeconds"]),
         )
+        for sub in submissions
+    ]
+
+    # Rating changes, when the caller fetched them -- collect.py does, a web
+    # sync does not. [] means "fetched, and there are none"; None means "not
+    # fetched", and leaves whatever is stored alone. Same distinction as
+    # get_submissions' None and [].
+    changes = None
+    if rating_changes is not None:
+        changes = [
+            (
+                handle,
+                change["contestId"],
+                change["rank"],
+                change["oldRating"],
+                change["newRating"],
+                iso_from_unix(change["ratingUpdateTimeSeconds"]),
+            )
+            for change in rating_changes
+        ]
 
     with conn:
         # excluded is SQLite's name for the row that the INSERT tried to add
@@ -491,24 +497,7 @@ def save_sync(conn, handle, cf_rating, submissions):
         # Problems are updated, not ignored, because their facts change:
         # Codeforces assigns a rating to a new problem days or weeks after the
         # contest, and that rating is what the section 9 baseline is built on.
-        conn.executemany(
-            """
-            INSERT INTO problems (id, contest_id, problem_index, name, rating)
-                 VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET name   = excluded.name,
-                                          rating = excluded.rating
-            """,
-            list(problems.values()),
-        )
-
-        # Tags are replaced rather than added to -- ADR 0005. Codeforces edits
-        # tags, and inserting without deleting would accumulate every tag a
-        # problem has ever had, with no way to tell the stale ones apart.
-        conn.executemany(
-            "DELETE FROM problem_tags WHERE problem_id = ?",
-            [(pid,) for pid in problems],
-        )
-        conn.executemany("INSERT INTO problem_tags (problem_id, tag) VALUES (?, ?)", tags)
+        _write_problems(conn, problems, tags)
 
         # Codeforces' submission ids are stable, so re-syncing hits this
         # conflict for every submission already stored and no duplicate row is
@@ -526,11 +515,186 @@ def save_sync(conn, handle, cf_rating, submissions):
             rows,
         )
 
+        # The whole history arrives every time, so replacing is exact: a
+        # contest Codeforces later unrated disappears instead of lingering.
+        if changes is not None:
+            conn.execute("DELETE FROM rating_changes WHERE handle = ?", (handle,))
+            conn.executemany(
+                """
+                INSERT INTO rating_changes (handle, contest_id, place,
+                                            old_rating, new_rating, rated_at)
+                     VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                changes,
+            )
+
         stored = conn.execute(
             "SELECT count(*) FROM submissions WHERE handle = ?", (handle,)
         ).fetchone()[0]
 
     return stored
+
+
+def save_problemset(conn, problems):
+    """Store the whole problemset, from api_client.fetch_problemset()["problems"].
+
+    One transaction. Adds problems nobody has submitted to yet -- a sample's
+    histories only ever mention problems someone in it tried, and a
+    recommender needs the rest too. Returns how many problems were written.
+    """
+    shaped, tags = _shape_problems(problems)
+    with conn:
+        _write_problems(conn, shaped, tags)
+    return len(shaped)
+
+
+def _shape_problems(problem_dicts):
+    """API problem objects -> (rows keyed by id, (id, tag) pairs). No writing.
+
+    Shared by save_sync and save_problemset so there is one definition of how
+    a problem becomes a row. The underscore marks it as private to this file:
+    callers outside db.py should never need it.
+    """
+    problems = {}
+    tags = []
+    for problem in problem_dicts:
+        pid = problem_id(problem)
+
+        # The same problem appears on many of a user's submissions. A dict
+        # keyed by id collapses those to one row each.
+        if pid in problems:
+            continue
+        problems[pid] = (
+            pid,
+            problem.get("contestId"),
+            problem["index"],
+            problem["name"],
+            # Absent for unrated, very new, and gym problems.
+            problem.get("rating"),
+        )
+        for tag in problem.get("tags", []):
+            tags.append((pid, tag))
+    return problems, tags
+
+
+def _write_problems(conn, problems, tags):
+    """Upsert problems and replace their tags. Call inside a transaction."""
+    # Problems are updated, not ignored, because their facts change:
+    # Codeforces assigns a rating to a new problem days or weeks after the
+    # contest, and that rating is what the section 9 baseline is built on.
+    conn.executemany(
+        """
+        INSERT INTO problems (id, contest_id, problem_index, name, rating)
+             VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name   = excluded.name,
+                                      rating = excluded.rating
+        """,
+        list(problems.values()),
+    )
+
+    # Tags are replaced rather than added to -- ADR 0005. Codeforces edits
+    # tags, and inserting without deleting would accumulate every tag a
+    # problem has ever had, with no way to tell the stale ones apart.
+    conn.executemany(
+        "DELETE FROM problem_tags WHERE problem_id = ?",
+        [(pid,) for pid in problems],
+    )
+    conn.executemany("INSERT INTO problem_tags (problem_id, tag) VALUES (?, ?)", tags)
+
+
+# ------------------------------------------------------------------ the sample
+#
+# collect.py decides who is drawn (ADR 0009). These only store and read it.
+
+
+def save_draw(conn, seed, source, source_fetched_at, rating_min, rating_max,
+              stratum_width, per_stratum, candidates):
+    """Record a draw and its whole ordered candidate list, in one transaction.
+
+    `candidates` is (stratum, position, handle, rating_when_drawn) tuples.
+    Returns the new sample's id.
+    """
+    with conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO samples (seed, source, source_fetched_at, rating_min,
+                                 rating_max, stratum_width, per_stratum)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (seed, source, source_fetched_at, rating_min, rating_max, stratum_width, per_stratum),
+        )
+        sample_id = cursor.lastrowid
+        conn.executemany(
+            """
+            INSERT INTO sample_candidates (sample_id, stratum, position, handle, rating_when_drawn)
+                 VALUES (?, ?, ?, ?, ?)
+            """,
+            [(sample_id, *candidate) for candidate in candidates],
+        )
+    return sample_id
+
+
+def get_sample(conn):
+    """The one sample in this database, or None if nothing has been drawn."""
+    return conn.execute(
+        """
+        SELECT id, seed, source, source_fetched_at, rating_min, rating_max,
+               stratum_width, per_stratum
+          FROM samples
+         ORDER BY id
+         LIMIT 1
+        """
+    ).fetchone()
+
+
+def get_strata(conn, sample_id):
+    """Per stratum: population, wanted, collected, unavailable. Lowest first."""
+    return conn.execute(
+        """
+        SELECT stratum, population, wanted, collected, unavailable
+          FROM sample_strata
+         WHERE sample_id = ?
+         ORDER BY stratum
+        """,
+        (sample_id,),
+    ).fetchall()
+
+
+def next_candidate(conn, sample_id, stratum):
+    """The first candidate in this stratum not yet collected and not known to
+    be unavailable, or None when the stratum has run out of candidates.
+
+    "Collected" is read from users.last_synced, so a user whose save rolled
+    back (ADR 0004) is still next in line -- which is exactly what resuming
+    after a stop needs.
+    """
+    return conn.execute(
+        """
+        SELECT c.handle, c.position, c.rating_when_drawn
+          FROM sample_candidates c
+          LEFT JOIN users u ON u.handle = c.handle AND u.last_synced IS NOT NULL
+         WHERE c.sample_id = ? AND c.stratum = ?
+           AND c.unavailable IS NULL
+           AND u.handle IS NULL
+         ORDER BY c.position
+         LIMIT 1
+        """,
+        (sample_id, stratum),
+    ).fetchone()
+
+
+def mark_unavailable(conn, sample_id, handle, reason):
+    """Record that Codeforces will not give us this candidate, and why.
+
+    Only for answers that will not change -- a handle that no longer exists.
+    Never for a network failure: that would turn a bad connection into a
+    permanently skipped user.
+    """
+    with conn:
+        conn.execute(
+            "UPDATE sample_candidates SET unavailable = ? WHERE sample_id = ? AND handle = ?",
+            (reason, sample_id, handle),
+        )
 
 
 def main():
