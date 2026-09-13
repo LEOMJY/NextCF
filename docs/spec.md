@@ -395,8 +395,10 @@ steps, a dark canvas with a single accent, 3px radius, no shadow.
 That is the **working** direction: it makes the v0.2 pages usable and
 legible, and it is not necessarily the final look. The final direction is
 revisited at the v0.8 design pass — see §12. Because every value is a token in
-one file, changing type, colour and spacing later is a one-file change.
-Changing layout is not, so layout is where a late change of direction costs.
+one file, changing type, colour and spacing later is a one-file change. Layout
+can change too, at any point. It just means editing each page's template and
+CSS, and any check that looks for specific elements, instead of one file.
+That makes it the more expensive part of a late change of direction.
 
 ### Interactivity that is in scope
 

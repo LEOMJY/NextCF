@@ -1926,8 +1926,8 @@ documents said more than I meant.
 said "accepted" with nothing qualifying it. What was actually decided was a
 system good enough to make the v0.2 pages usable and legible. The final
 direction is now an open question for v0.8. The token file makes that cheap
-for type, colour and spacing. Layout is where a late change costs, so that is
-the part to leave loose until then.
+for type, colour and spacing. Layout can still change. It costs more because
+it touches every template, not one file.
 
 **React is open again.** §7 rejected it, and §7.1 said the rejection "stands".
 I think a restrained use of React, components without showing off, can be
