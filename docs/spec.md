@@ -71,7 +71,8 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   ON THE AUTHOR'S MACHINE — run by hand
   ─────────────────────────────────────────────────────
     collect.py  →  api_client.py  →  [ dataset.db ]
-    fetch every problem, then ~2000 users' histories
+    draw 2000 users: five rating strata of 400, 1000–1999 (ADR 0009)
+    fetch every problem, then each user's history and rating changes
     resumable: dies at minute 40, restarts at minute 40
     progress is printed to the terminal; no jobs rows
 
@@ -553,7 +554,9 @@ Written down because they are guesses, not facts, and should be revisited.
 v1.0 is done when all three hold:
 
 1. The model predicts solve/fail on held-out submissions with **lower log loss
-   than the rating-only baseline**, and that number is written down.
+   than the rating-only baseline**, and that number is written down — for each
+   of the five rating strata in ADR 0009, and as one total weighted by each
+   stratum's real share of the audience.
 2. At least **50 people who are not the author** have used it, and at least
    **20 have returned** after their first visit.
 3. It is live at a URL and stays up.
@@ -587,7 +590,7 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 |---|---|---|
 | v0.1 | Enter a handle, see your submissions. Deployed. | end Aug |
 | v0.2 | Background job with a progress page; caching. Design tokens and base stylesheet — see §7.1 | early Sep |
-| v0.3 | Bulk collection of ~2000 users into `dataset.db`, on the author's machine — rate limited, resumable | mid Sep |
+| v0.3 | Bulk collection into `dataset.db`, on the author's machine: 2000 users stratified by rating, with histories and rating changes — rate limited, resumable | mid Sep |
 | v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down | early Oct |
 | v0.6 | First real model (logistic / Rasch), scored against the baseline; `/how` | late Oct |
@@ -714,7 +717,30 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
 - **Cold start.** What is shown to somebody with 3 submissions? Probably fall
   back to the rating-only baseline. Decide at v0.6.
 - **What counts as "solved"?** Solved on the first try, or after five attempts
-  and an editorial? The API does not distinguish. Affects everything.
+  and an editorial? The API does not distinguish. Affects everything. Decide at
+  v0.5: the harness cannot label a single test attempt without an answer.
+- **How is the data split into what the model learns from and what it is
+  tested on?** Proposed by the author: hold back each user's most recent
+  submissions — say the last 500 of 2000 — let the model learn from the
+  earlier ones, and test whether it predicts the recent ones: what the user
+  could do before, against what they do now. A split by time is the right
+  shape, because it asks exactly what NextCF asks — given your past, what will
+  you solve next — and it needs the rating history ADR 0009 collects, since a
+  recent attempt may only be predicted from the rating the user had then.
+  Three details to settle:
+  (1) *Per user, or one date for everyone.* Holding back each user's own last
+  submissions puts one user's test period alongside another user's learning
+  period, so a new problem's difficulty can be learned from other people
+  attempting it at the same time as the attempts being tested. A single cutoff
+  date — learn from everything before it, test everything after — matches the
+  day the model goes live, when nothing later is known. It costs the users
+  with nothing after the date.
+  (2) *A fixed count or a share.* "The last 500" does not exist for a user with
+  60 submissions.
+  (3) *What is tested: submissions or problems.* Three wrong answers and an
+  accepted one are four submissions and one problem, and NextCF recommends
+  problems. Tied to "what counts as solved".
+  Decide at v0.5, with the harness.
 - **Where do visit records live?** §9 needs to know who came back, and on the
   free instance nothing written survives a spin-down (§7). A paid disk keeps
   SQLite and costs money every month; a hosted database costs nothing on some

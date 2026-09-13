@@ -2494,3 +2494,60 @@ files. Put a Russian title, a `√` and an `ō` on it, and exactly the files for
 those characters follow — Cyrillic in both weights because one line was bold,
 Latin2 and Pi in regular only. Visitors pay for an alphabet only when they see
 it.
+
+---
+
+## 2026-09-13 — Who goes into the dataset
+
+`collect.py`'s first question was not how to fetch 2000 users but which 2000.
+ADR 0009 has the decision and the alternatives; this is how it was reached.
+
+### Measured first
+
+`user.ratedList` with `activeOnly=true` returned 40,929 users. Half are rated
+1000–1900, the range §2 names. Above 1600 they thin out fast: 835 in 1800–1999,
+376 in 2000–2199. Below 1000 are many accounts still in their first six rated
+contests, whose displayed rating Codeforces raises in steps, so their number is
+not yet their level.
+
+### Stratified, not simply random
+
+A simple random draw from 1000–1999 follows the crowd: about 735 users at
+1000–1199 and about 80 at 1800–1999. The model would be weakest for the top of
+the audience, and one average would hide that. So: five strata of 200 points,
+400 users drawn at random from each, and §9 reported per stratum plus one total
+weighted back to each stratum's real share. The weighting is the price —
+1000–1199 is 37% of the audience and 20% of the sample, and forgetting to
+reweight would quietly describe the sample instead of the people using the site.
+
+### Rating history, because of leakage
+
+The rating-only baseline predicts an attempt from the user's rating. An attempt
+from three years ago predicted with today's rating lets the prediction know how
+strong the user later became. That is data leakage, and it flatters the baseline
+and the model alike, which makes the comparison §9 depends on meaningless. So
+every user's rating changes are fetched too: one more request each, about an
+hour more, and the alternative is fetching 2000 users again later.
+
+### Filters wait for the analysis
+
+Nobody drawn is skipped. "At least thirty problems" is a `WHERE` clause at v0.5,
+and changeable; the same rule applied during collection would be permanent. The
+rated list does not report submission counts anyway.
+
+### An idea that was never written down
+
+Before any of this, the plan for testing the model was: hold back a user's most
+recent submissions, let the model learn from the earlier ones, and see whether it
+predicts the recent ones. Checking the documents turned up only "held-out
+submissions" in §9 and "train/test split" in §4 — the actual idea existed only in
+conversation. It is in §12 now, for v0.5, with the three details it still needs:
+one cutoff date for everyone or each user's own latest submissions, a count or a
+share, and whether the unit tested is a submission or a problem. "What counts as
+solved?" had no deadline at all; it has v0.5 now, because the harness cannot label
+a test attempt without it.
+
+### Next
+
+`collect.py` itself, and the two tables `dataset.db` needs that `nextcf.db` does
+not have yet: rating changes, and the record of the draw.
