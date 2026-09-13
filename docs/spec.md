@@ -676,6 +676,16 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   the site needs is the result — per-problem and per-topic numbers, small
   compared to the histories — and it has to arrive in a way that survives a
   restart. Decide at v0.6, when there is a result to move.
+- **What does the tenth visitor in a queue see?** Every request from the web
+  app waits its turn, one every two seconds (`api_client.RateLimiter`), so
+  visitors syncing at the same time share that pace. Measured 2026-09-13: two
+  histories synced together alternated requests and took 44 seconds between
+  them. §9's launch is a blog post, which sends people at once, and ten visitors
+  with long histories would leave the last one waiting minutes while the
+  progress page says "0 submissions fetched". The pace cannot be raised; what
+  can change is what the page says while a job is waiting, and whether a
+  handle already stored is shown straight away. Decide at v0.7, with error
+  handling.
 - **One problem, two ids.** When a Div. 1 and a Div. 2 round run together,
   each shared problem gets an id in both contests: `1292A` and `1293C` are the
   same problem. `problemset.problems` lists only one copy, but a Div. 2

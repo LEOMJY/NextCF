@@ -1,7 +1,10 @@
 """Codeforces API client.
 
-v0.1 scope: fetch one user's recent submissions and print them.
-Rate limiting, retries and backoff are v0.3 work — see docs/spec.md section 4.
+Every request to Codeforces goes through call(), which does two things for
+every caller so that no caller has to remember them:
+
+    pacing     one request every two seconds, shared by all threads -- RateLimiter
+    retrying   the failures that waiting can fix, and no others   -- call()
 
 Usage:
     .venv\\Scripts\\python.exe api_client.py [handle]
@@ -9,6 +12,7 @@ Usage:
 
 import json
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -16,16 +20,84 @@ import urllib.request
 
 API_BASE = "https://codeforces.com/api"
 
+# Codeforces asks for no more than one request every two seconds, and answers
+# faster callers with "Call limit exceeded".
+SECONDS_BETWEEN_REQUESTS = 2.0
+
 # How many times one request is tried before giving up, and how long to wait
 # after the first failure. The wait doubles: 2 seconds, then 4.
 #
 # Only failures that waiting can fix are retried -- see TemporaryFailure.
 # Three attempts and six seconds of waiting rides out a blip, and is short
-# enough that somebody watching a progress page has not given up. Rate
-# limiting shared across callers is still v0.3 work (spec section 4).
+# enough that somebody watching a progress page has not given up.
 MAX_ATTEMPTS = 3
 RETRY_SECONDS = 2.0
 RATING_WIDTH = 6
+
+
+class RateLimiter:
+    """Spaces out the moments requests start, across every thread in a program.
+
+    Call wait() immediately before sending a request. It returns at once if
+    the last request started long enough ago, and otherwise sleeps until it
+    did.
+
+    The idea is a queue of time slots. Each caller, under a lock, takes the
+    next free slot -- "now", or one interval after the slot before it,
+    whichever is later -- and moves the marker along. Then it lets go of the
+    lock and sleeps until its slot. Two threads arriving at the same instant
+    get slots two seconds apart, and neither holds the lock while sleeping, so
+    a third thread can join the queue immediately instead of waiting to ask.
+
+    What it does NOT cover: a second program. Each program that imports this
+    file gets its own limiter, so collect.py and the local site running at
+    the same moment each keep their own pace and together go twice as fast.
+    Codeforces then answers "Call limit exceeded", which call() retries. Do not
+    run the two together. See the 2026-09-13 devlog entry for why this is not
+    shared between programs.
+    """
+
+    def __init__(self, interval, clock=time.monotonic, sleep=time.sleep):
+        self.interval = interval
+
+        # The clock and the sleep are parameters so the checks can hand in a
+        # fake clock that moves only when something sleeps. The defaults are
+        # the real thing.
+        #
+        # monotonic(), not time.time(): the wall clock can jump -- the computer
+        # corrects its time from the internet, or daylight saving changes it --
+        # and a clock that jumps backwards by an hour would make this wait an
+        # hour. A monotonic clock only ever moves forward. Its value means
+        # nothing on its own; only the difference between two readings does.
+        self._clock = clock
+        self._sleep = sleep
+
+        # A thread lock: only one thread at a time may run the lines inside
+        # `with self._lock`. Without it, two threads could both read the same
+        # free slot before either moves the marker, and both send at once --
+        # precisely the collision this class exists to prevent.
+        self._lock = threading.Lock()
+
+        # When the next free slot starts. Minus infinity means "no request
+        # yet", so the very first caller never waits.
+        self._next_slot = float("-inf")
+
+    def wait(self):
+        with self._lock:
+            now = self._clock()
+            slot = max(now, self._next_slot)
+            self._next_slot = slot + self.interval
+
+        # Outside the lock, on purpose -- see the class docstring.
+        delay = slot - now
+        if delay > 0:
+            self._sleep(delay)
+
+
+# The one limiter for this program. Module-level on purpose: every thread that
+# imports api_client shares it, which is what makes two simultaneous syncs in
+# the web app take turns. The checks swap it out; nothing else should.
+limiter = RateLimiter(SECONDS_BETWEEN_REQUESTS)
 
 
 class TemporaryFailure(RuntimeError):
@@ -75,6 +147,13 @@ def call(method, **params):
 
 def _call_once(method, params):
     """One attempt at one API call. The retrying lives in call()."""
+
+    # Wait for a turn. Here, in the single attempt, rather than once in call():
+    # a retry is a request too, and a retry after "Call limit exceeded" is the
+    # last request that should be allowed to jump the queue. When the retry has
+    # already slept 2 or 4 seconds, its turn has usually arrived and this
+    # returns at once.
+    limiter.wait()
 
     # urlencode escapes anything awkward in a value. A handle containing a
     # space or an "&" would otherwise corrupt the query string silently --

@@ -2083,3 +2083,113 @@ not know a visitor's topics until a handle is synced; per-topic recommendations
 are not a v1.0 page (added to §11); and a camera flight on every visit charges
 the returning visitor that §4.1 exists to protect. A realistic balloon also does
 not explain what it means by itself. Labels do that.
+
+---
+
+## 2026-09-13 — Rate limiting, shared by every thread in a program
+
+Codeforces asks for one request every two seconds. Until today only `sync.py`
+was polite about it, with a two-second pause between pages of one history. Two
+visitors syncing at once were two threads with no idea the other existed, and
+nothing at all paced `collect.py`, which does not exist yet but will make
+thousands of requests in a row.
+
+### A queue of time slots
+
+`api_client.RateLimiter` sits in front of every attempt at every request. Each
+caller takes the next free two-second slot under a lock, moves the marker along,
+lets go of the lock and sleeps until its slot.
+
+```
+thread A arrives at 0.0   takes slot 0.0   marker → 2.0   goes at once
+thread B arrives at 0.1   takes slot 2.0   marker → 4.0   sleeps 1.9
+thread A arrives at 1.2   takes slot 4.0   marker → 6.0   sleeps 2.8
+```
+
+Four choices in those few lines, each for a reason:
+
+- **The gap is between request starts.** A request that itself takes 1.5
+  seconds owes only half a second more. Pausing after each request finishes
+  would make every slow request slower for nothing.
+- **Sleeping happens outside the lock.** A thread holding the lock while it
+  slept would make everybody behind it wait just to ask for a slot.
+- **The clock is `time.monotonic()`, not the wall clock.** The wall clock can
+  jump when the computer corrects its time, and a jump backwards of an hour
+  would become an hour's wait. A monotonic clock only moves forward.
+- **Every attempt waits, retries included.** A retry after "Call limit
+  exceeded" is the last request that should jump the queue. When the retry has
+  already slept 2 or 4 seconds, its slot has arrived and the limiter adds
+  nothing — which the retry checks now prove, because the limiter shares their
+  fake clock and any extra wait would show up.
+
+`sync.py`'s own pause between pages is gone. Kept, it would have stacked on top
+of the limiter.
+
+### The check that proved nothing
+
+The first version of the threads check released four threads at the same
+instant and asserted they went 0.2 seconds apart. It passed. Then, as a test of
+the test, the lock was deleted — and it still passed, 20 runs out of 20.
+
+Not because the lock is unnecessary. The gap it protects, between reading the
+free slot and moving the marker, is a couple of bytecodes, and the GIL almost
+never switches threads inside it. Forcing a switch into that gap with a
+one-millisecond sleep made two threads take the same slot at once; the same
+forced gap with the lock in place did not. That pair is now a check of its own.
+
+It matters more here than in most projects: spec §7 already notes that the
+Windows launcher defaults to the free-threaded Python build, which has no GIL,
+and there the race needs no forcing.
+
+What I learned: a check that passes is not evidence until it has been seen to
+fail. This one was written test-first and did fail first — for the missing
+class. That proved it could see the class was missing, not that it could see
+the lock was.
+
+### Not shared between programs
+
+Each program that imports `api_client` gets its own limiter. `collect.py` and
+the local site running at the same moment would each keep their own pace and
+together go twice as fast.
+
+Sharing a limiter between programs needs somewhere both can see: a lock file,
+or a row in a database both open. ADR 0007 just gave the two programs different
+database files, and file locking behaves differently on Windows and on the
+Linux server. All of that buys the ability to do something with an easy
+alternative — not running collect.py while using the local site. On the server
+there is only ever one program, so there is nothing to share.
+
+### Run for real
+
+Two syncs started at the same moment, every request's start time logged:
+
+```
+  0.03s  user.info    Thread-2
+  2.03s  user.info    Thread-1
+  4.03s  user.status  Thread-2
+  6.03s  user.status  Thread-1
+  ...
+ 40.03s  user.status  Thread-2
+ 42.03s  user.status  Thread-2
+ 44.03s  user.status  Thread-2
+Benq     done   8585
+jiangly  done  11147
+```
+
+23 requests, exactly two seconds apart, alternating between the threads until
+Benq's shorter history finished. No "Call limit exceeded".
+
+That log is also the next problem. Two visitors at once took 44 seconds between
+them; ten would leave the last one waiting minutes, and §9's launch is a blog
+post that sends people at once. The pace cannot go up. What the progress page
+says while a job waits for its turn can change, and so can whether a stored
+history is shown before re-syncing. In §12 for v0.7.
+
+67 checks: 14 schema, 22 database, 7 retry, 8 rate limit, 3 render, 13 web flow.
+
+### Next
+
+`collect.py`: fetch the problemset, then ~2000 users' histories into
+`dataset.db`, skipping users already complete. The first question is which 2000
+users, since that choice decides who the model learns from — §8's assumption 4
+about selection bias starts there.

@@ -34,12 +34,9 @@ import db
 # the bar for the heavy ones.
 PAGE_SIZE = 1000
 
-# Codeforces asks for no more than one request every two seconds. Real rate
-# limiting -- with retries and backoff, shared by every caller -- belongs in
-# api_client at v0.3 (spec section 4), where collect.py will hit this limit
-# for ~2000 users in a row. This is the minimum that keeps one sync polite,
-# and only a user long enough to need a second page ever waits for it.
-SECONDS_BETWEEN_PAGES = 2.0
+# No pause between pages here. api_client paces every request, from every
+# thread, one every two seconds -- so a second pause in this loop would stack
+# on top of that and slow every long history down for nothing.
 
 
 def fetch_history(handle, job_id, conn):
@@ -75,7 +72,6 @@ def fetch_history(handle, job_id, conn):
         # somebody else's API happens to sort. If that changes, this breaks
         # silently.
         from_index += PAGE_SIZE
-        time.sleep(SECONDS_BETWEEN_PAGES)
 
 
 def run_sync(handle, job_id):
