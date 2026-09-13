@@ -305,10 +305,13 @@ Explicitly rejected:
   *Reopened 2026-09-12, before v1.0 rather than at v1.5 — see §12.*
 - **FastAPI** — more concepts before anything runs.
 - **PostgreSQL locally** — nothing to gain yet.
-- **asyncio / concurrent requests** — the Codeforces API allows roughly one
-  request every two seconds, so the rate limit dominates and concurrency buys
-  nothing. 2000 users takes about an hour either way. Adding async would be
-  complexity with no benefit.
+- **asyncio / concurrent requests** — the Codeforces API allows at most one
+  request every two seconds (its documentation says exactly that, and an API
+  key does not raise it), so the rate limit dominates and concurrency buys
+  nothing. Collection time is set by how many requests are made, not by how
+  many are in flight: one per user is 67 minutes for 2000 users, and a separate
+  `user.info` for each user doubles it. Adding async would be complexity with no
+  benefit.
 - **A job queue library (Celery, RQ)** — needs a separate server process and a
   message broker. One worker thread and a database table does the same job at
   this scale.
@@ -669,23 +672,46 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   free instance nothing written survives a spin-down (§7). A paid disk keeps
   SQLite and costs money every month; a hosted database costs nothing on some
   free tiers but brings a second SQL dialect and a network hop. Counting visits
-  is not built at all yet either. Decide at v0.7, before anyone who is not the
-  author uses the site.
+  is not built at all yet either. The same choice decides whether a returning
+  visitor's stored history still exists to be shown or topped up — see the
+  queue question below. Decide at v0.7, before anyone who is not the author
+  uses the site.
 - **How does what the model learned reach the server?** The model is fitted on
   the author's machine from `dataset.db`, which never goes to the server. What
   the site needs is the result — per-problem and per-topic numbers, small
   compared to the histories — and it has to arrive in a way that survives a
   restart. Decide at v0.6, when there is a result to move.
-- **What does the tenth visitor in a queue see?** Every request from the web
-  app waits its turn, one every two seconds (`api_client.RateLimiter`), so
-  visitors syncing at the same time share that pace. Measured 2026-09-13: two
-  histories synced together alternated requests and took 44 seconds between
-  them. §9's launch is a blog post, which sends people at once, and ten visitors
-  with long histories would leave the last one waiting minutes while the
-  progress page says "0 submissions fetched". The pace cannot be raised; what
-  can change is what the page says while a job is waiting, and whether a
-  handle already stored is shown straight away. Decide at v0.7, with error
-  handling.
+- **What does the tenth visitor in a queue see?** The Codeforces API
+  documentation says requests are allowed "at most 1 time per two seconds"; an
+  API key only unlocks private data, not a higher limit. Every request from the
+  web app waits its turn (`api_client.RateLimiter`), so visitors syncing at the
+  same time share that pace. Measured 2026-09-13: two histories synced together
+  alternated requests and took 44 seconds between them. Those were two of the
+  longest histories on Codeforces, 8,585 and 11,147 submissions in 23 requests;
+  a visitor with fewer than 1000 submissions needs two requests. §9's launch is
+  a blog post, which sends people at once, and ten visitors with long histories
+  would leave the last one waiting minutes while the progress page says
+  "0 submissions fetched".
+  The pace cannot be raised, and spreading requests over several addresses to
+  get around it would break Codeforces' rules. A visitor waits for the requests
+  queued ahead of them, two seconds each, so what can change is how many there
+  are and in what order:
+  (a) **Order.** The limiter interleaves everybody's requests, so everybody
+  finishes near the end. Finishing one visitor's job before starting the next
+  leaves the last visitor's wait unchanged and cuts the average: ten visitors
+  with two requests each finish after 22 seconds on average instead of 31, and
+  the first after 4 instead of 22. Shortest job first minimises the average, but
+  a job's size is unknown until its first page arrives.
+  (b) **Fewer requests for a returning visitor.** Fetch only the newest page and
+  stop at a submission already stored: one request. This changes ADR 0004, which
+  fetches the whole history every time.
+  (c) **Show a stored history straight away**, and re-sync behind it.
+  (b) and (c) only work if the server still has the visitor's rows. On the free
+  instance a spin-down after 15 idle minutes wipes them (§7), so a visitor
+  returning the next day is almost always synced from scratch. Both depend on
+  the storage decision in "Where do visit records live?"; (a) does not.
+  Whichever is chosen, the progress page also has to say something true while a
+  job waits for its turn. Decide at v0.7, with error handling.
 - **One problem, two ids.** When a Div. 1 and a Div. 2 round run together,
   each shared problem gets an id in both contests: `1292A` and `1293C` are the
   same problem. `problemset.problems` lists only one copy, but a Div. 2

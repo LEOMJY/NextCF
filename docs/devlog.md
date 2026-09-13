@@ -2193,3 +2193,73 @@ history is shown before re-syncing. In §12 for v0.7.
 `dataset.db`, skipping users already complete. The first question is which 2000
 users, since that choice decides who the model learns from — §8's assumption 4
 about selection bias starts there.
+
+---
+
+## 2026-09-13 — The limit is exact; the number of requests is not
+
+### Checked against the source
+
+The spec said "roughly one request every two seconds", taken from memory. The
+Codeforces API documentation says "at most 1 time per two seconds", with
+"Call limit exceeded" past that. An API key unlocks private data such as hacks
+during a contest; nothing there says it raises the limit. The pace is fixed.
+
+### What a visitor actually waits for
+
+A visitor waits for the requests queued ahead of them, two seconds each. The
+pace cannot change, so the only things that can are how many requests there are
+and the order they go in.
+
+**How many.** The 44-second run in the previous entry used Benq and jiangly, two
+of the longest histories on the site: 23 requests. A history under 1000
+submissions is two requests, `user.info` and one page. Ten visitors like that
+arriving together is 20 requests, 40 seconds for the last one. Not minutes.
+
+**In what order.** `RateLimiter` hands out slots to whoever asks next, so ten
+jobs interleave and all of them finish near the end. Finishing one job before
+starting the next does not help the last visitor, but it helps everyone before
+them:
+
+```
+ten visitors, two requests each      first done   last done   average
+interleaved (now)                        22s          40s        31s
+one job at a time                         4s          40s        22s
+```
+
+This is the scheduling result from greedy problems: shortest job first
+minimises the average wait, provable by swapping any adjacent pair that is out
+of order. The catch here is that a job's size is unknown until its first page
+comes back.
+
+### Two ideas that the free server cancels
+
+Fetching only a returning visitor's newest page, or showing their stored
+history at once, both assume the server still has their rows. On the free
+instance a spin-down after 15 idle minutes wipes the database, so the next day
+there is nothing to top up or show. Both now hang on the v0.7 storage decision,
+which until today was only about counting visits. Recorded in §12.
+
+### A wrong estimate in §7
+
+§7 said 2000 users takes "about an hour". That is one request per user. If
+`collect.py` also asks `user.info` separately for every user, it is at least
+twice that. Two things to try before writing it: `user.info` accepts several
+handles in one call (three came back in one request), and `user.ratedList`
+returns every rated user with their rating in a single call, which may make
+per-user `user.info` unnecessary for choosing the 2000 at all. Its response is
+large, so the 10-second timeout may need to be longer for that one call.
+
+### Something that broke without code
+
+`docs/spec.md` and `docs/devlog.md` were found with the last commit's additions
+missing: both files had been replaced, in the same instant, by the copies from
+the commit before. Most likely an editor still holding the old text saved it
+over the new. Git had the right version and `git restore` brought it back,
+but a `git commit -a` would have deleted the rate-limiting entry for good.
+`git status` and a look at the diff before every commit is what catches this.
+
+### Next
+
+Unchanged: `collect.py`, starting with which 2000 users, and now also how few
+requests per user it can manage.
