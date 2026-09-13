@@ -15,9 +15,9 @@ owns what is NOT a property of the schema:
     what "synced" means         get_submissions(), and only there
     ADR 0004's one transaction  save_sync(), which is why it is one function
 
-Deliberately not here yet:
-    calling init_db() when the app starts    with sync.py, when there is a use
-    where the file lives in production       undecided -- spec section 7, due before v0.3
+Two startup functions, because they are safe for different programs:
+    init_db()               any program, any time
+    fail_orphaned_jobs()    the web app only, once, at startup -- ADR 0007
 
 Usage:
     .venv\\Scripts\\python.exe db.py
@@ -37,11 +37,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SCHEMA_PATH = HERE / "schema.sql"
 
-# Overridable from the environment, the way serve.py reads PORT, because where
-# this file lives in production is undecided (spec section 7): a free Render
-# instance wipes its disk on every redeploy, and the likely fix -- a mounted
-# persistent disk -- appears at a different path. When that is decided it
-# becomes a setting on the host, not a code change.
+# Overridable from the environment, the way serve.py reads PORT. On the free
+# Render instance this file is a cache that is allowed to vanish: the instance
+# loses its disk on every redeploy, restart and spin-down, and everything in
+# here can be fetched again (ADR 0007). The day something stored here cannot be
+# fetched again -- visit records, v0.7 -- it moves to storage that survives, at
+# a different path, and that becomes a setting on the host, not a code change.
 DB_PATH = Path(os.environ.get("NEXTCF_DB", HERE / "nextcf.db"))
 
 # The one timestamp shape, from spec section 6. Two functions produce
@@ -130,11 +131,10 @@ def connect(path=DB_PATH):
 def init_db(path=DB_PATH):
     """Create the database if it is missing, and make it ready for work.
 
-    Safe to call on every startup, and meant to be called exactly there:
-    before any request is served and before any worker thread starts.
-
-    Returns how many unfinished jobs it found and marked failed, so the
-    caller can log it.
+    Safe for ANY program to call, at any time, including while another
+    program is using the same file: it creates what is missing and changes
+    nothing that exists. Cleaning up abandoned jobs used to happen here too,
+    and was not safe to share -- it is fail_orphaned_jobs() now.
     """
     conn = connect(path)
     try:
@@ -154,24 +154,35 @@ def init_db(path=DB_PATH):
         # Every statement in schema.sql is IF NOT EXISTS: this creates what is
         # missing and leaves an existing database, and its data, alone.
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    finally:
+        conn.close()
 
-        # Orphaned jobs. This runs at startup, and there is only ever one
-        # process (spec section 7), so no job can genuinely be in progress
-        # right now. Anything unfinished belongs to a process that has died:
-        # a redeploy, a crash, the host cycling the instance mid-sync.
-        #
+
+def fail_orphaned_jobs(path=DB_PATH):
+    """Mark every unfinished job failed. ONLY the web app may call this.
+
+    Call it once, when the web app starts, after init_db() and before any
+    request is served. Returns how many jobs it marked, so the caller can log
+    it.
+
+    Why only the web app (ADR 0007): this is correct only when run by the
+    program that starts jobs, at the moment that program starts. The web app
+    is the only program that starts sync jobs, and when it starts, every sync
+    thread from its previous run died with the old process -- a redeploy, a
+    crash, the host restarting the instance. So anything unfinished is
+    genuinely abandoned.
+
+    Any OTHER program calling this has no such guarantee. If sync.py run by
+    hand, or collect.py, called it while the web app was mid-sync, it would
+    mark that live sync failed and tell the visitor the server had restarted
+    when it had not. That is exactly what init_db() used to do to them.
+    """
+    conn = connect(path)
+    try:
         # 'pending' as well as 'running' -- ADR 0004 originally named only
         # 'running'. A stale pending row is worse than untidy: the unique
         # index on jobs refuses a second unfinished job for the same handle,
         # so that user could never be synced again.
-        #
-        # CORRECT ONLY WHILE ONE PROGRAM USES THE DATABASE. Spec section 4
-        # plans three programs on this one file -- the web app, collect.py and
-        # scheduler.py -- and the web app never stops running. If either of
-        # the others ran this while the web app was mid-sync, it would mark
-        # that live sync failed. Before a second program touches the jobs
-        # table (collect.py, v0.3), decide which program may run this cleanup:
-        # spec section 12.
         with conn:
             cursor = conn.execute(
                 """
@@ -523,14 +534,20 @@ def save_sync(conn, handle, cf_rating, submissions):
 
 
 def main():
-    orphaned = init_db()
+    # init_db() only. This is a program run by hand, possibly while the web app
+    # is running on the same file, so it reports unfinished jobs and does not
+    # touch them -- see fail_orphaned_jobs().
+    init_db()
 
     conn = connect()
     try:
-        print(f"database:      {DB_PATH}")
-        print(f"journal mode:  {conn.execute('PRAGMA journal_mode').fetchone()[0]}")
-        print(f"foreign keys:  {'on' if conn.execute('PRAGMA foreign_keys').fetchone()[0] else 'OFF'}")
-        print(f"orphaned jobs: {orphaned} marked failed\n")
+        unfinished = conn.execute(
+            "SELECT count(*) FROM jobs WHERE state IN ('pending', 'running')"
+        ).fetchone()[0]
+        print(f"database:        {DB_PATH}")
+        print(f"journal mode:    {conn.execute('PRAGMA journal_mode').fetchone()[0]}")
+        print(f"foreign keys:    {'on' if conn.execute('PRAGMA foreign_keys').fetchone()[0] else 'OFF'}")
+        print(f"unfinished jobs: {unfinished} (left alone; only the web app cleans these up)\n")
 
         # sqlite_master is SQLite's own table describing every table and index
         # in the file -- the schema, readable as ordinary rows.

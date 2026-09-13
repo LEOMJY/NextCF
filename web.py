@@ -55,14 +55,15 @@ FRESH_FOR_SECONDS = 600
 # v0.4 replaces this table with five recommendations, so this is a stopgap.
 RESULTS_LIMIT = 100
 
-# Create the tables if they are missing, and fail any job left behind by a
+# Create the tables if they are missing, then fail any job left behind by a
 # process that died. Runs on import, which means once per server start, before
 # any request is served.
 #
-# Only the web app may do this. It marks EVERY unfinished job failed, so
-# another program calling it while a sync was running would destroy that
-# sync's record -- see spec section 12.
+# The second call belongs here and nowhere else. It marks EVERY unfinished job
+# failed, which is only true at the moment the program that starts syncs has
+# just started -- ADR 0007. Every other program calls init_db() alone.
 db.init_db()
+db.fail_orphaned_jobs()
 
 
 def get_db():

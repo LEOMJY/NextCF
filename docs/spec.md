@@ -52,8 +52,9 @@ tools, and if abandoned ones turn up, work out why they were abandoned.
 
 ## 4. How it works
 
-Three programs sharing one database. They are not the same process and they do
-not run at the same times.
+Two places, two database files, and the files never meet. Bulk collection and
+model fitting happen on the author's own machine, into `dataset.db`. The web app
+runs on the server, on `nextcf.db`. Both files use the same schema.
 
 ```
   api_client.py   Codeforces API — rate limiting, retries, backoff
@@ -67,14 +68,20 @@ not run at the same times.
 ```
 
 ```
-  BULK COLLECTION — run manually, takes about an hour
+  ON THE AUTHOR'S MACHINE — run by hand
   ─────────────────────────────────────────────────────
-    collect.py  →  api_client.py  →  database
+    collect.py  →  api_client.py  →  [ dataset.db ]
     fetch every problem, then ~2000 users' histories
     resumable: dies at minute 40, restarts at minute 40
+    progress is printed to the terminal; no jobs rows
+
+    model.py, evaluate.py  ←  [ dataset.db ]
   ─────────────────────────────────────────────────────
-                          |
-                    [  database  ]
+
+  ON THE SERVER
+  ─────────────────────────────────────────────────────
+                    [ nextcf.db ]
+         a cache of public data; may vanish at any time (§7)
                           |
   WEB APP
   ─────────────────────────────────────────────────────
@@ -94,7 +101,7 @@ not run at the same times.
     results page  ←── model.py predicts, picks 5 near target
   ─────────────────────────────────────────────────────
                           |
-  SCHEDULER — nightly
+  SCHEDULER — nightly, a thread inside the web app
   ─────────────────────────────────────────────────────
     scheduler.py → re-sync users seen in the last 30 days
   ─────────────────────────────────────────────────────
@@ -112,6 +119,19 @@ costs tens of seconds — see `docs/decisions/0004-sync-interruption.md`.
 Training data comes from ~2000 strangers' public histories, not from the
 visitor's own submissions. The visitor's history is used only to locate them
 inside a model that was learned from the crowd.
+
+The training data gets its own file for two reasons. The server loses its disk
+whenever the free instance restarts, which would take an hour of collection
+with it. And the web app re-syncs any handle it is asked about, so a training
+set sharing its file would change under the evaluation whenever somebody looked
+up a user in it — and §9's number has to come out the same every time it is
+computed. A separate file is a frozen snapshot, which is also the dataset §9
+proposes to publish. See `docs/decisions/0007-dataset-file-and-job-cleanup.md`.
+
+Only the web app may clean up abandoned jobs, because only it starts them. The
+scheduler is a thread inside the web app rather than a program of its own, for
+the same reason and because the host will not let a separate service read the
+web app's disk. Same ADR.
 
 The site never runs or judges anybody's code. Users solve problems on
 Codeforces; this reads the outcome from the public API.
@@ -209,7 +229,8 @@ submissions
 
 jobs
   id             integer
-  kind           text     — "sync" or "collect"
+  kind           text     — "sync"; the schema also permits "collect", which
+                            nothing writes since ADR 0007
   target         text     — which handle, or which batch
   state          text     — "pending", "running", "done", "failed"
   progress       integer  — submissions fetched so far; drives the progress page
@@ -269,7 +290,7 @@ to drive `/progress/<job>`.
 | Styling | Own CSS built on design tokens. No framework, no build step | Promoted from "classless framework" — see §7.1. A framework gives a floor but also a recognisable look, and "does not read as templated" is now an explicit goal. Three pages of hand-written CSS is roughly 200 lines and is fully ours |
 | Charts | Server-rendered SVG from Jinja | The topic breakdown is the one thing a template cannot give us. SVG generated from the data needs no JavaScript library, no CDN, and no build step, and it renders in the launch screenshot |
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
-| Scheduling | A timed loop, or the host's cron if it has one | Nightly re-sync |
+| Scheduling | A timed loop in a thread inside the web app | Nightly re-sync. Not the host's cron: a cron service on Render cannot read another service's disk, and a second program would break the job-cleanup rule — ADR 0007 |
 | Web server | Waitress | Flask's built-in server is development-only. Pure Python, so the deployed setup also runs on Windows and can be tested before pushing |
 | Hosting | Render | Connects to GitHub, redeploys on push. Free tier, at the cost of sleeping when idle — see `docs/decisions/0003-hosting.md` |
 
@@ -292,15 +313,30 @@ Explicitly rejected:
   message broker. One worker thread and a database table does the same job at
   this scale.
 
-Known risk: most hosting platforms wipe the filesystem on redeploy, which
-would delete a SQLite file. Either a paid persistent disk, or PostgreSQL for
-the deployed copy only.
+**The server's database does not survive, and that is accepted until v0.7.**
+Render's free instance loses every file it wrote whenever it redeploys,
+restarts, or spins down after 15 minutes without traffic, and free instances
+cannot attach a persistent disk (Render's docs, checked 2026-09-13). An earlier
+version of this paragraph named only redeploys; spin-down means the file is
+really wiped several times a day.
 
-Moved from v0.1 to **v0.2**, when `db.py` first exists. v0.1 stores nothing, so
-there is no data to lose and the question cannot be answered by testing yet.
-Deploying an app with no database first is deliberate: it separates "does the
-deployment pipeline work" from "does the database survive a redeploy", and
-debugging those together is much harder than debugging them in sequence.
+What that costs depends on what is in the file:
+
+| Data | Comes from | If it is wiped |
+|---|---|---|
+| A visitor's submissions | Codeforces, in seconds | One re-sync. Accepted |
+| The ~2000-user training set | An hour of API calls | Never on the server — `dataset.db` on the author's machine |
+| Who visited, and when | Exists only on the server | §9's "20 have returned" cannot be measured |
+
+So `nextcf.db` on the server is a cache that is allowed to vanish, and the
+training data never goes there. The third row needs storage that survives — a
+paid disk, or a hosted database — and it is due at v0.7, before any stranger
+visits, because a visit that was not recorded cannot be recovered later. See
+§12 and `docs/decisions/0007-dataset-file-and-job-cleanup.md`.
+
+History: moved from v0.1 to v0.2 because v0.1 stored nothing, then carried past
+v0.2 unanswered although the devlog twice said it was due before v0.3. Answered
+at v0.3.
 
 Known risk: the local install is Python 3.14, and the `py` launcher currently
 defaults to the free-threaded build (`3.14t`) rather than the standard one.
@@ -501,11 +537,11 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 |---|---|---|
 | v0.1 | Enter a handle, see your submissions. Deployed. | end Aug |
 | v0.2 | Background job with a progress page; caching. Design tokens and base stylesheet — see §7.1 | early Sep |
-| v0.3 | Bulk collection of ~2000 users — rate limited, resumable | mid Sep |
+| v0.3 | Bulk collection of ~2000 users into `dataset.db`, on the author's machine — rate limited, resumable | mid Sep |
 | v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down | early Oct |
 | v0.6 | First real model (logistic / Rasch), scored against the baseline; `/how` | late Oct |
-| v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy` | early Nov |
+| v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts | early Nov |
 | v0.8 | Design polish pass and unhandled states — see §7.1 | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
@@ -620,7 +656,17 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   back to the rating-only baseline. Decide at v0.6.
 - **What counts as "solved"?** Solved on the first try, or after five attempts
   and an editorial? The API does not distinguish. Affects everything.
-- **SQLite persistence in production.** See §7.
+- **Where do visit records live?** §9 needs to know who came back, and on the
+  free instance nothing written survives a spin-down (§7). A paid disk keeps
+  SQLite and costs money every month; a hosted database costs nothing on some
+  free tiers but brings a second SQL dialect and a network hop. Counting visits
+  is not built at all yet either. Decide at v0.7, before anyone who is not the
+  author uses the site.
+- **How does what the model learned reach the server?** The model is fitted on
+  the author's machine from `dataset.db`, which never goes to the server. What
+  the site needs is the result — per-problem and per-topic numbers, small
+  compared to the histories — and it has to arrive in a way that survives a
+  restart. Decide at v0.6, when there is a result to move.
 - **One problem, two ids.** When a Div. 1 and a Div. 2 round run together,
   each shared problem gets an id in both contests: `1292A` and `1293C` are the
   same problem. `problemset.problems` lists only one copy, but a Div. 2
@@ -637,14 +683,6 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   problem is not always in an adjacent contest (`1230D` appears in the
   problemset only as `1210B`). Decide at v0.4, before the first recommendation
   ships.
-- **Which program may clean up orphaned jobs?** At startup `init_db()` marks
-  every unfinished job failed, on the grounds that no job can be running when
-  the only process has just started. That holds at v0.2, when the web app is
-  the only program. §4 plans three programs on one database and says they "do
-  not run at the same times", which cannot hold literally, because the web app
-  never stops. If `collect.py` or `scheduler.py` ran the same cleanup while the
-  web app was mid-sync, it would fail that live sync. Decide at v0.3, before
-  `collect.py` first touches the `jobs` table.
 - **React for the front end?** §7 rejected it. Reopened 2026-09-12: a
   restrained use of React, with components and nothing showy, may be worth
   it for a site that is meant to have real design. What React changes is
@@ -676,3 +714,18 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   every later reader believes it. Making completeness explicit is the fix, and
   once it is explicit, partial data is strictly better than none. See
   `docs/decisions/0004-sync-interruption.md`.
+- **Which program may clean up orphaned jobs?** *(asked 09-11, answered 09-13,
+  at v0.3 as scheduled.)* Only the web app. The cleanup is correct only when run
+  by the program that starts jobs, at the moment it starts, and the web app is
+  the only program that starts syncs. It moved out of `init_db()`, which every
+  program calls, into `fail_orphaned_jobs()`, which only `web.py` calls. The
+  problem was already reachable, not hypothetical: `sync.py` run by hand called
+  `init_db()` and failed any sync the web app had running. `collect.py` writes
+  no job rows, and the scheduler runs inside the web app. The alternative — a
+  heartbeat that any program could check — was rejected as machinery for a
+  problem with one program. See
+  `docs/decisions/0007-dataset-file-and-job-cleanup.md`.
+- **SQLite persistence in production.** *(a known risk since 08-11, due at v0.2,
+  answered 09-13.)* The server's database is a cache that is allowed to vanish;
+  the training set lives in `dataset.db` on the author's machine; data that
+  exists only on the server waits for v0.7, above. Details in §7.

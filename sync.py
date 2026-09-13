@@ -159,8 +159,8 @@ def start_sync(handle):
 
     # daemon=True: this thread does not keep the process alive at shutdown.
     # Killing a sync mid-flight costs nothing, because it has written nothing
-    # (ADR 0004), and init_db() marks the abandoned job failed the next time
-    # the app starts.
+    # (ADR 0004), and fail_orphaned_jobs() marks the abandoned job failed the
+    # next time the web app starts.
     threading.Thread(target=run_sync, args=(handle, job_id), daemon=True).start()
     return job_id
 
@@ -168,6 +168,8 @@ def start_sync(handle):
 def main():
     handle = sys.argv[1] if len(sys.argv) > 1 else "tourist"
 
+    # init_db() only, never fail_orphaned_jobs(): this may be run by hand while
+    # the web app is mid-sync on the same file. ADR 0007.
     db.init_db()
     job_id = start_sync(handle)
     print(f"job {job_id}: syncing {handle}")

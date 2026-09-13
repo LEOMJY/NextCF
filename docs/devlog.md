@@ -1939,3 +1939,94 @@ because the topic chart is the first thing where the choice changes the code.
 What I learned: "accepted" in an ADR reads as permanent to anyone who opens it
 later, including me. If a decision is only for now, the status line has to say
 so.
+
+---
+
+## 2026-09-13 — Two v0.3 questions, and one answer for both
+
+§12 had one question marked for v0.3: which program may clean up orphaned jobs.
+A second one was overdue without being marked. §7's risk that the host wipes the
+database was moved from v0.1 to v0.2, carried past v0.2 unanswered, and this log
+said twice that it had to be settled before v0.3. ADR 0007 has both.
+
+### The disk is wiped more often than §7 said
+
+Render's documentation, read properly this time: a free instance loses the files
+it wrote on a redeploy, on any restart, **and whenever it spins down after 15
+minutes without traffic**. §7 only named redeploys. In practice the server's
+database disappears several times a day, and a free instance cannot attach a
+disk that survives.
+
+Whether that matters depends on what is in the file:
+
+| Data | Comes from | If it is wiped |
+|---|---|---|
+| A visitor's submissions | Codeforces, in seconds | One re-sync |
+| The ~2000-user training set | An hour of API calls | An hour |
+| Who visited, and when | Exists only on the server | §9's "20 returned" is unmeasurable |
+
+So the training set lives in its own file, `dataset.db`, on my machine, and never
+goes to the server. The server's `nextcf.db` is a cache that is allowed to
+vanish.
+
+A separate file rather than the local `nextcf.db` for a second reason: the web
+app re-syncs any handle older than ten minutes. Look up somebody in the training
+set and their rows change, and `evaluate.py` run twice gives two numbers. The §9
+number has to come out the same every time.
+
+Visit records are the row that has nowhere to go yet. Nothing is worth paying to
+keep before strangers visit, so they are due at v0.7. Looking for where they
+would be built turned up a gap: **no milestone counted visits at all**, though
+§9 is measured on them. That is in v0.7's row now.
+
+### The cleanup bug was already reachable
+
+`init_db()` did two things: create missing tables, and mark every unfinished job
+failed. The second is right for the web app, because when it starts, every sync
+thread from its last run died with the old process. §12 asked what happens when
+another program calls it.
+
+It did not need `collect.py` to happen. `sync.py`'s `main()` already called
+`init_db()`. Start the site, type a handle, run `sync.py` in a terminal during
+the sync, and the visitor is told the server restarted while their job carries
+on. No data is damaged — ADR 0004 guarantees that — but the page shows a failure
+that did not happen, and a retry starts a second sync of the same handle.
+
+The fix is a split. `init_db()` only creates what is missing, and any program
+may call it. `fail_orphaned_jobs()` does the cleanup, and only `web.py` calls
+it. `collect.py` will write no job rows at all: it runs in a terminal, prints
+its progress there, and resumes by skipping users whose `last_synced` is set.
+
+A heartbeat was the alternative: every running job writes "still alive", and
+any program can fail a job that goes quiet. It works for any number of programs,
+but the limit has to be longer than the longest silence, and one API call can be
+silent for 36 seconds with the current retries. That would make a timeout in
+`api_client.py` quietly decide when `db.py` kills jobs. Too much machinery for
+one program.
+
+### Checked by being two programs
+
+The check does not call a function and pretend it is a second program. It
+starts real, separate Python processes against a file holding a running sync.
+`import db; db.init_db()` has to leave the job running; `import web` has to mark
+the same job failed. The first one failed before the change, with the live sync
+turned into `'failed'` — the bug reproduced, then fixed.
+
+59 checks: 14 schema, 22 database, 7 retry, 3 render, 13 web flow.
+
+### What I learned
+
+A question put off without a date does not wait, it drifts. The persistence
+risk moved milestone twice and was then simply behind. The two new questions in
+§12 each have a milestone attached.
+
+And a function named for one job should do one job. Anybody reading
+`init_db()` at a call site would assume it only creates tables, which is exactly
+how `sync.py` came to call it.
+
+### Next
+
+Rate limiting in `api_client`, shared by every caller inside one program. The
+first question there is whether two programs on one machine — `collect.py` and
+the local site — also need to share it, since Codeforces sees one address
+either way. Then `collect.py`.

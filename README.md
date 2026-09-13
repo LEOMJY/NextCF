@@ -10,12 +10,12 @@ be just hard enough — roughly a 70% chance you solve them.
 
 ---
 
-## Status: v0.2 in progress
+## Status: v0.3 in progress
 
 **Nothing on this page is finished yet.** What exists today is a three-page web
 app that reads a Codeforces history into a database and lists it back. There is
-no styling and no model — so it recommends nothing, which is the entire point of
-the project.
+no model yet — so it recommends nothing, which is the entire point of the
+project.
 
 | | |
 |---|---|
@@ -123,8 +123,9 @@ frontend framework. Reasoning, and the list of things explicitly rejected, is in
 
 - This site never runs, judges or sandboxes anybody's code. It reads outcomes
   from the public Codeforces API.
-- Training data comes from strangers' public submission histories. A visitor's
-  own history is used only to locate them inside a model learned from the crowd.
+- Training data comes from strangers' public submission histories, collected
+  into a separate file offline and never stored on the server. A visitor's own
+  history is used only to locate them inside a model learned from the crowd.
 - There are no accounts and no passwords. A handle is the only identity.
 
 ## Author
