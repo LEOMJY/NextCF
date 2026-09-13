@@ -2030,3 +2030,56 @@ Rate limiting in `api_client`, shared by every caller inside one program. The
 first question there is whether two programs on one machine — `collect.py` and
 the local site — also need to share it, since Codeforces sees one address
 either way. Then `collect.py`.
+
+---
+
+## 2026-09-13 — A second round of design directions
+
+Not v0.8 work yet, and nothing is decided. Written down because it changes what
+v0.8 starts from.
+
+### Why the first round felt merely usable
+
+Checked against a list of the defaults generated sites keep landing on, the
+first round did badly. All four typefaces are on that list: Instrument Serif,
+IBM Plex Mono, Space Grotesk, Inter. Two of the three directions are among the
+most common generated looks: near-black with one neon accent (terminal) and
+off-white paper with a serif headline and a dark red accent (editorial). The
+live landing page also puts a small label above the headline, which a strong
+headline does not need. None of these are wrong on their own. Together they
+explain why the result looked like a template, even though it was not built
+from one.
+
+### Four more, from the audience's own world
+
+This time the starting point was things a Codeforces user already knows by
+heart, not what a technical site usually looks like: a problem statement with
+the handle input in the Input box, the rank colours, a calibration plot, and
+ICPC balloons. The page is `.claude/design-directions-2.html`. The five problems
+on it are real; the 1520-rated history and every probability are illustrative.
+
+My ranking: rank colours first, balloons second, statement and calibration
+plot flat.
+
+### The rank colours feel stiff, and why
+
+They are the real handle colours: `#808080`, `#008000`, `#03a89e`, `#0000ff`,
+`#aa00aa`, `#ff8c00`, `#ff0000`. Two properties make
+them harsh as large fields. They are fully saturated, and their lightness
+varies wildly: pure blue is far darker than orange at the same saturation, so
+a stack of them reads as uneven blocks. They were chosen to colour a handle in
+a line of text, not to fill half a screen. Keeping the hues recognisable while
+evening out the lightness is a design task, not a reason to drop the idea.
+
+### Balloons: 2D does not explain itself
+
+A flat cartoon balloon asks the visitor to work out what it stands for. The
+idea instead: a 3D balloon per topic in the centre of the page; click one, it
+rises, the camera follows, and you arrive at that topic's recommendations. The
+material has to be right: light, reflection and the feel of latex or foil.
+
+Three problems before it can be built, recorded in §12: the landing page does
+not know a visitor's topics until a handle is synced; per-topic recommendations
+are not a v1.0 page (added to §11); and a camera flight on every visit charges
+the returning visitor that §4.1 exists to protect. A realistic balloon also does
+not explain what it means by itself. Labels do that.

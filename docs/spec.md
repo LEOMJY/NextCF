@@ -602,6 +602,15 @@ Known risk: art, animation and game feel have no natural stopping point, and
 this is more enjoyable to build than debugging a likelihood function. It needs
 a fixed slot, not an open-ended one.
 
+### Per-topic recommendations
+
+Pick a topic, get problems in that topic near the target probability. The
+model already predicts per problem, so this is a filter over the same numbers.
+The cost is the page, and the question of what happens when a topic has too
+few unsolved problems near the target. Proposed 2026-09-13 as where the 3D
+balloon interaction (§12) would lead. Not v1.0, where the results page shows
+five problems overall.
+
 ### Knowledge tracing
 
 v1.0 models a user as a snapshot: "weak at DP." Knowledge tracing models the
@@ -702,6 +711,25 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   not necessarily the last one. Decide at v0.8, inside the design budget in
   §7.1. If (b) or (c) above is chosen, decide the stack first, because it
   changes what the design pass can do cheaply.
+  A second round on 2026-09-13 built four landing directions from things the
+  audience already knows (a problem statement, the rank colours, a calibration
+  plot, ICPC balloons). Preferred: rank colours, then balloons. The rank colours
+  read as stiff when used as large fields. They are the original saturated
+  handle colours, with very uneven lightness. Retuning them is part of the
+  decision.
+- **3D balloons as the landing page's visual idea?** Proposed 2026-09-13: one 3D
+  balloon per topic in the centre; clicking one makes it rise with the camera
+  following, into that topic's recommendations. Material quality (light,
+  reflection, latex or foil) is part of the requirement. To settle first:
+  (1) the landing page does not know a visitor's topics until a handle is
+  synced, so balloons before the input can only be generic topics;
+  (2) per-topic recommendations are not a v1.0 page (§4.1, §11);
+  (3) a camera flight on every visit costs the returning visitor §4.1
+  protects, and the tool pages are meant to stay calm (§7.1).
+  Three ways to build it, at very different cost: real-time 3D in the browser,
+  3D rendered offline and played back as video or frames, or a no-code 3D tool
+  with its own runtime. Decide at v0.8, after a prototype with a fixed time
+  limit shows whether the material quality is reachable inside the budget.
 
 ### Answered
 
