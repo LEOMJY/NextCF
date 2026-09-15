@@ -865,7 +865,16 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   problemset holds seven different problems called "Elections", and a reused
   problem is not always in an adjacent contest (`1230D` appears in the
   problemset only as `1210B`). Decide at v0.4, before the first recommendation
-  ships.
+  ships. Measured in the collected dataset (2026-09-15): 1,807 non-gym problem
+  ids that the problemset does not list — an upper bound on the ids needing a
+  mapping, since some belong to contests the problemset leaves out entirely.
+- **What happens to gym submissions?** 9.1% of the dataset's submissions
+  (353,922) are to gym problems — contest ids from 100000 up, 16,874 problems,
+  attempted by 2,142 of the 4,000 users. Gym problems have no Codeforces
+  rating and are never in the problemset, so the rating-only baseline cannot
+  score them and NextCF cannot recommend them. They may still say something
+  about a user's skill. Excluding them from the §9 evaluation is the simple
+  answer and has to be stated, not done silently. Decide at v0.5.
 - **How does the React bundle get built, and tested?** ADR 0008 adds a Node
   build step. Either the host runs it on every deploy — Render would need
   Node in the build of a Python service — or it runs on the author's machine

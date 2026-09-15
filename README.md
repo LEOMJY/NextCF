@@ -10,7 +10,7 @@ be just hard enough — roughly a 70% chance you solve them.
 
 ---
 
-## Status: v0.3 in progress
+## Status: v0.3 done, v0.4 next
 
 **Nothing on this page is finished yet.** What exists today is a three-page web
 app that reads a Codeforces history into a database and lists it back. There is
@@ -20,7 +20,8 @@ project.
 | | |
 |---|---|
 | Works now | Enter a handle; the history is fetched in the background behind a progress page, stored, listed, and styled |
-| Now (v0.3) | Collecting the dataset: 4000 users stratified by rating, rate limited and resumable |
+| Collected (v0.3) | A dataset of 4000 users stratified by rating: 3.9 million submissions and every rating change |
+| Next (v0.4) | Per-topic solve counts, a rating-only baseline recommender, and the topic-breakdown chart |
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a

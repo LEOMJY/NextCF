@@ -118,7 +118,8 @@ to lower the number or to exceed the smallest stratum's population, and
 **What it costs.**
 - About four and a half hours of collection instead of two and a quarter.
 - `dataset.db` roughly doubles, to an estimated 1.3 GB from the first 56
-  users' average.
+  users' average. *Measured when finished: 680 MB* — the estimate was taken
+  while a large write-ahead log sat beside the file.
 - 1800–1999 now takes 800 of its 869 candidates. The stratum is close to fully
   enumerated rather than sampled, which is statistically fine; it also leaves
   only 69 replacements if handles turn out unavailable.

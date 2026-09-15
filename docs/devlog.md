@@ -2673,3 +2673,105 @@ does not stop a closed lid from sleeping.
 
 The first 56 users averaged 783 submissions, which puts the finished
 `submissions` table near three million rows and `dataset.db` near 1.3 GB.
+
+---
+
+## 2026-09-15 — The dataset is collected, and v0.3 is finished
+
+### The run
+
+Started 00:56, stopped once on purpose at 211 users to raise the target to 800
+per stratum, restarted at about 01:23, finished at 05:24. 3,789 users in about
+four hours: 3.8 seconds each, close to the 4 measured on the trial.
+
+No handle was unavailable. No request was retried. Nothing stopped the run that
+was not meant to. The screen was off from 01:36 and the laptop stayed awake.
+
+### What is in `dataset.db`
+
+| | |
+|---|---|
+| users | 4,000 — 800 in each stratum, every one complete |
+| submissions | 3,875,775 |
+| rating changes | 160,633 |
+| problems | 30,082, of which 11,401 are the problemset |
+| file size | 680 MB |
+
+Checked: `integrity_check` ok, no foreign-key violations, no user without
+`last_synced`, no user outside the sample, no user with zero submissions or
+zero rating changes.
+
+One cross-check came free. Every user's rating was recorded twice from
+different endpoints — `rating_when_drawn` from the rated list, `cf_rating` from
+the last entry of `user.rating` — and all 4,000 agree.
+
+| stratum | median submissions | mean | largest |
+|---|---|---|---|
+| 1000–1199 | 211 | 368 | 5,690 |
+| 1200–1399 | 368 | 651 | 7,114 |
+| 1400–1599 | 528 | 886 | 10,725 |
+| 1600–1799 | 808 | 1,333 | 13,269 |
+| 1800–1999 | 990 | 1,607 | 13,845 |
+
+### Two estimates that were wrong
+
+**Size.** Estimated at 1.3 GB from the first 56 users; 680 MB at the end. The
+estimate divided a file size that included a large write-ahead log, and the
+problem and candidate tables that are the same size whether 56 or 4,000 users
+are collected.
+
+**Submissions per user.** Estimated at 783 from the same 56; 969 over all 4,000.
+The medians above are far below the means because a few histories are enormous,
+and a mean taken from 56 people in a distribution like that is mostly luck.
+
+Neither mattered — the disk had room either way — but both were stated with more
+confidence than 56 users can carry.
+
+### What the data already says
+
+- **Gym is 9.1% of submissions**: 353,922 to 16,874 gym problems, from 2,142 of
+  the 4,000 users. Gym problems have no rating and are never recommended. New
+  question in §12, for v0.5.
+- **1,807 non-gym problem ids are not in the problemset.** The upper bound on
+  §12's "one problem, two ids", due at v0.4.
+- **4.6% of submissions predate their author's first rated contest**, so there
+  is no "rating at the time" for them. For v0.5.
+- **61% of submissions are practice**, 26% in contest, 11% virtual, 2% out of
+  competition.
+
+### Is 4,000 enough?
+
+Asked last night about going to 6,000. The data answers part of it. For each
+rated problem, how many of the 4,000 attempted it:
+
+| problem rating | problems | median attempting | fewer than 10 | 30 or more |
+|---|---|---|---|---|
+| 800–1100 | 2,405 | 165 | 2% | 91% |
+| 1200–1500 | 2,122 | 82 | 7% | 76% |
+| 1600–1900 | 2,599 | 47 | 15% | 62% |
+| 2000–2400 | 2,777 | 26 | 27% | 47% |
+
+The thin end is the hard problems. But who attempts those is the other half of
+the answer: 85% of attempts on problems rated 2000–2400 come from the 1600 and
+1800 strata, and 1800–1999 is already 800 of its 869 candidates. More users from
+the lower strata — which is where 6,000 would have to find most of them — would
+add little where the data is thinnest. If v0.6 shows hard problems are estimated
+badly, the lever is more users rated 1600–1799, not more users overall.
+
+### v0.3 is done
+
+| | |
+|---|---|
+| Rate limiting shared across threads | done |
+| `collect.py`, resumable | done, and resumed for real |
+| The dataset | 4,000 users, stratified |
+| §12 questions due at v0.3 | answered |
+
+78 checks. The dataset is on this machine only, as ADR 0007 intends, and is not
+backed up; losing it costs one night.
+
+### Next
+
+v0.4: per-topic solve counts, the rating-only baseline, the topic-breakdown
+chart — and before any React is set up, the three things written down for that
+moment.

@@ -133,9 +133,9 @@ CREATE TABLE IF NOT EXISTS problem_tags (
 CREATE INDEX IF NOT EXISTS idx_problem_tags_tag ON problem_tags(tag);
 
 
--- Every submission fetched. The largest table by far: ~4000 users averaging
--- about 780 submissions each (measured on the first 56), so roughly three
--- million rows after v0.3.
+-- Every submission fetched. The largest table by far: 3,875,775 rows in the
+-- v0.3 dataset, from 4000 users -- a mean of 969 each and a median far lower,
+-- because a few histories run past 13,000.
 CREATE TABLE IF NOT EXISTS submissions (
     -- Codeforces' own submission id, not one generated here. That is what
     -- makes the sync repeatable: fetching the same submission twice produces
