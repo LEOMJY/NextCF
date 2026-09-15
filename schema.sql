@@ -1,11 +1,11 @@
 -- NextCF database schema.
 --
--- Eight tables and one view, per spec section 6. Run once at startup via
+-- Nine tables and one view, per spec section 6. Run once at startup via
 -- db.py's init_db(); every statement is IF NOT EXISTS, so running it again is
 -- harmless -- and also means a CHANGE to an existing table here does nothing
 -- to a database that already has it.
 --
--- Both database files use this one schema (ADR 0007). The last three tables
+-- Both database files use this one schema (ADR 0007). The last four tables
 -- and the view are filled only in dataset.db, by collect.py; on the server
 -- they exist and stay empty.
 --
@@ -133,8 +133,9 @@ CREATE TABLE IF NOT EXISTS problem_tags (
 CREATE INDEX IF NOT EXISTS idx_problem_tags_tag ON problem_tags(tag);
 
 
--- Every submission fetched. The largest table by far: ~2000 users at up to a
--- few thousand submissions each, so roughly two million rows after v0.3.
+-- Every submission fetched. The largest table by far: ~4000 users averaging
+-- about 780 submissions each (measured on the first 56), so roughly three
+-- million rows after v0.3.
 CREATE TABLE IF NOT EXISTS submissions (
     -- Codeforces' own submission id, not one generated here. That is what
     -- makes the sync repeatable: fetching the same submission twice produces
@@ -240,7 +241,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_active_per_target
 -- ============================================================ the dataset
 --
 -- Everything below is written by collect.py into dataset.db (ADR 0009).
--- Changing it after the two-hour collection means collecting again, so these
+-- Changing it after the collection means collecting again, so these
 -- columns were chosen before the first real run, not after.
 
 
@@ -304,7 +305,7 @@ CREATE TABLE IF NOT EXISTS samples (
 
     -- The strata: rating_min to rating_max inclusive, in steps of
     -- stratum_width, per_stratum users wanted from each. 1000, 1999, 200 and
-    -- 400 in ADR 0009.
+    -- 800 in ADR 0009 (drawn at 400; see sample_size_changes).
     rating_min         INTEGER NOT NULL,
     rating_max         INTEGER NOT NULL,
     stratum_width      INTEGER NOT NULL,
@@ -352,6 +353,22 @@ CREATE TABLE IF NOT EXISTS sample_candidates (
     PRIMARY KEY (sample_id, stratum, position),
     UNIQUE (sample_id, handle),
     CHECK (position >= 0)
+) STRICT;
+
+
+-- Every time a sample's per_stratum was raised after the draw -- ADR 0009 was
+-- drawn at 400 and raised to 800 the same night. samples.per_stratum holds the
+-- current number; this is how it got there, so the dataset's size is never a
+-- number nobody can account for.
+--
+-- Only upwards, enforced here as well as in collect.py. Lowering it would
+-- leave users collected who are no longer part of the sample.
+CREATE TABLE IF NOT EXISTS sample_size_changes (
+    sample_id        INTEGER NOT NULL REFERENCES samples(id),
+    changed_at       TEXT    NOT NULL,
+    old_per_stratum  INTEGER NOT NULL,
+    new_per_stratum  INTEGER NOT NULL,
+    CHECK (new_per_stratum > old_per_stratum)
 ) STRICT;
 
 

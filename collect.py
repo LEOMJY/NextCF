@@ -1,9 +1,9 @@
-"""Bulk collection of the dataset: 2000 Codeforces users, stratified by rating.
+"""Bulk collection of the dataset: 4000 Codeforces users, stratified by rating.
 
 Runs on the author's machine, into dataset.db, and never on the server
 (ADR 0007). Who is drawn, and why this way: ADR 0009.
 
-Three commands, in the order they are used:
+Four commands, in the order they are used:
 
     .venv\\Scripts\\python.exe collect.py draw [--seed N] [--per-stratum N]
         Fetch the list of active rated users, shuffle each rating stratum with
@@ -15,13 +15,17 @@ Three commands, in the order they are used:
         changes -- until every stratum has per_stratum of them. Stops cleanly
         on a network failure or Ctrl+C; run it again to carry on.
 
+    .venv\\Scripts\\python.exe collect.py extend --per-stratum N
+        Raise how many users each stratum wants. Nobody is redrawn or
+        refetched; the next `run` takes the next ones in line.
+
     .venv\\Scripts\\python.exe collect.py status
         How far it has got, per stratum.
 
 Every request waits for a two-second turn (api_client), and each user takes
-two requests, so a full run is a little over two hours. Do not run it while
-using the local site: each program keeps its own pace, and together they go
-twice as fast as Codeforces allows.
+two requests, so a full run of 4000 users is about four and a half hours. Do
+not run it while using the local site: each program keeps its own pace, and
+together they go twice as fast as Codeforces allows.
 """
 
 import argparse
@@ -43,14 +47,15 @@ HERE = Path(__file__).resolve().parent
 # throwaway file without touching the real dataset.
 DATASET_PATH = Path(os.environ.get("NEXTCF_DATASET", HERE / "dataset.db"))
 
-# ADR 0009: ratings 1000-1999 in five strata of 200, 400 users from each.
+# ADR 0009: ratings 1000-1999 in five strata of 200, 800 users from each --
+# drawn at 400 on 2026-09-15 and raised to 800 the same night with `extend`.
 # These are the defaults for a new draw. Once drawn, the numbers stored in the
 # samples table are what run() obeys, so changing these later cannot change a
 # dataset already drawn.
 RATING_MIN = 1000
 RATING_MAX = 1999
 STRATUM_WIDTH = 200
-PER_STRATUM = 400
+PER_STRATUM = 800
 STRATA = list(range(RATING_MIN, RATING_MAX + 1, STRATUM_WIDTH))
 
 SOURCE = "user.ratedList activeOnly=true includeRetired=false"
@@ -58,6 +63,10 @@ SOURCE = "user.ratedList activeOnly=true includeRetired=false"
 
 class SampleExists(Exception):
     """Raised by draw() when this dataset already has a sample."""
+
+
+class ResizeRefused(Exception):
+    """Raised by extend() for a per_stratum it will not set."""
 
 
 def stratum_of(rating):
@@ -126,6 +135,45 @@ def draw(path, rated_users, seed, per_stratum=PER_STRATUM, fetched_at=None):
         for stratum in STRATA:
             print(f"  {stratum}-{stratum + STRATUM_WIDTH - 1}  {len(pools[stratum]):>6} candidates")
         return sample_id
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------- extend
+
+def extend(path, per_stratum):
+    """Raise how many users each stratum wants. The next `run` collects the rest.
+
+    Nothing is redrawn and nobody is refetched: every stratum's full shuffled
+    order was stored by draw(), so the extra users are simply the next ones in
+    line -- the same users a larger draw with the same seed would have taken.
+
+    Refuses (ResizeRefused):
+      - a number that is not larger. Lowering would leave users collected who
+        are no longer part of the sample.
+      - a number above the smallest stratum's population. That stratum would
+        run out, and the strata would stop being equal, which is the point of
+        stratifying (ADR 0009).
+    """
+    db.init_db(path)
+    conn = db.connect(path)
+    try:
+        sample = db.get_sample(conn)
+        if sample is None:
+            raise ResizeRefused(f"Nothing drawn yet in {path}.")
+        if per_stratum <= sample["per_stratum"]:
+            raise ResizeRefused(
+                f"per_stratum is already {sample['per_stratum']}; it can only be raised."
+            )
+        smallest = min(row["population"] for row in db.get_strata(conn, sample["id"]))
+        if per_stratum > smallest:
+            raise ResizeRefused(
+                f"The smallest stratum has only {smallest} candidates, so {per_stratum} "
+                "per stratum would leave the strata unequal."
+            )
+        old = db.raise_per_stratum(conn, sample["id"], per_stratum)
+        print(f"sample {sample['id']}: per_stratum {old} -> {per_stratum}. Run `collect.py run` to collect the rest.")
+        return old
     finally:
         conn.close()
 
@@ -323,10 +371,13 @@ def main(argv=None):
     # No fixed default seed: a random one is chosen, printed and stored, which
     # is what repeating the draw needs. Pass --seed to choose it yourself.
     draw_cmd.add_argument("--seed", type=int, default=None)
-    # 400 is ADR 0009's number. A smaller one is for a trial run into a
+    # 800 is ADR 0009's number. A smaller one is for a trial run into a
     # throwaway file (set NEXTCF_DATASET), and is stored with the sample either
     # way, so a trial can never be mistaken for the real thing.
     draw_cmd.add_argument("--per-stratum", type=int, default=PER_STRATUM)
+
+    extend_cmd = commands.add_parser("extend", help="raise per_stratum; run then collects the rest")
+    extend_cmd.add_argument("--per-stratum", type=int, required=True)
 
     commands.add_parser("run", help="collect until every stratum is full")
     commands.add_parser("status", help="show progress per stratum")
@@ -353,10 +404,13 @@ def main(argv=None):
             users = api_client.fetch_rated_list()
             draw(DATASET_PATH, users, seed, args.per_stratum)
             return 0
+        if args.command == "extend":
+            extend(DATASET_PATH, args.per_stratum)
+            return 0
         if args.command == "run":
             return run(DATASET_PATH)
         return status(DATASET_PATH)
-    except SampleExists as exc:
+    except (SampleExists, ResizeRefused) as exc:
         print(exc)
         return 1
     except KeyboardInterrupt:

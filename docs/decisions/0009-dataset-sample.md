@@ -1,7 +1,8 @@
-# 0009 — Who is in the dataset: 2000 users, stratified by rating
+# 0009 — Who is in the dataset: 4000 users, stratified by rating
 
 **Date:** 2026-09-13
-**Status:** accepted
+**Status:** accepted; per stratum raised from 400 to 800 on 2026-09-15 — see
+"Amendment" at the end
 
 ## Context
 
@@ -92,3 +93,34 @@ users again, the exact backfill §6 warns about.
   was drawn; the recorded date is what makes that explicit.
 - **Releasing the dataset (§9 stretch goal) raises whether handles should be
   anonymised.** Not decided here.
+
+## Amendment — 2026-09-15: 800 per stratum
+
+The real draw was made on 2026-09-15 with seed 1918731084: 8,091 / 6,708 /
+4,155 / 2,281 / 869 candidates from 1000–1199 up to 1800–1999, about 1,100 more
+active users than on the 13th, because "active" is a moving window.
+
+The same night, with 211 users collected, per stratum was raised from 400 to
+800 — 4000 users in total.
+
+**Why.** The collection runs unattended overnight either way, so the extra
+users cost hours that were going unused, not attention. More users mean more
+attempts per problem, which is what a model estimating problem difficulty from
+the crowd is short of, and more submissions to hold back for testing (§12).
+
+**Why it needed no redraw.** The draw stores every stratum's whole shuffled
+order, so raising the number takes the next candidates in line — exactly the
+users a draw of 800 with the same seed would have taken. Nobody already
+collected was fetched again. `collect.py extend` makes the change; it refuses
+to lower the number or to exceed the smallest stratum's population, and
+`sample_size_changes` records it.
+
+**What it costs.**
+- About four and a half hours of collection instead of two and a quarter.
+- `dataset.db` roughly doubles, to an estimated 1.3 GB from the first 56
+  users' average.
+- 1800–1999 now takes 800 of its 869 candidates. The stratum is close to fully
+  enumerated rather than sampled, which is statistically fine; it also leaves
+  only 69 replacements if handles turn out unavailable.
+- §9's weights are unchanged: they come from each stratum's population, not
+  from how many were collected.

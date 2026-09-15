@@ -20,7 +20,7 @@ project.
 | | |
 |---|---|
 | Works now | Enter a handle; the history is fetched in the background behind a progress page, stored, listed, and styled |
-| Next (v0.3) | Bulk collection of ~2000 users, rate limited and resumable |
+| Now (v0.3) | Collecting the dataset: 4000 users stratified by rating, rate limited and resumable |
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a
@@ -100,7 +100,7 @@ templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
 db.py                the database: opening it, creating it, and every query
 sync.py              fetches one user's history in the background
-collect.py           draws and collects the 2000-user dataset — see docs/decisions/0009-dataset-sample.md
+collect.py           draws and collects the 4000-user dataset — see docs/decisions/0009-dataset-sample.md
 static/style.css     the whole design system — see docs/decisions/0006-design-direction.md
 static/fonts/        IBM Plex Mono, served from this site, with its licence
 schema.sql           the tables and the view — see docs/spec.md §6
@@ -118,7 +118,7 @@ described in [spec §4](docs/spec.md).
 ### Collecting the dataset
 
 Runs on your own machine, into `dataset.db`, never on the server. Draw once,
-then run until done — a full run is a little over two hours, and it resumes
+then run until done — a full run is about four and a half hours, and it resumes
 where it stopped:
 
 ```bash

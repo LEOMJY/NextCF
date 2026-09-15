@@ -2632,3 +2632,44 @@ nothing at all — a case v0.5 has to decide, not a zero.
 ### Next
 
 The real draw and run, once the tables are agreed.
+
+---
+
+## 2026-09-15 — The real draw, and 800 per stratum
+
+`collect.py draw` against the live list: seed 1918731084, 8,091 / 6,708 /
+4,155 / 2,281 / 869 candidates per stratum — about 1,100 more active users than
+two days earlier, because "rated in the last month" is a moving window. That is
+the reason the draw stores the date it was made.
+
+### 400 became 800
+
+The collection was going to run overnight, and two and a quarter hours of it
+would have left the rest of the night idle. So, with 211 users collected, each
+stratum was raised to 800: 4000 users, about four and a half hours.
+
+It needed no redraw because the whole shuffled order of every stratum was stored
+at the draw — the next 400 per stratum are simply the next in line, the same
+users a draw of 800 would have picked. A new command, `collect.py extend`, raises
+the number and records the change in `sample_size_changes`. It refuses to lower
+it, which would leave collected users outside the sample, and refuses anything
+above the smallest stratum, 869, which would make the strata unequal. Three new
+checks; 78 in total.
+
+Stopping the first run to restart it was the first real use of ADR 0004 on this
+dataset. The process was killed mid-user; afterwards `integrity_check` was clean,
+no user had `last_synced` unset, and no submission belonged to an incomplete
+user. The half-fetched user had simply never been written.
+
+### Keeping the machine awake
+
+An overnight run on a laptop stops when the laptop sleeps. Changing the power
+settings would work and would have to be remembered in the morning. Instead the
+collection runs under a Windows `SetThreadExecutionState` request, held by the
+process that runs it and released when that process ends — nothing to undo. It
+does not stop a closed lid from sleeping.
+
+### Measured while it ran
+
+The first 56 users averaged 783 submissions, which puts the finished
+`submissions` table near three million rows and `dataset.db` near 1.3 GB.

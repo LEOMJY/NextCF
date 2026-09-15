@@ -647,6 +647,29 @@ def get_sample(conn):
     ).fetchone()
 
 
+def raise_per_stratum(conn, sample_id, new_per_stratum):
+    """Raise a sample's per_stratum and record the change, in one transaction.
+
+    Returns the old value. collect.extend() decides whether the new number is
+    allowed; sample_size_changes' CHECK refuses a decrease regardless.
+    """
+    with conn:
+        old = conn.execute(
+            "SELECT per_stratum FROM samples WHERE id = ?", (sample_id,)
+        ).fetchone()[0]
+        conn.execute(
+            """
+            INSERT INTO sample_size_changes (sample_id, changed_at, old_per_stratum, new_per_stratum)
+                 VALUES (?, ?, ?, ?)
+            """,
+            (sample_id, utc_now(), old, new_per_stratum),
+        )
+        conn.execute(
+            "UPDATE samples SET per_stratum = ? WHERE id = ?", (new_per_stratum, sample_id)
+        )
+    return old
+
+
 def get_strata(conn, sample_id):
     """Per stratum: population, wanted, collected, unavailable. Lowest first."""
     return conn.execute(

@@ -60,7 +60,7 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   api_client.py   Codeforces API — rate limiting, retries, backoff
   db.py           schema and queries
   sync.py         fetch one user's history as a background job, all or nothing
-  collect.py      bulk collection of ~2000 users, run manually
+  collect.py      bulk collection of ~4000 users, run manually
   model.py        skill estimation and solve-probability prediction
   evaluate.py     the harness — train/test split, scoring
   web.py          routes and pages
@@ -71,7 +71,7 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   ON THE AUTHOR'S MACHINE — run by hand
   ─────────────────────────────────────────────────────
     collect.py  →  api_client.py  →  [ dataset.db ]
-    draw 2000 users: five rating strata of 400, 1000–1999 (ADR 0009)
+    draw 4000 users: five rating strata of 800, 1000–1999 (ADR 0009)
     fetch every problem, then each user's history and rating changes
     resumable: dies at minute 40, restarts at minute 40
     progress is printed to the terminal; no jobs rows
@@ -117,7 +117,7 @@ job: a bulk run resumes at the user it died on, while one user's sync is
 written in a single transaction and simply runs again, because redoing it
 costs tens of seconds — see `docs/decisions/0004-sync-interruption.md`.
 
-Training data comes from ~2000 strangers' public histories, not from the
+Training data comes from ~4000 strangers' public histories, not from the
 visitor's own submissions. The visitor's history is used only to locate them
 inside a model that was learned from the crowd.
 
@@ -197,9 +197,9 @@ not slipped in while coding.
 
 ## 6. Data
 
-Eight tables and one view. Everything else is computed on demand, not stored,
+Nine tables and one view. Everything else is computed on demand, not stored,
 so there is only one copy of the truth. Both database files use the same
-schema (ADR 0007); the last three tables are filled only in `dataset.db`, by
+schema (ADR 0007); the last four tables are filled only in `dataset.db`, by
 `collect.py`, and stay empty on the server.
 
 ```
@@ -258,7 +258,13 @@ samples                                                 dataset.db only
   rating_min     integer  — 1000
   rating_max     integer  — 1999
   stratum_width  integer  — 200
-  per_stratum    integer  — 400
+  per_stratum    integer  — 800; drawn at 400, raised the same night
+
+sample_size_changes                                     dataset.db only
+  sample_id      integer
+  changed_at     text     — ISO-8601 UTC
+  old_per_stratum integer
+  new_per_stratum integer — only ever larger; the table refuses otherwise
 
 sample_candidates                                       dataset.db only
   sample_id      integer
@@ -383,7 +389,7 @@ What that costs depends on what is in the file:
 | Data | Comes from | If it is wiped |
 |---|---|---|
 | A visitor's submissions | Codeforces, in seconds | One re-sync. Accepted |
-| The ~2000-user training set | An hour of API calls | Never on the server — `dataset.db` on the author's machine |
+| The ~4000-user training set | Hours of API calls | Never on the server — `dataset.db` on the author's machine |
 | Who visited, and when | Exists only on the server | §9's "20 have returned" cannot be measured |
 
 So `nextcf.db` on the server is a cache that is allowed to vanish, and the
@@ -639,7 +645,7 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 |---|---|---|
 | v0.1 | Enter a handle, see your submissions. Deployed. | end Aug |
 | v0.2 | Background job with a progress page; caching. Design tokens and base stylesheet — see §7.1 | early Sep |
-| v0.3 | Bulk collection into `dataset.db`, on the author's machine: 2000 users stratified by rating, with histories and rating changes — rate limited, resumable | mid Sep |
+| v0.3 | Bulk collection into `dataset.db`, on the author's machine: 4000 users stratified by rating, with histories and rating changes — rate limited, resumable | mid Sep |
 | v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down | early Oct |
 | v0.6 | First real model (logistic / Rasch), scored against the baseline; `/how` | late Oct |
