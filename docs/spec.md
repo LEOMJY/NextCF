@@ -308,7 +308,12 @@ second copy in `sample_candidates` could disagree with it. `sample_strata`
 joins the two.
 
 Derived and deliberately not stored: per-topic skill estimates, solve
-probability predictions, recommendation lists.
+probability predictions, recommendation lists. **Per-topic solve counts are
+derived too** — `db.topic_breakdown()` is one `GROUP BY` over a user's
+submissions folded to canonical problems, 13 milliseconds for a 1,800-submission
+history, so there is nothing to keep in step and nothing to invalidate. The
+alias map in `problem_aliases` is the single exception this document allows, for
+the reasons above.
 
 **Dates and times are ISO-8601 UTC text**, e.g. `2026-09-07T21:20:00Z`. SQLite
 has no date or time type, so the only choice is text or an integer count of
@@ -536,6 +541,19 @@ Three things, each because the product needs it rather than because it decorates
    calls it useful on its own. It is also the only element on the site a
    template cannot produce, and it is the differentiator made visible. Highest
    return of anything in this section.
+   **At v0.4 it describes practice, not skill, and it has to say so.** The
+   numbers behind it are how many problems in each topic a user has solved and
+   how hard those were on average. What it cannot yet say is whether that is
+   good, because tree problems are rated higher than implementation problems
+   for everybody, so a higher mean in trees may be a fact about trees. Removing
+   that confound is model.py at v0.6, and the chart's wording changes then.
+   Two things were measured on the way and both constrain what it can show.
+   The gap between attempted and solved is not the weakness signal it looks
+   like: across the whole dataset 93.7% of problems ever attempted were
+   eventually solved, so the ratio is near 95% for almost everyone and
+   separates nobody. Difficulty does carry signal — for one 1718-rated user the
+   mean rating of solved problems ran from 1800 in trees to 1300 in
+   implementation, a 400-point spread where the solve ratio spread was four.
 2. **The progress page** (v0.2). Already required — a job running tens of
    seconds is a product surface, and it is the moment of peak user attention.
 3. **Solve probability on each recommendation** (v0.4). "70%" is the entire
@@ -802,6 +820,14 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
 - **What counts as "solved"?** Solved on the first try, or after five attempts
   and an editorial? The API does not distinguish. Affects everything. Decide at
   v0.5: the harness cannot label a single test attempt without an answer.
+  The v0.4 topic breakdown uses "any submission on this problem was accepted",
+  and that does **not** pre-empt this. They are two different questions. The
+  breakdown answers "what has this person done", where a problem solved on the
+  sixth try is still done and a visitor comparing the page against their own
+  Codeforces profile expects it to be counted. The harness answers "what
+  should the model have predicted about this attempt", where the sixth try and
+  the first are different events. Whatever is decided here changes the second
+  one; the first stays as it is unless there is a separate reason to move it.
 - **How is the data split into what the model learns from and what it is
   tested on?** Proposed by the author: hold back each user's most recent
   submissions — say the last 500 of 2000 — let the model learn from the

@@ -303,6 +303,23 @@ def get_user(conn, handle):
     ).fetchone()
 
 
+def has_complete_data(conn, handle):
+    """Is this handle's stored history known to be a WHOLE history? ADR 0004.
+
+    False means "no usable data", and it covers two situations the caller must
+    not tell apart: never synced, and a sync that started and did not finish.
+    Both leave last_synced NULL, which is written inside the same transaction
+    as the rows themselves, so it cannot drift out of step with them.
+
+    Every function that reads the submissions table asks this first. That is
+    the whole defence: the failure ADR 0004 exists to prevent is not missing
+    rows, it is missing rows that LOOK complete, and it only takes one reader
+    that forgot to ask.
+    """
+    user = get_user(conn, handle)
+    return user is not None and user["last_synced"] is not None
+
+
 def get_submissions(conn, handle, limit=None):
     """One user's submissions, newest first, joined to their problems.
 
@@ -316,12 +333,11 @@ def get_submissions(conn, handle, limit=None):
         rows  -- synced successfully, here they are.
 
     None versus [] is the same distinction as NULL versus 0 in the database:
-    "not known" is not "none". This is the only place the completeness rule
-    from ADR 0004 is enforced, which is why nothing else should query the
-    submissions table directly.
+    "not known" is not "none". ADR 0004's completeness rule is enforced by
+    has_complete_data() below, which every reader of the submissions table goes
+    through, and which is why nothing else should query that table directly.
     """
-    user = get_user(conn, handle)
-    if user is None or user["last_synced"] is None:
+    if not has_complete_data(conn, handle):
         return None
 
     # contest_id and problem_index come back as their own columns so the page
@@ -357,6 +373,155 @@ def count_submissions(conn, handle):
     return conn.execute(
         "SELECT count(*) FROM submissions WHERE handle = ?", (handle,)
     ).fetchone()[0]
+
+
+# ------------------------------------------------------- the topic breakdown
+#
+# One user's practice history collapsed from submissions to PROBLEMS, which is
+# the unit everything below counts in. Three wrong answers and an accepted one
+# are four submissions and one problem, and nobody has solved a topic four
+# times by failing it three times first.
+#
+# Written once and shared by the two queries under it, because they have to
+# agree. If one folded aliases and the other did not, a page could show 40
+# problems solved and topic bars adding to 43, and the only clue would be
+# arithmetic that nearly works.
+#
+# COALESCE returns its first argument that is not NULL. The LEFT JOIN supplies
+# a canonical id when this problem is an alias of another and NULL when it is
+# not, so this reads: the problemset's id for this problem, or its own if the
+# problemset lists it. That is what makes a Div. 2 contestant's 1293C and a
+# Div. 1 contestant's 1292A one problem and not two -- ADR 0010.
+#
+# MAX over a CASE is "did ANY submission on this problem get accepted". The
+# CASE rather than `verdict = 'OK'` because a submission still being judged has
+# verdict NULL, and NULL = 'OK' is NULL, not 0 -- MAX would then skip the row
+# instead of counting it as unsolved.
+_MY_PROBLEMS = """
+    WITH mine AS (
+        SELECT COALESCE(a.canonical_id, s.problem_id)      AS canonical_id,
+               MAX(CASE WHEN s.verdict = 'OK' THEN 1 ELSE 0 END) AS solved
+          FROM submissions s
+          LEFT JOIN problem_aliases a ON a.alias_id = s.problem_id
+         WHERE s.handle = ?
+         GROUP BY COALESCE(a.canonical_id, s.problem_id)
+    )
+"""
+
+
+def topic_breakdown(conn, handle):
+    """Per-topic practice for one user. None if there is no usable data.
+
+    Rows of (tag, solved, attempted, rated_solved, mean_solved_rating), the
+    most-solved topic first.
+
+    THE TAGS COME FROM THE CANONICAL PROBLEM, never from the alias -- ADR
+    0010. Codeforces tags the two copies of a shared problem differently:
+    1292A is data structures, dsu, implementation; 1293C, which is the same
+    problem, is constructive algorithms, implementation. Three quarters of the
+    alias pairs in the dataset disagree like that, so until now the topic a
+    solve was filed under depended on which division the solver was in. The
+    alias's own tag rows stay in the table and are simply never joined to.
+
+    A problem carries about three tags and counts once under each, so these
+    numbers add up to more than the user's problem count -- see
+    problem_totals(). Correct, and not obvious, so a page showing this has to
+    say so.
+
+    **`attempted` is here for completeness, not as a weakness signal.** The
+    plan was that the gap between solved and attempted would show where
+    somebody is struggling. Measured across the whole dataset, it does not:
+    of 1,817,020 (user, problem) pairs ever attempted, 1,701,748 were
+    eventually solved -- 93.7%. Competitive programmers mostly submit when
+    they believe they are right and then keep going until the problem falls,
+    so the ratio sits near 95% for nearly every user and nearly every topic,
+    and a number that is always 95% distinguishes nobody. It stays because
+    "0 of 30" and "0 of 0" are genuinely different and it costs nothing to
+    keep, not because a chart should be built on it.
+
+    **The difficulty columns are the ones that carry information.** For one
+    1718-rated user, the mean rating of solved problems runs from about 1800
+    in trees and 1700 in graphs down to 1300 in implementation -- a 400-point
+    spread where the solve ratio spread was four points.
+
+    Mean rather than median: SQLite has no median, working one out needs
+    either a window function or a second pass in Python, and problem ratings
+    are bounded and roughly symmetric within one user's range, which is
+    exactly the case where the two agree. (The 09-15 devlog entry's warning
+    about means is about heavy-tailed data, like submissions per user. This is
+    not that.)
+
+    `rated_solved` is how many solves that mean rests on, and it is separate
+    because a third of the problemset has no rating at all. A mean over three
+    problems is not the same claim as a mean over three hundred, and the two
+    must not look alike in a chart.
+
+    **What this is NOT: a skill estimate,** and the difference matters enough
+    to be spelled out. These are facts about a history, not about a person.
+    Worse, the per-topic means cannot be compared with each other as they
+    stand: tree problems are rated higher than implementation problems for
+    everybody, so a higher mean in trees may say something about trees rather
+    than about this user. Removing that confound -- asking how far up each
+    topic's OWN difficulty range this user has climbed, relative to people
+    like them -- is the whole job of model.py at v0.6. This function is the
+    input it starts from, and the chart built on it at v0.4 has to describe
+    practice rather than claim skill.
+    """
+    if not has_complete_data(conn, handle):
+        return None
+
+    # AVG and COUNT both skip NULL, so the CASE does two jobs at once: it
+    # drops unsolved problems, and it drops solved ones Codeforces has never
+    # rated. What is left is "the rated problems this user actually solved",
+    # which is the only set either number should describe.
+    return conn.execute(
+        _MY_PROBLEMS + """
+        SELECT t.tag,
+               SUM(m.solved)                                 AS solved,
+               COUNT(*)                                      AS attempted,
+               COUNT(CASE WHEN m.solved = 1 THEN p.rating END) AS rated_solved,
+               AVG(CASE WHEN m.solved = 1 THEN p.rating END)   AS mean_solved_rating
+          FROM mine m
+          JOIN problem_tags t ON t.problem_id = m.canonical_id
+          JOIN problems     p ON p.id         = m.canonical_id
+         GROUP BY t.tag
+         ORDER BY solved DESC, attempted DESC, t.tag
+        """,
+        (handle,),
+    ).fetchall()
+
+
+def problem_totals(conn, handle):
+    """(solved, attempted, solved_untagged) for one user. None if not synced.
+
+    Not derivable from topic_breakdown(): a problem with three tags appears in
+    three of its rows, so summing that column counts it three times. These are
+    distinct problems, which is the number a page can put next to the chart
+    without lying.
+
+    `solved_untagged` is the third number because it explains a gap somebody
+    will otherwise find by hand. A solved problem with no tags at all is in no
+    topic bar, so the bars can never account for it. In the collected dataset
+    these are almost entirely gym problems: 16,874 gym problems and 92 of them
+    tagged. Gym is deliberately included here -- it is practice the user
+    really did -- even though it is outside the recommendation pool, because
+    "what you have done" and "what to do next" are different questions.
+    """
+    if not has_complete_data(conn, handle):
+        return None
+
+    return conn.execute(
+        _MY_PROBLEMS + """
+        SELECT SUM(m.solved) AS solved,
+               COUNT(*)      AS attempted,
+               SUM(CASE WHEN m.solved = 1
+                         AND NOT EXISTS (SELECT 1 FROM problem_tags t
+                                          WHERE t.problem_id = m.canonical_id)
+                        THEN 1 ELSE 0 END) AS solved_untagged
+          FROM mine m
+        """,
+        (handle,),
+    ).fetchone()
 
 
 def get_job(conn, job_id):

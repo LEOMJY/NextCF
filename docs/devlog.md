@@ -2960,3 +2960,103 @@ had been carried by hand; it is now counted by running them.
 The rest of v0.4: per-topic solve counts on top of the canonical tags, the
 rating-only baseline recommender with the problemset fetch that feeds it, and
 the topic-breakdown chart.
+
+---
+
+## 2026-09-15 — Per-topic solve counts, and a signal that was not there
+
+`db.topic_breakdown()` and `db.problem_totals()`. One `GROUP BY` each over a
+user's submissions folded to canonical problems, 13 milliseconds for a
+1,803-submission history.
+
+Counting is in problems, not submissions. Three wrong answers and an accepted
+one are four submissions and one solved problem, and nobody has practised a
+topic four times by failing it three times first. Aliases fold first, so a
+Div. 2 contestant's `1293C` and a Div. 1 contestant's `1292A` are one problem,
+and the tags come from the canonical copy — the rule ADR 0010 settled this
+morning, now with a check that would catch it being broken.
+
+### The column that was supposed to show weakness
+
+The plan was solved and attempted per topic, with the gap between them as the
+weakness signal: 5 solved of 40 attempted is a topic someone is struggling
+with, 5 of 5 is a topic they have barely opened.
+
+It does not work, and it fails for a reason that is obvious in hindsight.
+Across the whole dataset, of 1,817,020 (user, problem) pairs ever attempted,
+1,701,748 were eventually solved — **93.7%**. Competitive programmers submit
+when they think they are right and then keep going until the problem falls.
+The first user checked came out at 95–100% on every single topic:
+
+```
+greedy                   393 solved / 402 attempted    98%
+dp                       173 / 182                     95%
+data structures          123 / 129                     95%
+constructive algorithms  192 / 199                     96%
+```
+
+A number that is 96% for everybody and every topic separates nobody. The
+column stays, because "0 of 30" and "0 of 0" really are different and it costs
+nothing, but nothing gets built on top of it.
+
+### What was there instead
+
+Difficulty. Same user, same topics, mean rating of the problems they solved:
+
+```
+trees            1800        brute force     1399
+graphs           1700        greedy          1348
+dfs and similar  1700        math            1329
+dp               1546        implementation  1323
+```
+
+A 400-point spread where the solve ratio had a four-point spread. So the
+breakdown gained two columns: `rated_solved` and `mean_solved_rating`.
+
+Mean rather than median: SQLite has no median, and problem ratings are bounded
+and roughly symmetric inside one user's range, which is the case where the two
+agree. That is not in tension with yesterday's warning about estimating from 56
+users — that was about a heavy-tailed quantity, submissions per user, where the
+mean is mostly luck. Ratings are not that.
+
+`rated_solved` is a separate column and not a detail. A third of the problemset
+has no rating, and one of the two users checked had topics where the mean rested
+on one or two problems. A mean over 2 and a mean over 393 must not look alike in
+a chart.
+
+### What the chart is allowed to claim
+
+Not skill. The per-topic means cannot even be compared with each other as they
+stand, because tree problems are rated higher than implementation problems for
+everyone — a higher mean in trees may be a fact about trees rather than about
+the user. Asking how far up a topic's own difficulty range somebody has climbed,
+relative to people like them, is exactly what model.py is for at v0.6.
+
+So v0.4's chart describes practice and says so, and §7.1 now records that the
+wording changes at v0.6. Writing "you are weak at dp" from these numbers would
+be the project claiming the thing it exists to measure, three milestones before
+it has measured it.
+
+### ADR 0004 made literally true
+
+That ADR says one gatekeeping function enforces the completeness rule "rather
+than remembered in five". It was a sentence inside `get_submissions`, and the
+two new queries would have been the second and third place to remember it. It
+is now `has_complete_data()`, which all three call. The rule it protects is not
+"some rows are missing" but "some rows are missing and nothing says so", and it
+only takes one reader that forgot to ask.
+
+Both new functions return None for a user who was never synced or whose sync did
+not finish, the same three-case contract `get_submissions` already had.
+
+### Counted
+
+115 checks, 14 new. The most valuable one is that the tags come from the
+canonical copy: every other check here would still pass with that rule broken,
+and the bug is invisible — a number wrong by one topic, on the page whose whole
+job is to say which topics you are good at.
+
+### Next
+
+The chart itself, and the rating-only baseline with the problemset fetch that
+feeds it.
