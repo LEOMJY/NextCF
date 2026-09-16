@@ -1,6 +1,6 @@
 -- NextCF database schema.
 --
--- Nine tables and one view, per spec section 6. Run once at startup via
+-- Ten tables and one view, per spec section 6. Run once at startup via
 -- db.py's init_db(); every statement is IF NOT EXISTS, so running it again is
 -- harmless -- and also means a CHANGE to an existing table here does nothing
 -- to a database that already has it.
@@ -82,8 +82,9 @@ CREATE TABLE IF NOT EXISTS problems (
     -- One row per contest a problem appeared in, NOT one per problem. When a
     -- Div. 1 and a Div. 2 round run together they share problems under
     -- different ids -- 1292A and 1293C are the same problem -- and each
-    -- submission is stored under the id it was actually made against. Read
-    -- spec section 12 before assuming that one id means one problem.
+    -- submission is stored under the id it was actually made against.
+    -- problem_aliases below is what ties those rows back together; read
+    -- ADR 0010 before assuming that one id means one problem.
     id             TEXT    PRIMARY KEY,
 
     -- The two halves of the id, kept as their own columns so nothing ever
@@ -103,6 +104,23 @@ CREATE TABLE IF NOT EXISTS problems (
     -- the rating-only baseline in section 9 non-trivial: a baseline that
     -- cannot score a third of the problemset is not much of a baseline.
     rating         INTEGER,
+
+    -- 1 if problemset.problems lists this id, 0 otherwise. Two things need it
+    -- and neither could be written without it (ADR 0010):
+    --
+    --   the recommendation pool is "in_problemset = 1 AND rating IS NOT NULL"
+    --   -- 11,102 problems of the 11,401 listed;
+    --
+    --   and problem_aliases below points every OTHER id of the same problem
+    --   at the one copy the problemset lists.
+    --
+    -- A snapshot, exactly like rating beside it: a contest can be removed and
+    -- its problems leave the problemset. save_problemset() therefore clears
+    -- the flag and re-sets it on every fetch -- the same shape as ADR 0005's
+    -- rule that tags are replaced rather than added to. save_sync() never
+    -- touches this column, so a problem learned from somebody's submission
+    -- can neither list nor un-list itself.
+    in_problemset  INTEGER NOT NULL DEFAULT 0 CHECK (in_problemset IN (0, 1)),
 
     -- The id and its two halves are the same fact stored twice, and two
     -- copies can drift apart. This makes a disagreement an error at the
@@ -131,6 +149,47 @@ CREATE TABLE IF NOT EXISTS problem_tags (
 -- because tag is not the leading column. That second query is what the topic
 -- breakdown at v0.4 runs, so it gets an index of its own.
 CREATE INDEX IF NOT EXISTS idx_problem_tags_tag ON problem_tags(tag);
+
+
+-- One problem, many ids -- ADR 0010. A Div. 1 and a Div. 2 round running
+-- together share problems, and each shared problem gets an id in BOTH
+-- contests. problemset.problems lists one of them; a Div. 2 contestant's
+-- submissions carry the other. 1,807 of the 13,208 non-gym ids in the
+-- collected dataset are unlisted this way.
+--
+-- This table is the only derived data spec section 6 allows to be stored, and
+-- the reasons are in ADR 0010: it depends on the whole problems table, so it
+-- cannot be worked out for one visitor's page, and section 9 has to be
+-- reproducible from the file.
+--
+-- Rebuilt whole by db.rebuild_aliases(), inside the same transaction that
+-- writes in_problemset. Never edited by hand.
+CREATE TABLE IF NOT EXISTS problem_aliases (
+    -- PRIMARY KEY, not just a column: an id has at most one canonical form.
+    -- Two rows for one alias would make "has this user solved it?" depend on
+    -- which row a query happened to read.
+    alias_id      TEXT PRIMARY KEY REFERENCES problems(id) ON DELETE CASCADE,
+
+    -- Always a row with in_problemset = 1, which is why no alias ever points
+    -- at another alias and nothing here has to be followed more than one step.
+    canonical_id  TEXT NOT NULL    REFERENCES problems(id) ON DELETE CASCADE,
+
+    -- A problem is not its own alias. Cheap, and it turns the worst possible
+    -- bug in the builder -- matching a problem to itself, which would make
+    -- every count silently double -- into a failed write.
+    CHECK (alias_id <> canonical_id)
+) STRICT;
+
+-- For "every id this problem is also known by", which is the direction the
+-- topic counts read it in. The primary key above only serves the other one.
+CREATE INDEX IF NOT EXISTS idx_problem_aliases_canonical
+    ON problem_aliases(canonical_id);
+
+-- The alias builder joins problems to problems on (name, rating). Without
+-- this it is 13,000 rows scanned once per candidate; the web app rebuilds the
+-- map at every startup (ADR 0010), so it is worth the index.
+CREATE INDEX IF NOT EXISTS idx_problems_name_rating
+    ON problems(name, rating);
 
 
 -- Every submission fetched. The largest table by far: 3,875,775 rows in the
@@ -198,6 +257,16 @@ CREATE TABLE IF NOT EXISTS jobs (
 
     -- CHECK turns a typo into an error at the write, rather than a row that
     -- silently matches nothing three weeks later.
+    -- 'sync' is the only kind anything writes: collect.py reports to a
+    -- terminal rather than a web page, so it writes no job rows (ADR 0007).
+    --
+    -- 'collect' is still permitted here, and ADR 0007 said to remove it at
+    -- "the next schema change so one rebuild covers both". ADR 0010 was that
+    -- change and it did NOT cover this, because its premise turned out to be
+    -- wrong: adding a column rewrites nothing, so there was no rebuild to
+    -- share. Removing a value from a CHECK still means rebuilding this table
+    -- on its own, for a value nothing writes. It waits for a change that
+    -- rebuilds a table for a real reason.
     kind         TEXT    NOT NULL CHECK (kind IN ('sync', 'collect')),
 
     -- Which handle, or which batch. COLLATE NOCASE for the same reason as

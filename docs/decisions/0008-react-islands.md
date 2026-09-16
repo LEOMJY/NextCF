@@ -81,3 +81,41 @@ the choice under (a).
   as §9, which is the trade §7.1 already names for design work.
 - **Balloons are not decided by this.** It fixes how a real-time prototype
   would be written, not whether one ships (v0.8).
+
+## Amendment — 2026-09-15: the Tailwind consequence was argued wrongly
+
+The consequence above reads "a component library or a utility-class framework
+such as Tailwind would be a separate decision, and would collide with the token
+file." That sentence puts two different things in one bucket and gives a reason
+that is only true of one of them.
+
+**A component library** — shadcn/ui, Material — ships buttons, cards and
+dialogs that already look like something. ADR 0001's argument against Pico.css
+applies to it exactly: a recognisable look is a cost as well as a floor, and
+§7.1's stated goal is that the site must not read as templated.
+
+**Tailwind ships no appearance at all.** It is a set of small class names for
+individual properties. ADR 0001's argument does not apply to it, and "would
+collide with the token file" is too strong: Tailwind reads CSS custom properties
+as its own configuration, so a single source of truth in `static/style.css` is
+achievable rather than impossible.
+
+**The decision does not change**, for two reasons that were not the ones given:
+
+- **React is a small minority of this site's markup.** Five pages, one component
+  at v0.4. The Jinja templates keep hand-written CSS either way, so adopting
+  Tailwind would add a second way of writing styles rather than replacing the
+  first. Two idioms in one codebase is worse than either idiom alone. Tailwind's
+  real advantage — never naming a class again — arrives when components carry
+  most of the markup, which is not this project.
+- **§7.1's budget.** Learning a second styling system comes out of §9, and buys
+  nothing there.
+
+**When to reopen it:** if React comes to carry the majority of the markup. The
+plausible cause is the pet system at v1.5 (§11), which would make the results
+page mostly components. At that point the ratio flips and the trade is worth
+recomputing. Recorded in §12 so it is a trigger rather than a thing that quietly
+never happens.
+
+**The build question this ADR left open is now answered** — see
+`docs/decisions/0011-bundle-built-locally.md`.

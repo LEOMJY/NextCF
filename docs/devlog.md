@@ -2775,3 +2775,188 @@ backed up; losing it costs one night.
 v0.4: per-topic solve counts, the rating-only baseline, the topic-breakdown
 chart — and before any React is set up, the three things written down for that
 moment.
+
+---
+
+## 2026-09-15 — One problem, many ids
+
+v0.4 opened with the two §12 questions due at it. This entry is the first one.
+It was supposed to be a filter on the recommender and turned out to be a bug in
+the thing v0.4 is actually for.
+
+### The question was only half the problem
+
+§12 said: a problem shared by a Div. 1 and a Div. 2 round has an id in both
+contests, the problemset lists one, and a recommender drawing from the
+problemset would offer people problems they had already solved. All true.
+1,807 of the 13,208 non-gym ids in the dataset are unlisted this way, carrying
+146,869 submissions and 48,526 solves across 3,528 of the 4,000 users.
+
+The half nobody had looked at is that **Codeforces tags the two copies
+differently**.
+
+```
+1292A  NEKO's Maze Game  1400  data structures, dsu, implementation   listed
+1293C  NEKO's Maze Game  1400  constructive algorithms, implementation    not
+```
+
+"Marcin and Training Camp" manages three ids and three different tag sets:
+`1210B` with two tags, `1229A` with three, `1230D` with four.
+
+So a solve was filed under different topics depending on which division its
+solver was in. Measured after the map was built: of its 1,527 pairs, 1,142 —
+three in four — disagree on tags, and 34,856 solves in the dataset sit on the
+wrong side of one. It has a direction. The listed copy is the lower contest id
+in 1,493 of 1,527 pairs, which is the Div. 1 half, so the misfiled solves are
+the Div. 2 ones, and §2 says the audience is mostly Div. 2.
+
+Per-topic solve counts are the first thing v0.4 builds. So this stopped being a
+filter on the recommender and became a correctness bug in the measurement, which
+is what moved it to the front of the milestone instead of somewhere inside it.
+
+One suspicion was checked and dismissed on the way. `save_problemset` and
+`save_sync` share a writer that replaces a problem's tags every time it sees
+one, so a later sync could in principle have overwritten good problemset tags
+with worse ones. It had not: all 11,401 problemset problems are stored, and all
+11,401 have tags identical to the live problemset. The two copies differ at
+Codeforces, not here.
+
+### The database could not answer the question
+
+Nothing in `problems` recorded whether an id was in the problemset. The "11,401
+are the problemset" line in yesterday's entry came from `collect.py`'s printed
+output, not from a query — the number was true and the file could not reproduce
+it. Without that fact stored there is no map to build and no pool to recommend
+from, and ADR 0007 requires §9 to be recomputable from the file alone.
+
+That is now `problems.in_problemset`, cleared and re-set on every problemset
+fetch so it describes the current fetch rather than an older one — the same
+shape ADR 0005 already uses for tags.
+
+### Two methods, and why only one ships
+
+**B, which ships.** Same name, same rating, and exactly one listed candidate.
+1,527 of 1,680 unlisted contest ids — 91%.
+
+**A, which does not.** A `CONTESTANT` submission can only be made while its
+contest is running, so the earliest one per contest says when that contest
+started; contests starting within twenty minutes of each other were run
+together, and inside such a cluster problems sharing a name are the same
+problem. 325 clusters, 1,251 mapped — 74%.
+
+Both were run against the whole dataset before choosing. They fire together on
+1,239 ids and **agree on all 1,239**. That is what made B safe to ship alone:
+not that it looked reasonable, but that a method built out of completely
+different facts reached the same answer every time it had an opinion.
+
+A is now a check rather than dead code, and it earns its place by being
+independent. If Codeforces renames a problem, or a rating moves, or the
+clustering window stops being right, the two stop agreeing and something fails
+loudly instead of quietly changing §9's number.
+
+§12 warned that name matching alone would not work, and gave `1230D`, which the
+problemset lists only as `1210B`, as the awkward case. It is: A maps it to
+`1229A`, which is not listed either, so A declines. B goes straight to `1210B`.
+Both examples from §12 come out right — `1293C → 1292A` and `1230D → 1210B`.
+
+The 153 ids B leaves alone are mostly not a loss. 134 belong to contests the
+problemset omits entirely — April Fools rounds, unrated rounds, contests since
+removed — which are unrecommendable whatever happens. The real remainder is 7.
+
+### What it buys
+
+3,360 of the 4,000 users have at least one solve that is invisible without the
+map; median 6, mean 13, largest 362. By stratum the count rises steeply, because
+stronger users simply submit more:
+
+| stratum | solves the map reveals |
+|---|---|
+| 1000–1199 | 1,389 |
+| 1200–1399 | 3,982 |
+| 1400–1599 | 7,043 |
+| 1600–1799 | 13,508 |
+| 1800–1999 | 16,070 |
+
+### The first migration
+
+Changing `schema.sql` does nothing to a database that already exists — every
+statement in it is `IF NOT EXISTS`, which is what makes it safe to run at every
+startup and useless for changing a table. So `init_db()` gained `_migrate()`:
+each change guarded by a test of what the file currently looks like, so running
+it twice does nothing and running it on a half-migrated file finishes the job.
+
+No `schema_version` counter. The guards are the version, they cannot disagree
+with reality, and a counter would be a second copy of the truth. When the list
+gets long enough to be hard to read, that is the moment for numbered migration
+files — not before.
+
+`ALTER TABLE ... ADD COLUMN` on the 680 MB file: **0.0 seconds**, because SQLite
+records the column and its default and does not touch a row. The whole
+migration, the problemset fetch and the map build together took under two
+seconds. Afterwards `integrity_check` was ok, `foreign_key_check` clean, no
+alias points at an unlisted problem and no listed problem is an alias.
+
+### A promise that did not survive contact with the work
+
+ADR 0007 left removing `'collect'` from `jobs.kind` for "the next schema change
+so one rebuild covers both". This was meant to be that change. It is not.
+
+The premise was that a schema change means rebuilding a table, so a second
+rebuild rides along free. Adding a column rewrites nothing, so there was no
+rebuild to ride on. Removing a value from a `CHECK` still costs a full rebuild
+of `jobs` — rename, recreate, copy, drop — and doing it needs either the table's
+definition duplicated in Python or string surgery on the definition SQLite
+stores. That is real risk for something with no effect on behaviour, since
+nothing writes `'collect'`.
+
+Changing `schema.sql` without migrating was considered for about a minute and is
+worse than both: a new database would then disagree with every existing one.
+So it stays, with the reason written in the schema next to it, and waits for a
+change that rebuilds a table for a reason.
+
+### Found while checking: the server has no problems to recommend
+
+`save_problemset` has exactly one caller, `collect.py`. `web.py` has never
+fetched the problemset. So `nextcf.db` knows only the problems its visitors
+submitted to, and the rating-only baseline — which runs there — would have had
+an empty candidate pool and could only have offered people problems they had
+already attempted.
+
+Not built yet, deliberately. It belongs with the recommender, where "the pool
+is not ready yet" is a state that has to be designed rather than bolted on. The
+free instance wipes the file on every spin-down, so it will be a startup fetch
+of one request.
+
+### The React questions
+
+Both answered, both recorded: the bundle is built here by Vite and committed,
+Render never runs Node, and a check hashes the component sources at build time
+so a forgotten rebuild fails instead of shipping. Building on the host was
+rejected mostly because a build failure would take the whole site down, on top
+of the cold start ADR 0003 already accepted. Node LTS installed; Vitest decided
+and deferred to v0.7, where ADR 0008 already put it.
+
+Tailwind was reconsidered properly rather than waved away, and the old reason
+for refusing it turned out to be wrong. ADR 0008 said a component library or a
+utility-class framework "would collide with the token file", which lumps two
+different things together. A component library ships an appearance, so ADR
+0001's argument against Pico.css applies to it. Tailwind ships none, and it can
+read CSS custom properties as its configuration, so one source of truth is
+achievable. The answer is still no, for a reason that is actually true: React
+carries a small minority of this site's markup, so adding Tailwind would mean
+two ways of writing styles in one codebase rather than one. The trigger to
+recompute it — React carrying the majority, which the v1.5 pet system would
+cause — is written into §12 so it is a trigger rather than something that
+quietly never happens again.
+
+### Counted
+
+101 checks, 13 of them new. The 78 recorded yesterday does not survive a recount
+— summing each script's own "N passed" line gives 88 before today. The number
+had been carried by hand; it is now counted by running them.
+
+### Next
+
+The rest of v0.4: per-topic solve counts on top of the canonical tags, the
+rating-only baseline recommender with the problemset fetch that feeds it, and
+the topic-breakdown chart.

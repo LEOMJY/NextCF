@@ -83,6 +83,9 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   ─────────────────────────────────────────────────────
                     [ nextcf.db ]
          a cache of public data; may vanish at any time (§7)
+         at startup: fetch the problemset, rebuild the alias
+         map — one request, and the recommender has no
+         candidate pool without it (ADR 0010)
                           |
   WEB APP
   ─────────────────────────────────────────────────────
@@ -197,7 +200,7 @@ not slipped in while coding.
 
 ## 6. Data
 
-Nine tables and one view. Everything else is computed on demand, not stored,
+Ten tables and one view. Everything else is computed on demand, not stored,
 so there is only one copy of the truth. Both database files use the same
 schema (ADR 0007); the last four tables are filled only in `dataset.db`, by
 `collect.py`, and stay empty on the server.
@@ -216,11 +219,19 @@ problems
   problem_index  text     — the index half: "A", "E1", or in one contest "14"
   name           text
   rating         integer  — Codeforces' own rating, often absent
+  in_problemset  integer  — 1 if problemset.problems lists this id, else 0.
+                            The recommendation pool, and what an alias points
+                            at (ADR 0010)
 
 problem_tags
   problem_id     text     — which problem
   tag            text     — one tag, e.g. "dp"
                             one row per (problem, tag) pair
+
+problem_aliases
+  alias_id       text     — an id the problemset does not list
+  canonical_id   text     — the same problem's id in the problemset
+                            one row per alias; rebuilt, never edited by hand
 
 submissions
   id               integer  — Codeforces' submission id, primary key
@@ -316,12 +327,29 @@ no submissions" — see `docs/decisions/0004-sync-interruption.md`.
 skill is the axis the entire product works along — see
 `docs/decisions/0005-tags-as-a-table.md`.
 
+**`problem_aliases` is how one problem with several ids is read as one
+problem.** 1,807 of the 13,208 non-gym ids in the collected dataset are not in
+the problemset, because a problem shared by a Div. 1 and a Div. 2 round gets an
+id in both and the problemset lists only one. It is built from stored rows —
+same name, same rating, exactly one problemset candidate — and it is the one
+piece of derived data this document allows to be stored, for two reasons: it
+depends on the whole `problems` table, so it cannot be computed for one
+visitor's page, and §9 has to be reproducible from the file. Two things read it.
+A recommendation must not offer a problem the visitor solved under the other id,
+which affects 3,360 of the 4,000 users in the dataset. And **per-topic counts
+take the canonical problem's tags**, because Codeforces tags the two copies
+differently — `1292A` is tagged data structures, dsu, implementation while
+`1293C`, the same problem, is tagged constructive algorithms, implementation.
+An alias keeps its own tags; they simply stop being counted. See
+`docs/decisions/0010-one-problem-many-ids.md`.
+
 **`problems.id` is never parsed back into its parts.** It looks splittable at
 the first letter, but contest 921 numbers its problems `01` to `14`, producing
 ids like `92114` that could equally mean contest 921 or contest 9211.
 `contest_id` and `problem_index` are stored as columns of their own, and a
 `CHECK` rejects any row whose id disagrees with them. There is one row per
-contest a problem appeared in, not one per problem — see §12.
+contest a problem appeared in, not one per problem; `problem_aliases` above is
+what ties those rows back together — ADR 0010.
 
 **`participant_type` is stored now and unused until v0.6.** It records whether
 a submission was made in-contest, virtually, or in practice, which §12's "what
@@ -346,7 +374,7 @@ history, so the count jumps from nothing to everything, and the page follows
 | Web framework | Flask | Smallest thing that works; large amount of beginner material |
 | Database | SQLite | A single file on disk. Nothing to install, nothing to run |
 | Pages | Jinja templates (ships with Flask) | Every page is rendered on the server first, so it works before and without any JavaScript — layer 1 in §7.1 |
-| Interactive parts | React components mounted into those pages, from v0.4. Node builds them into one bundle, served from this site | Pieces that react to each other in the browser — a topic chart that filters a table, a target-probability control that re-ranks both, later the pet system — are where hand-written DOM updates tangle. Not the whole front end. See `docs/decisions/0008-react-islands.md` |
+| Interactive parts | React components mounted into those pages, from v0.4. Vite builds them into one bundle on the author's machine; the built file is committed and served from this site, and the host never runs Node — ADR 0011 | Pieces that react to each other in the browser — a topic chart that filters a table, a target-probability control that re-ranks both, later the pet system — are where hand-written DOM updates tangle. Not the whole front end. See `docs/decisions/0008-react-islands.md` |
 | Styling | Own CSS built on design tokens. No framework, no build step | Promoted from "classless framework" — see §7.1. A framework gives a floor but also a recognisable look, and "does not read as templated" is now an explicit goal. Three pages of hand-written CSS is roughly 200 lines and is fully ours |
 | Charts | Server-rendered SVG from Jinja, taken over by a React component where the chart is interactive | The topic breakdown is the one thing a template cannot give us. SVG generated from the data needs no chart library and renders in the launch screenshot, and it is still there if the React bundle never loads |
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
@@ -850,24 +878,6 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   saying OK. A full fetch gets both right for free.
   Whichever is chosen, the progress page has to keep saying something true while
   a job waits for its turn. Decide at v0.7, with error handling.
-- **One problem, two ids.** When a Div. 1 and a Div. 2 round run together,
-  each shared problem gets an id in both contests: `1292A` and `1293C` are the
-  same problem. `problemset.problems` lists only one copy, but a Div. 2
-  contestant's submissions carry the other. In one real Div. 2 history checked
-  on 2026-09-11, 29 of 230 solved problems were stored under an id the
-  problemset does not list — one history is an example, not an estimate. A
-  recommender drawing from the problemset would offer those users problems
-  they have already solved, and the audience in §2 is mostly Div. 2. This is
-  not a flaw in the id format, since any contest-plus-index scheme has it.
-  Storing the id each submission actually used is what keeps it fixable: a
-  mapping to the problemset's id can be built later from stored rows, without
-  re-fetching anybody. Name matching alone will not build it correctly — the
-  problemset holds seven different problems called "Elections", and a reused
-  problem is not always in an adjacent contest (`1230D` appears in the
-  problemset only as `1210B`). Decide at v0.4, before the first recommendation
-  ships. Measured in the collected dataset (2026-09-15): 1,807 non-gym problem
-  ids that the problemset does not list — an upper bound on the ids needing a
-  mapping, since some belong to contests the problemset leaves out entirely.
 - **What happens to gym submissions?** 9.1% of the dataset's submissions
   (353,922) are to gym problems — contest ids from 100000 up, 16,874 problems,
   attempted by 2,142 of the 4,000 users. Gym problems have no Codeforces
@@ -875,13 +885,15 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   score them and NextCF cannot recommend them. They may still say something
   about a user's skill. Excluding them from the §9 evaluation is the simple
   answer and has to be stated, not done silently. Decide at v0.5.
-- **How does the React bundle get built, and tested?** ADR 0008 adds a Node
-  build step. Either the host runs it on every deploy — Render would need
-  Node in the build of a Python service — or it runs on the author's machine
-  and the built file is committed, which is simpler and puts generated code in
-  the repository. The Python checks cannot see inside a React component, so a
-  JavaScript test tool is needed too. Decide at v0.4, before the first
-  component.
+- **Does a utility-class framework ever become worth it?** Settled for now as
+  no — the styling system is the tokens in `static/style.css`, and React brings
+  none of its own (ADR 0008, amended 2026-09-15). The reason is proportion
+  rather than taste: React carries a small minority of this site's markup, so
+  adding Tailwind would mean two ways of writing styles in one codebase instead
+  of one. The trigger to recompute that is React carrying the *majority* of the
+  markup, which the pet system at v1.5 (§11) would cause. Not before then, and
+  not without an ADR. A component library such as shadcn/ui is a separate and
+  weaker case, because it ships an appearance and §7.1 forbids a templated one.
 - **Final design direction.** Terminal (ADR 0006) is the working direction,
   not necessarily the last one. Decide at v0.8, inside the design budget in
   §7.1. The stack under it is settled: React for interactive parts (ADR 0008),
@@ -944,3 +956,25 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   (b) then would have been additive rather than a rewrite; the author chose to
   set it up once, before the first interactive component, rather than switch
   in the middle of building one. See `docs/decisions/0008-react-islands.md`.
+- **One problem, two ids.** *(asked 09-11, answered 09-15, at v0.4 as
+  scheduled.)* A stored `problem_aliases` table, built from rows already held:
+  same name, same rating, exactly one problemset candidate. 1,527 of the 1,680
+  unlisted contest ids, 91%. A second, independent method — clustering contests
+  by when their in-contest submissions happened, then matching names inside a
+  cluster — agreed with it on all 1,239 ids where both fire, and is kept as a
+  check rather than shipped. The question turned out to have a second half
+  nobody had looked for: Codeforces tags the two copies of a shared problem
+  differently, so per-topic counts were division-dependent before this. They now
+  read the canonical problem's tags. Two things had to be fixed to make any of
+  it possible — the database did not record which ids are in the problemset, and
+  the web app never fetched the problemset at all. See
+  `docs/decisions/0010-one-problem-many-ids.md`.
+- **How does the React bundle get built, and tested?** *(asked 09-13, answered
+  09-15, at v0.4 as scheduled.)* Built by Vite on the author's machine, with the
+  built file committed; Render never runs Node. A check hashes the component
+  sources at build time and fails when the working tree disagrees, which is what
+  makes committing generated code safe. Building on the host was rejected mainly
+  because a build failure would take the whole site down, on top of the cold
+  start ADR 0003 already accepted. Component tests are Vitest and arrive at
+  v0.7, where ADR 0008 already put them. See
+  `docs/decisions/0011-bundle-built-locally.md`.

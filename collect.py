@@ -208,7 +208,8 @@ def run(path=DATASET_PATH):
             problems = api_client.fetch_problemset()["problems"]
         except (urllib.error.URLError, RuntimeError) as exc:
             return _stopped(f"could not fetch the problemset: {exc}")
-        print(f"problemset: {db.save_problemset(conn, problems)} problems", flush=True)
+        stored, aliases = db.save_problemset(conn, problems)
+        print(f"problemset: {stored} problems, {aliases} aliases", flush=True)
 
         started = time.monotonic()
         collected_this_run = 0

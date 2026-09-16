@@ -52,6 +52,13 @@ DB_PATH = Path(os.environ.get("NEXTCF_DB", HERE / "nextcf.db"))
 # and they have to agree exactly, so the format is written once.
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
+# Codeforces numbers gym contests from 100000 up. Gym problems carry no rating
+# and are never in the problemset, so they are outside the recommendation pool
+# and outside the alias map (ADR 0010). 9.1% of the collected dataset's
+# submissions are to them, which is why this needs a name rather than a bare
+# 100000 repeated wherever the question comes up.
+GYM_CONTEST_ID_FLOOR = 100000
+
 
 def utc_now():
     """The current time, in the one timestamp format this database uses.
@@ -156,8 +163,43 @@ def init_db(path=DB_PATH):
         # Every statement in schema.sql is IF NOT EXISTS: this creates what is
         # missing and leaves an existing database, and its data, alone.
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+
+        # ...which is also the limitation that makes the next line necessary.
+        _migrate(conn)
     finally:
         conn.close()
+
+
+def _migrate(conn):
+    """Bring an existing database up to the current schema. Idempotent.
+
+    A MIGRATION is a change to the structure of a database that already holds
+    data, applied without rebuilding it from scratch. It is needed because of
+    the sentence at the top of schema.sql: every statement there is
+    IF NOT EXISTS, so it creates missing tables and indexes but does nothing
+    at all to a table that already exists. A new column added to `problems` in
+    schema.sql appears in a database created tomorrow and never appears in
+    dataset.db, which holds 3.9 million rows nobody wants to collect twice.
+
+    Each change below is guarded by a test of what the database currently
+    looks like, so running this on an up-to-date file does nothing, and
+    running it on a half-migrated file finishes the job. There is deliberately
+    no schema_version counter: the guards ARE the version, they cannot
+    disagree with reality, and a counter would be a second copy of the truth.
+    When this grows long enough to be hard to read, that is the moment to
+    replace it with numbered migration files -- not before.
+    """
+    # ADR 0010. ALTER TABLE ... ADD COLUMN is metadata only: SQLite records the
+    # new column and its default and does not touch a single row, so this
+    # returns instantly on a 680 MB file. NOT NULL is allowed here precisely
+    # because there is a non-null DEFAULT for the existing rows to take.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(problems)")}
+    if "in_problemset" not in columns:
+        with conn:
+            conn.execute(
+                "ALTER TABLE problems ADD COLUMN in_problemset INTEGER NOT NULL "
+                "DEFAULT 0 CHECK (in_problemset IN (0, 1))"
+            )
 
 
 def fail_orphaned_jobs(path=DB_PATH):
@@ -540,12 +582,101 @@ def save_problemset(conn, problems):
 
     One transaction. Adds problems nobody has submitted to yet -- a sample's
     histories only ever mention problems someone in it tried, and a
-    recommender needs the rest too. Returns how many problems were written.
+    recommender needs the rest too. Returns (problems written, aliases built).
+
+    Three things happen here and they are one transaction on purpose. The rows
+    are written; `in_problemset` is cleared and re-set so it describes THIS
+    fetch and not an older one; and the alias map is rebuilt from the result.
+    An alias map is only meaningful against the membership it was built from,
+    so there must be no moment at which a reader can see one without the
+    other -- ADR 0010.
     """
     shaped, tags = _shape_problems(problems)
     with conn:
         _write_problems(conn, shaped, tags)
-    return len(shaped)
+
+        # Membership is a snapshot, like a rating: a contest can be removed
+        # and take its problems out of the problemset. Clearing first is what
+        # makes this a replacement rather than an accumulation -- the same
+        # shape as ADR 0005's rule for tags. Without the clear, an id that
+        # left the problemset in March would still be offered as a
+        # recommendation today.
+        conn.execute("UPDATE problems SET in_problemset = 0 WHERE in_problemset = 1")
+        conn.executemany(
+            "UPDATE problems SET in_problemset = 1 WHERE id = ?",
+            [(pid,) for pid in shaped],
+        )
+        aliases = _rebuild_aliases(conn)
+    return len(shaped), aliases
+
+
+def rebuild_aliases(conn):
+    """Rebuild the alias map on its own, in its own transaction.
+
+    save_problemset() already does this, and that is the normal path. This
+    exists for the check that rebuilds the map and compares it against the
+    independent method in ADR 0010, and for a database whose problemset
+    membership is already correct.
+    """
+    with conn:
+        return _rebuild_aliases(conn)
+
+
+def _rebuild_aliases(conn):
+    """Replace problem_aliases from the problems table. Call inside a transaction.
+
+    Method B of ADR 0010: an id the problemset does not list is an alias of a
+    listed problem when they share a name and a rating AND exactly one listed
+    problem matches. 1,527 of the 1,680 unlisted contest ids in the collected
+    dataset, 91%.
+
+    The "exactly one" is the whole safety argument. The problemset holds three
+    different problems called "Game" rated 800, and seven called "Elections";
+    when a group is ambiguous this produces NO row rather than a wrong one.
+    56 of 11,044 (name, rating) pairs in the problemset are ambiguous that way.
+
+    Excluded, and each for its own reason:
+      rating IS NULL   -- nothing to match on, and NULL = NULL is never true
+                          in SQL anyway, so this is documentation as much as a
+                          filter
+      contest_id NULL  -- acmsguru; problemset.problems returns none of it, so
+                          there is no listed copy for one to point at
+      contest_id big   -- gym, which is never in the problemset either
+
+    Returns how many aliases were written.
+    """
+    # Rebuilt whole rather than updated. The inputs -- names, ratings,
+    # membership -- can all change under us, so a row that was right last
+    # month can be wrong now, and there is no way to tell which ones from the
+    # map alone. 1,500 rows is nothing to rewrite.
+    conn.execute("DELETE FROM problem_aliases")
+
+    # The subquery appears twice: once to prove there is exactly one candidate,
+    # once to fetch it. Written this way rather than as a GROUP BY with a bare
+    # column, which SQLite allows and which would do the same thing by a rule
+    # most readers would have to look up. idx_problems_name_rating is what
+    # keeps both cheap.
+    cursor = conn.execute(
+        """
+        INSERT INTO problem_aliases (alias_id, canonical_id)
+        SELECT a.id,
+               (SELECT c.id FROM problems c
+                 WHERE c.in_problemset = 1
+                   AND c.name = a.name
+                   AND c.rating = a.rating)
+          FROM problems a
+         WHERE a.in_problemset = 0
+           AND a.rating IS NOT NULL
+           AND a.contest_id IS NOT NULL
+           AND a.contest_id < ?
+           AND (SELECT COUNT(*) FROM problems c
+                 WHERE c.in_problemset = 1
+                   AND c.name = a.name
+                   AND c.rating = a.rating) = 1
+        """,
+        (GYM_CONTEST_ID_FLOOR,),
+    )
+    return cursor.rowcount
 
 
 def _shape_problems(problem_dicts):
