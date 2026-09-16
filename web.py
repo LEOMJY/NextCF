@@ -1,17 +1,17 @@
 """NextCF web app.
 
-v0.2: every page reads from the database, and no request waits on Codeforces.
-Asking for a handle starts a background sync (sync.py) and sends the visitor
-to a progress page, which polls the jobs table until the work is done.
+Every page reads from the database, and no request waits on Codeforces. Asking
+for a handle starts a background sync (sync.py) and sends the visitor to a
+progress page, which polls the jobs table until the work is done.
 
     GET  /                   the pitch, and the handle input
     POST /                   read the field, send them to /results/<handle>
-    GET  /results/<handle>   the table, out of the database
+    GET  /results/<handle>   the topic breakdown and the submissions table
     GET  /progress/<job>     a sync in flight, reported honestly
 
 Deliberately not here yet:
-    styling and design tokens      v0.2, and the last thing it needs
-    recommendations, the model     v0.4 onwards
+    the problemset fetch at startup    v0.4, and the recommender needs it
+    recommendations, the model         v0.4 onwards
 
 Usage:
     .venv\\Scripts\\python.exe web.py
@@ -182,6 +182,8 @@ def results(handle):
         rows=[display_row(row) for row in rows],
         total=db.count_submissions(conn, handle),
         last_synced=user["last_synced"],
+        topics=topic_rows(db.topic_breakdown(conn, handle)),
+        totals=db.problem_totals(conn, handle),
     )
 
 
@@ -250,6 +252,59 @@ def display_row(row):
         "name": row["name"],
         "url": url,
     }
+
+
+def topic_rows(rows):
+    """Turn db.topic_breakdown() rows into what the chart draws.
+
+    Same job as display_row: the template stays dumb, and the one arithmetic
+    decision in the chart -- how long each bar is -- happens somewhere it can
+    be stepped through and checked.
+
+    Bars are scaled against the LARGEST topic, not against the user's total or
+    a fixed number. Against the total, every bar would be a sliver, because a
+    problem counts under each of its three tags and the total counts it once.
+    Against a fixed number, the chart would look different for a beginner and
+    an expert for reasons that are about the scale rather than about them.
+    Relative to their own biggest topic, the shape is the same question at
+    every level: what has this person spent their time on.
+    """
+    if not rows:
+        return []
+
+    # `or 1` guards a user who has attempted problems and solved none: every
+    # bar is then zero-wide, which is correct, and the division is not.
+    widest = max(row["solved"] for row in rows) or 1
+
+    return [
+        {
+            "tag": row["tag"],
+            "solved": row["solved"],
+            "attempted": row["attempted"],
+            "rated_solved": row["rated_solved"],
+            # `is not None`, never a truth test. A mean of 0 is impossible
+            # today and a truth test that happens to work is a bug waiting for
+            # the data to change -- the same trap the rating column in
+            # results.html already carries a comment about.
+            "mean": (
+                round(row["mean_solved_rating"])
+                if row["mean_solved_rating"] is not None
+                else None
+            ),
+            # A floor, not the raw proportion. One solve against a best of 948
+            # is 0.1% of the row, which draws as a pixel or two and reads as
+            # "nothing here" -- but "you have solved one" and "you have never
+            # solved one" are exactly the distinction this chart exists to
+            # show. 1% is a visible sliver at every width, the exact figure is
+            # in the next column, and a topic with nothing solved still gets a
+            # true zero.
+            "width": (
+                0.0 if row["solved"] == 0
+                else max(1.0, round(100 * row["solved"] / widest, 1))
+            ),
+        }
+        for row in rows
+    ]
 
 
 if __name__ == "__main__":

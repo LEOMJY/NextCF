@@ -13,26 +13,118 @@
   <div class="tool">
     <h1>{{ handle }}</h1>
 
-    {# The database holds the whole history now, and the table shows the newest
-       slice of it. Saying so is the point: a list quietly cut short reads as
-       "that is all there is". #}
+    {# <time> is the element for a machine-readable instant, and it is what
+       keeps the timestamp from being broken across two lines -- ISO-8601
+       has no spaces, so a browser breaks it at the hyphens instead. #}
     <p class="meta">
-      {% if total > rows | length %}
-        Showing the {{ rows | length }} most recent of {{ total }} submissions,
-      {% else %}
-        {{ total }} submissions,
-      {% endif %}
-      {# <time> is the element for a machine-readable instant, and it is what
-         keeps the timestamp from being broken across two lines -- ISO-8601
-         has no spaces, so a browser breaks it at the hyphens instead. #}
-      last synced <time datetime="{{ last_synced }}">{{ last_synced }}</time>.
+      {{ total }} submissions, last synced
+      <time datetime="{{ last_synced }}">{{ last_synced }}</time>.
     </p>
+
+    {# The topic breakdown, above the submissions table because it is the more
+       useful of the two: the table is a log, this is a shape.
+
+       Drawn as a table with a CSS bar in one cell rather than as an SVG
+       chart -- see ADR 0001's amendment of 2026-09-15. A screen reader reads
+       this as rows of numbers, it reflows on a phone without a viewBox, and
+       it is the markup ADR 0008 describes a React component taking over.
+
+       No accent colour anywhere in here. Thirty-five bright green bars would
+       make the accent decoration, and ADR 0006 spends it on one meaning:
+       "this is good, or this is where you act". The recommendations at v0.4
+       are where it is going. #}
+    {% if topics %}
+      <section class="topics">
+        <h2>Topics</h2>
+
+        {# The honest framing, and it is short on purpose. This page is read in
+           a hurry, and the claim it must not make -- that these numbers say
+           how good somebody is -- takes one sentence to refuse. #}
+        <p class="meta">
+          What you have practised. Not yet how good you are at it.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Topic</th>
+              <th class="num">Solved</th>
+              <th class="num">Avg rating</th>
+            </tr>
+          </thead>
+          <tbody>
+            {# The bar is the row's own background, not a column. A column of
+               bars cannot survive a phone: at 375px the label and the two
+               number columns already want every pixel, so the flexible bar
+               column collapsed to two pixels and the chart disappeared. A
+               background cannot be squeezed by its neighbours, so this is the
+               same chart at every width instead of two layouts to keep in
+               step.
+
+               --bar is read by the gradient in style.css. A custom property
+               is the one thing that belongs in a style attribute: it is a
+               value, not a rule, and the rule using it stays in the
+               stylesheet where the token system lives. #}
+            {% for topic in topics %}
+              <tr style="--bar: {{ topic.width }}%">
+                <th scope="row" class="topic-name">{{ topic.tag }}</th>
+
+                <td class="num">
+                  {{ topic.solved }}<span class="of">/{{ topic.attempted }}</span>
+                </td>
+
+                <td class="num">
+                  {% if topic.mean is not none %}
+                    {{ topic.mean }}
+                    {# Only shown when the average rests on fewer problems than
+                       the user solved, which happens because about a third of
+                       the problemset has no rating. A mean over two problems
+                       and a mean over three hundred must not look alike. #}
+                    {% if topic.rated_solved != topic.solved %}
+                      <span class="of">({{ topic.rated_solved }} rated)</span>
+                    {% endif %}
+                  {% else %}
+                    &mdash;
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {# The two things about these numbers that look like mistakes and are
+           not. Somebody will add the column up; it should agree with them
+           before they have to ask. #}
+        <p class="footnote">
+          A problem carries about three tags and counts under each, so the
+          Solved column adds to more than the {{ totals.solved }} problems
+          solved
+          {%- if totals.solved_untagged %}, and {{ totals.solved_untagged }}
+          solved
+          {{- ' problem has' if totals.solved_untagged == 1 else ' problems have' }}
+          no tags at all and appear in no row
+          {%- endif -%}
+          . Average rating covers the rated problems solved in each topic; topics
+          differ in how hard their problems are for everybody, so the averages
+          are not yet comparable between rows.
+        </p>
+      </section>
+    {% endif %}
 
     {# A real account with zero submissions is a valid answer, not an error, and
        an empty table with no explanation looks like a bug. #}
     {% if not rows %}
       <p>No submissions found for this handle.</p>
     {% else %}
+      <h2>Submissions</h2>
+
+      {# The database holds the whole history, and this table shows the newest
+         slice of it. Saying so is the point: a list quietly cut short reads as
+         "that is all there is". #}
+      {% if total > rows | length %}
+        <p class="meta">The {{ rows | length }} most recent of {{ total }}.</p>
+      {% endif %}
+
       {# The wrapper is what scrolls on a narrow screen, so a wide table never
          pushes the whole page sideways. #}
       <div class="table-wrap">

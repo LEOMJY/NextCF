@@ -461,6 +461,98 @@ tbody tr:hover td {
   color: var(--accent);
 }
 
+/* ------------------------------------------- the tool: the topic breakdown
+ *
+ * A table with one cell drawn instead of written. There is no SVG and no
+ * chart library here -- see ADR 0001 and its amendment. The bar is the Solved
+ * column at the same scale on every row, which is the whole chart.
+ *
+ * NO ACCENT IN THIS BLOCK, deliberately. Thirty-five green bars would turn
+ * the accent into decoration, and ADR 0006 spends it on one meaning. The bars
+ * are --muted on a --panel track: legible, quiet, and they leave the green
+ * for the recommendations.
+ */
+
+.tool h2 {
+  font-size: var(--text-lead);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: var(--s4);
+  margin-bottom: var(--s1);
+}
+
+/* The row label. Plain `th` above is styled for a column heading -- small,
+   muted -- and a row heading is neither of those things. */
+.topic-name {
+  color: var(--ink);
+  font-size: var(--text-body);
+  font-weight: 400;
+  white-space: nowrap;
+  padding: 10px var(--s2) 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* THE BAR IS THE ROW, not a column in it.
+ *
+ * The first version gave bars a column of their own, and it collapsed to two
+ * pixels at 375px: the label and the two number columns want every pixel a
+ * phone has, so the one flexible column got what was left, which was nothing.
+ * A background cannot be squeezed by its neighbours. Same chart at every
+ * width, one mechanism to keep working.
+ *
+ * Two stops at the same position make a hard edge rather than a fade -- a
+ * gradient is being used to draw a rectangle, which is the cheapest way to
+ * get a proportional fill with no extra element. --bar comes from the row's
+ * style attribute; the rule lives here, where the tokens are.
+ *
+ * Every row's 100% is the full width of the table, so the rows are comparable
+ * without a drawn track behind them. */
+.topics tbody tr {
+  background-image: linear-gradient(
+    to right,
+    var(--panel-hover) var(--bar),
+    transparent var(--bar)
+  );
+  /* One solve against a best of 948 is 0.1% of the width, which is a pixel or
+     two and reads as a rendering fault. A minimum in the gradient is not
+     possible, so it is a floor in the value instead -- see topic_rows() in
+     web.py, which never emits a bar at all for a topic with nothing solved. */
+  background-repeat: no-repeat;
+}
+
+/* The row background is the chart, and a cell background would paint over it.
+   The submissions table keeps its hover because a hundred rows of log need
+   the help; these rows are short, already banded by their own bars, and not
+   clickable yet. When they become clickable, hover comes back meaning
+   something. */
+.topics tbody tr:hover td,
+.topics tbody tr:hover th {
+  background: transparent;
+}
+
+/* Columns of figures line up only with tabular figures, and right alignment
+   is what makes 9 and 393 readable as magnitudes at a glance. */
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* The secondary half of a number -- "/402", "(2 rated)". Same size, lower
+   contrast, so the eye takes the first figure and can still reach the
+   second. */
+.of {
+  color: var(--muted);
+}
+
+.footnote {
+  color: var(--muted);
+  font-size: var(--text-small);
+  max-width: var(--measure);
+  margin-top: var(--s2);
+}
+
+
 /* ----------------------------------------------------------- progress page */
 
 .progress-cursor {
@@ -534,5 +626,33 @@ tbody tr:hover td {
 
   .hero {
     padding-top: var(--s4);
+  }
+
+  /* "constructive algorithms" is 23 characters, which is most of a phone's
+     width in a mono face at body size. The whole table drops a step rather
+     than only the label, so the columns still look like one table. */
+  .topics table {
+    font-size: var(--text-small);
+  }
+
+  .topic-name {
+    font-size: var(--text-small);
+    white-space: normal;
+  }
+
+  /* "1776 (926 rated)" held on one line is 141px, and three columns of that
+     pushed the page 18px wider than a 351px screen -- a sideways scrollbar
+     under a chart whose whole point is a horizontal comparison. Letting it
+     break at its own space costs a second line on a few rows and takes the
+     column to about 100px. "948/964" has no space in it and stays put. */
+  .topics .num {
+    white-space: normal;
+  }
+
+  /* One step down, not a new value. Three gutters at 16px is 48px of a phone's
+     width spent on nothing, and this is the surface with the least room. */
+  .topics td,
+  .topic-name {
+    padding-right: var(--s1);
   }
 }

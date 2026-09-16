@@ -104,3 +104,54 @@ defaults in the imperative is indistinguishable from a real constraint, and gets
 written into the spec as one. Design decisions belong to the author. Engineering
 consequences — that a system must not be broken once chosen, that budgets need a
 source — are the part that is actually being advised on.
+
+## Amendment — 2026-09-15: the chart is a table, not an SVG
+
+Decision 3 above says "Server-rendered SVG for the topic-breakdown chart. No
+chart library." It was built at v0.4 with no SVG in it: an HTML table, one row
+per topic, with the bar drawn as a CSS gradient behind the row.
+
+**The second half of that decision is the half that mattered, and it stands.**
+No chart library, no canvas, no runtime dependency — the reasons this ADR gave
+for rejecting Chart.js are all still true, and every one of them is satisfied
+by a table. Jinja already has the data, nothing is fetched, it degrades to
+plain rows, and it renders in a screenshot. What the ADR actually argued was
+against Chart.js; SVG was named as the alternative rather than compared with
+one.
+
+**Where the table is better, and it is not close:**
+
+- **A screen reader reads it.** Thirty-nine rows of numbers with row headings
+  need no ARIA work at all. The same chart in SVG is a picture that needs a
+  label written for every bar, and those labels rot the first time the query
+  changes.
+- **It reflows.** Verified at 320px, 375px and 1085px: no sideways scroll, and
+  the bars still span the full width at each. An SVG with a viewBox scales its
+  text down instead, so a phone gets a chart it cannot read.
+- **It is the markup ADR 0008 already describes.** "A table is drawn by Jinja
+  first and the component takes it over" is that ADR's own sentence about how a
+  React island mounts. The chart arrives at v0.5 wanting exactly that.
+
+Spec §7 said "the topic breakdown is the one thing a template cannot give us."
+That was simply wrong, and it has been corrected. A proportional fill is one
+`linear-gradient` with two stops at the same position.
+
+**The bar's form was decided by a failure, not by taste.** The first version
+gave the bars a column of their own. At 375px that column collapsed to two
+pixels — the topic label and the two number columns want every pixel a phone
+has, and the flexible column gets what is left, which was nothing. A row
+background cannot be squeezed by its neighbours, so the failure is structurally
+impossible rather than fixed. There is one mechanism at every width instead of
+two layouts to keep in step.
+
+**What would bring SVG back:** a chart whose geometry is not rectangles. The
+calibration plot §9 wants, or a distribution curve, cannot be done with
+gradients and should be SVG — still hand-written, still no library. This
+amendment narrows decision 3 to the chart it was written about, and does not
+touch the rule against chart libraries.
+
+**No accent colour in the chart**, which is ADR 0006 rather than this one, but
+it was decided here in practice: thirty-nine bright green bars would make the
+accent decoration, and ADR 0006 spends it on one meaning. The bars are `--muted`
+on the canvas, and a check fails if any rule naming a chart element reaches for
+`--accent`.

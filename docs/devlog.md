@@ -3060,3 +3060,103 @@ job is to say which topics you are good at.
 
 The chart itself, and the rating-only baseline with the problemset fetch that
 feeds it.
+
+---
+
+## 2026-09-15 — The topic breakdown, on the page
+
+`/results/<handle>` now opens with the breakdown and the submissions table below
+it, because the table is a log and the breakdown is a shape.
+
+### It is a table, not an SVG
+
+ADR 0001 said "server-rendered SVG for the topic-breakdown chart", and §7 said
+"the topic breakdown is the one thing a template cannot give us". The second
+sentence is just wrong — a proportional fill is one `linear-gradient` with two
+stops at the same position — and the first turned out to be the less important
+half of its own decision.
+
+What that ADR actually argued was against a chart library: no runtime
+dependency, no canvas, Jinja already has the data, it has to survive with no
+JavaScript and appear in a screenshot. A table satisfies every one of those. So
+the rule against chart libraries stands and the SVG half is narrowed to charts
+whose geometry is not rectangles — the calibration plot §9 wants will be SVG,
+hand-written, still with no library.
+
+Three things the table does better, and none of them are close. A screen reader
+reads thirty-nine rows of numbers with no ARIA written for it. It reflows —
+checked at 320, 375 and 1085 pixels. And it is literally the markup ADR 0008
+describes a React island mounting onto: "a table is drawn by Jinja first and the
+component takes it over."
+
+ADR 0001 amended, §7 corrected.
+
+### The bar's shape was decided by a failure
+
+First version: the bar had a column of its own, an 8px track with a fill inside
+it. Fine on a laptop. At 375px the track measured **2 pixels**.
+
+The arithmetic is not subtle. The label wants 125px, `948/964` wants 71, and
+`1776 (926 rated)` wants 141 because it was told not to wrap — 337 of the 343
+a phone has. The bar column was the flexible one, so it got what was left,
+which was nothing. Adding a minimum would have pushed the page into a sideways
+scroll under a chart whose entire point is a horizontal comparison.
+
+So the bar stopped being a column and became the row's own background, a
+gradient with a hard stop at the percentage. A background cannot be squeezed by
+its neighbours. That is not a fix, it is the failure being made impossible, and
+it collapses two layouts into one mechanism that works at every width. The
+narrow-screen rules that remain are two lines: let the rating cell break at its
+own space, and drop the column gutters one step to `--s1`.
+
+Verified at 320px, the narrowest phone worth worrying about: no sideways
+scroll, the longest bar spans all 288 available pixels.
+
+### A floor, and why it is honest
+
+One solve against a best of 948 is 0.1% of the row — a pixel, which reads as a
+rendering fault. But "you have solved one" and "you have never solved one" is
+exactly the distinction this chart exists to draw, so the width has a floor of
+1%, and a topic with nothing solved still gets a true zero and no bar at all.
+Exaggerating 0.1% to 1% is the more truthful rendering, not the less: the exact
+figure is in the next column, and the bar's job is shape.
+
+### No green anywhere in it
+
+Thirty-nine accent-coloured bars would turn the accent into decoration, and ADR
+0006 spends it on one meaning — this is good, or this is where you act. The
+bars are `--muted` on the canvas, and the accent is being saved for the
+recommendations.
+
+That is the single most tempting edit anybody will ever make to this
+stylesheet, so it has a check: any rule whose selector names a chart element and
+reaches for `--accent` fails it.
+
+### What the page is allowed to claim
+
+Under the heading, one line: *What you have practised. Not yet how good you are
+at it.* Under the chart, the two things that look like mistakes and are not —
+the Solved column adds to more than the problems solved, because a problem
+carries about three tags; and some solved problems have no tags at all, so no
+row can account for them. tourist has 162 of those.
+
+The footnote also says the per-topic averages are not comparable between rows
+yet. Writing "you are weak at dp" from these numbers would be the project
+claiming the thing it exists to measure, three milestones early.
+
+### Smaller
+
+The header said `v0.2` while v0.3 was finished. Fixed. A stale version number
+on a live page is the same class of tell as an unhandled error.
+
+### Counted
+
+127 checks, 12 new. The two that earn their place are the bar widths — a chart
+that is wrong is worse than no chart, because it is wrong confidently — and the
+accent rule.
+
+### Next
+
+The rating-only baseline recommender, with the problemset fetch at startup that
+ADR 0010 says it needs, and which the chart also wants before it can say "you
+have never attempted flows".
