@@ -878,6 +878,14 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   (3) *What is tested: submissions or problems.* Three wrong answers and an
   accepted one are four submissions and one problem, and NextCF recommends
   problems. Tied to "what counts as solved".
+  *Evidence on (1), measured 2026-09-18:* time changes the answer. The
+  baseline fitted on attempts before 2025 and scored on the million from 2025
+  on had an average calibration gap of 3.4 points, all in one direction,
+  against 2.0 on the data it was fitted to; by year of attempt the error
+  drifts steadily from 2016 to 2026. A random split mixes every year into both
+  halves and would have reported the 2.0. A split by date reports what a model
+  in use actually faces. (The 2025 cutoff was for the demonstration, not a
+  proposal.)
   Decide at v0.5, with the harness.
 - **Where do visit records live?** §9 needs to know who came back, and on the
   free instance nothing written survives a spin-down (§7). A paid disk keeps

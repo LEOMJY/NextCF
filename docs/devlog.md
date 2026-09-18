@@ -3285,3 +3285,92 @@ bundle will be guarded.
 
 The author's decision on the event and the target. Then React takes over the
 topic chart, which is where ADR 0008 said it would start.
+
+---
+
+## 2026-09-18 — How wrong the baseline is, and in which directions
+
+Measured to answer two questions: how far the baseline's probabilities are from
+what really happens, and what a better model would have to know. Nothing in the
+code changed.
+
+### What a log loss number means
+
+| predictor | log loss |
+|---|---|
+| know nothing — always say 58.9%, the overall first-try rate | 0.6773 |
+| Elo's formula, unfitted | 0.9135 |
+| the fitted baseline | 0.6392 |
+
+Elo is worse than knowing nothing. Log loss punishes confidence that turns out
+wrong far harder than it rewards confidence that turns out right, and Elo says
+1% about attempts that succeed 37% of the time. That is ADR 0012's argument in
+one number.
+
+The more sobering line is the gap between the first and third rows: knowing the
+rating gap takes log loss down by 5.6%. Most of what decides a first attempt is
+not in the rating. That is the headroom the v0.6 model has, and it also says
+what a realistic win looks like — a few hundredths, not a halving.
+
+### In-sample flatters it, and time is why
+
+Calibration — group attempts by what the baseline predicted, compare with what
+happened — measured on the data it was fitted to: an average gap of 2.0
+percentage points.
+
+Then fitted on attempts before 2025 only, and scored on the 1,004,413 from 2025
+on, which it never saw: 3.4 points, and every band had the same sign. The model
+under-predicted everything after its cutoff, by as much as 11.9 points on the
+hardest problems. By year of attempt the error drifts steadily, from 6 to 9
+points too optimistic in 2016–2018 to 3 points too pessimistic in 2026.
+
+This is illustration, not §9's protocol — the cutoff was picked for the
+demonstration. But it is evidence for §12's split question: a random split would
+have reported the flattering 2.0, because it mixes every year into both halves.
+A split by time reports what happens to a model that is used after it was
+fitted, which is the only way it will ever be used.
+
+The likeliest cause is that a rating lags a skill that is changing. Someone
+improving quickly solves above their rating until the next contest catches it
+up, and the users in this dataset were drawn for being active now. The rating
+system itself has also changed over the years — ADR 0009 already notes the
+step-by-step scheme new accounts get today. Both are hypotheses. Knowledge
+tracing (§11) exists for the first.
+
+### The errors have structure
+
+Mean prediction against real rate, split by things the baseline cannot see:
+
+| | predicted | real | gap |
+|---|---|---|---|
+| in contest | 63.6% | 60.9% | −2.7 |
+| in practice | 54.4% | 56.7% | +2.3 |
+| users rated 1000–1199 | 54.0% | 57.9% | +3.9 |
+| users rated 1800–1999 | 61.5% | 59.8% | −1.7 |
+| constructive algorithms | 59.6% | 53.1% | **−6.5** |
+| binary search | 53.5% | 49.8% | −3.7 |
+| dp | 52.6% | 53.1% | +0.5 |
+
+Random error would scatter around zero whichever way the attempts were grouped.
+This does not: contest attempts fail more than their rating says, practice
+attempts succeed more, and a constructive problem is six and a half points
+harder to get right first time than its rating suggests — for everybody.
+
+That last row is the first direct evidence for §3's claim that topics carry
+information rating does not. It is a property of the topic, before anything is
+known about a particular user's skill in it. The per-user part — that one
+person is weak at constructive and another is not — is what the model has to
+find next.
+
+### Two kinds of wrong
+
+Worth separating before anyone tries to "minimise the gap". Calibration error is
+systematic: the baseline says 53% for a group that succeeds 50% of the time,
+and that can be fixed. The other kind cannot: one attempt succeeds or it does
+not, so even a perfect model saying 60% is "wrong" on four attempts in ten.
+Log loss has a floor above zero, set by how unpredictable a single attempt
+genuinely is, and nothing gets below it.
+
+And the fit is already the best curve of its shape — that is what maximum
+likelihood means. Doing better needs more information in, or a different shape,
+not a better fit of this one.
