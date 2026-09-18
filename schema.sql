@@ -41,8 +41,12 @@ CREATE TABLE IF NOT EXISTS users (
     -- known", which is not the same as 0.
     cf_rating    INTEGER,
 
-    -- Difficulty target from spec section 1. Nothing sets it before v0.4, so
-    -- it is 0.70 on every row until then.
+    -- Difficulty target from spec section 1. NOT READ since 2026-09-18: the
+    -- product default moved to 0.50 and lives in model.DEFAULT_TARGET (ADR
+    -- 0012), because nobody can choose a target yet, and changing this
+    -- default on an existing database means rebuilding this table, which
+    -- submissions refers to. It comes back into use with the target control
+    -- ADR 0008 plans, and that is the change that migrates it.
     target_prob  REAL    NOT NULL DEFAULT 0.70,
 
     -- ISO-8601 UTC text, e.g. "2026-09-09T14:03:00Z". SQLite has no date

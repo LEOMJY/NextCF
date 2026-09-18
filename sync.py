@@ -76,8 +76,20 @@ def run_sync(handle, job_id):
 
             submissions = fetch_history(canonical, job_id, conn)
 
+            # The rating history too -- a third request, and the reason a sync
+            # takes two seconds longer than it did. The model predicts each
+            # past attempt from the rating its author had AT THE TIME (ADR
+            # 0009, 0014); with only today's rating, somebody who climbed from
+            # 1200 to 1600 would have their 1200-era failures read as a
+            # 1600-rated user failing, be judged weaker than they are, and be
+            # recommended problems that are too easy. collect.py has always
+            # fetched this; the website now does the same thing for the same
+            # reason.
+            changes = api_client.fetch_rating_changes(canonical)
+
             # One call, one transaction, all or nothing. ADR 0004.
-            db.save_sync(conn, canonical, user.get("rating"), submissions)
+            db.save_sync(conn, canonical, user.get("rating"), submissions,
+                         rating_changes=changes)
 
         except RuntimeError as exc:
             # Codeforces answered and refused -- nearly always a handle that

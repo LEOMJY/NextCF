@@ -342,16 +342,28 @@ def recommendation_view(conn, user):
     if db.problemset_size(conn) == 0:
         return {"state": "not_ready"}
 
-    target = user["target_prob"]
-    picks = model.recommend(
-        db.recommendation_pool(conn, user["handle"]), user["cf_rating"], target
-    )
+    # model.DEFAULT_TARGET, not user["target_prob"] -- see the comment on the
+    # constant for why the column is not read yet.
+    target = model.DEFAULT_TARGET
+    pool = db.recommendation_pool(conn, user["handle"])
+
+    # The topic model when topic_model.json exists, the rating-only baseline
+    # when it does not. Never silently: `source` goes to the page, which says
+    # in words which of the two chose these problems, because they are
+    # different claims -- one is about everybody at a rating, the other about
+    # this person.
+    picks = model.topic_recommend(conn, user["handle"], user["cf_rating"], pool, target)
+    source = "topic"
+    if picks is None:
+        picks = model.recommend(pool, user["cf_rating"], target)
+        source = "rating"
     if not picks:
         return {"state": "exhausted"}
 
     baseline = model.current_baseline()
     return {
         "state": "ok",
+        "source": source,
         "target": round(target * 100),
         # The rating the curve puts at exactly the target, for the sentence
         # that explains the list. Clamped to the problemset's real range:

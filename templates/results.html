@@ -39,17 +39,29 @@
            rating -- around 2800", which reads as if 2800 were the visitor's
            own rating, so the problem rating now comes first and "your rating"
            only ever means theirs. #}
-        <p class="meta">
-          Problems rated around {{ recs.centre }}, where
-          {% if recs.event == "first_try" %}
-            a first submission from somebody at your rating is accepted about
-            {{ recs.target }}% of the time.
-          {%- else %}
-            somebody at your rating solves them in the end about
-            {{ recs.target }}% of the time.
-          {%- endif %}
-          Rating only, so everybody at your rating is shown these five.
-        </p>
+        {% if recs.source == "topic" %}
+          {# The topic model's claim is about THIS person, and the sentence
+             says what it was worked out from -- the three things the
+             evaluation found carry the information (ADR 0014). #}
+          <p class="meta">
+            Chosen for you: the chance your first submission is accepted, worked
+            out from your own history, how 4,000 other users actually did on
+            each problem, and how hard its topics are. Aiming at
+            {{ recs.target }}%.
+          </p>
+        {% else %}
+          <p class="meta">
+            Problems rated around {{ recs.centre }}, where
+            {% if recs.event == "first_try" %}
+              a first submission from somebody at your rating is accepted about
+              {{ recs.target }}% of the time.
+            {%- else %}
+              somebody at your rating solves them in the end about
+              {{ recs.target }}% of the time.
+            {%- endif %}
+            Rating only, so everybody at your rating is shown these five.
+          </p>
+        {% endif %}
 
         <table class="rec-table">
           <thead>
