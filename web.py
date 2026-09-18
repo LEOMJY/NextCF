@@ -10,12 +10,14 @@ progress page, which polls the jobs table until the work is done.
                              the submissions table
     GET  /progress/<job>     a sync in flight, reported honestly
 
-The recommendations come from the rating-only baseline in model.py, drawing
-on the problemset this program fetches when it starts (ADR 0010).
+The recommendations come from the topic model (ADR 0014) when
+topic_model.json is present, and from the rating-only baseline when it is not;
+the page says which. Both draw on the problemset this program fetches when it
+starts (ADR 0010).
 
 Deliberately not here yet:
-    the model that knows about topics    v0.6
-    re-fetching the problemset nightly   v0.7, with the scheduler
+    /how, which shows the section 9 number   next
+    re-fetching the problemset nightly       v0.7, with the scheduler
 
 Usage:
     .venv\\Scripts\\python.exe web.py
@@ -364,6 +366,10 @@ def recommendation_view(conn, user):
     return {
         "state": "ok",
         "source": source,
+        # A rating outside what the model was fitted on is answered, but as an
+        # extrapolation, and the page says so -- see model.outside_range.
+        "extrapolated": source == "topic" and model.outside_range(
+            model.current_topic_model(), user["cf_rating"]),
         "target": round(target * 100),
         # The rating the curve puts at exactly the target, for the sentence
         # that explains the list. Clamped to the problemset's real range:

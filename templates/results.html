@@ -49,6 +49,16 @@
             each problem, and how hard its topics are. Aiming at
             {{ recs.target }}%.
           </p>
+          {# Said plainly rather than hidden: the model learned from users
+             rated roughly 350 to 2,370 at the time of their attempts, and
+             beyond that its numbers are a guess with the same confidence
+             as its measurements -- unless the page says otherwise. #}
+          {% if recs.extrapolated %}
+            <p class="footnote">
+              Your rating is outside the range the model learned from, so these
+              chances are an extrapolation and less reliable than they look.
+            </p>
+          {% endif %}
         {% else %}
           <p class="meta">
             Problems rated around {{ recs.centre }}, where

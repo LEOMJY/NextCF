@@ -611,6 +611,14 @@ class TopicModel:
         self.beta = 0.0
         self.w = [0.0] * self._n_extra()
         self.tau, self.d, self.b, self.s = {}, {}, {}, {}
+        # Guard rails for the SHIPPED model only; None while fitting and
+        # evaluating, so every number measured is unaffected. A straight line
+        # is safe inside the data it was fitted to and nowhere else: the level
+        # column weighs about -0.1 per 100 rating points, fitted on users
+        # 99.9% of whom were below 2373, and at tourist's 3528 it would add
+        # -1.95 to the log-odds -- a thousand points of pure extrapolation.
+        self.level_range = None      # (lowest, highest) level, in hundreds
+        self.trend_until = None      # latest moment the time line is followed
 
     def _n_extra(self):
         return ((len(KNOTS) if "shape" in self.extras else 0)
@@ -631,7 +639,10 @@ class TopicModel:
                     out.append((col, g - knot))
                 col += 1
         if "level" in self.extras:
-            out.append((col, data.r[i]))
+            level = data.r[i]
+            if self.level_range is not None:
+                level = min(max(level, self.level_range[0]), self.level_range[1])
+            out.append((col, level))
             col += 1
         if "experience" in self.extras:
             if data.n[i]:
@@ -643,7 +654,10 @@ class TopicModel:
                 out.append((col + position - 1, 1.0))
             col += N_POSITIONS - 1
         if "trend" in self.extras:
-            out.append((col, (data.t[i] - TREND_ORIGIN) / YEAR))
+            when = data.t[i]
+            if self.trend_until is not None:
+                when = min(when, self.trend_until)
+            out.append((col, (when - TREND_ORIGIN) / YEAR))
         return out
 
     # ------------------------------------------------------------ fitting
@@ -1168,6 +1182,9 @@ def topic_recommend(conn, handle, current_rating, pool, target, count=5, now=Non
 
     m = TopicModel(fitted["groups"], fitted["lam"], extras=fitted["extras"])
     m.gamma, m.beta, m.w = list(fitted["gamma"]), fitted["beta"], list(fitted["w"])
+    if fitted.get("level_range"):
+        m.level_range = tuple(fitted["level_range"])
+    m.trend_until = fitted.get("trend_until")
     for name, value in fitted["tau"].items():
         key = NO_TAG if name == NO_TAG_NAME else tag_index.get(name)
         if key is not None:
@@ -1195,6 +1212,19 @@ def topic_recommend(conn, handle, current_rating, pool, target, count=5, now=Non
     ]
 
 
+def outside_range(fitted, rating):
+    """Is this rating outside the levels the model was fitted on?
+
+    The page says so when it is. The model still answers -- its level term is
+    held at the nearest edge -- but the answer is an extrapolation, and a
+    3500-rated visitor should be told that rather than handed five numbers
+    that look as solid as everybody else's."""
+    if not fitted or not fitted.get("level_range"):
+        return False
+    level = (rating - 1500) / SCALE
+    return not fitted["level_range"][0] <= level <= fitted["level_range"][1]
+
+
 def fit_topic(config):
     """Fit `config` on ALL of dataset.db and return what topic_model.json holds.
 
@@ -1219,11 +1249,20 @@ def export_fitted(m, data, halflife):
     holds it. The users' own parameters are left out on purpose: a visitor is
     folded in from their own history, never looked up."""
     tag_name = lambda k: NO_TAG_NAME if k == NO_TAG else data.tag_names[k]
+    # The guard rails (see TopicModel.__init__): the middle 99.8% of the
+    # levels the model was fitted on, and half a year past the newest attempt
+    # for the time line -- monthly refits keep that to one month in practice,
+    # and if they stop, predictions stop drifting instead of walking off.
+    levels = sorted(data.r)
+    level_range = [levels[int(0.001 * (len(levels) - 1))], levels[int(0.999 * (len(levels) - 1))]]
+    trend_until = max(data.t) + 183 * 86400.0
     return {
         "groups": sorted(m.groups),
         "lam": m.lam,
         "extras": list(m.extras),
         "halflife": halflife,
+        "level_range": level_range,
+        "trend_until": trend_until,
         "gamma": m.gamma,
         "beta": m.beta,
         "w": m.w,

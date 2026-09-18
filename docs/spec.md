@@ -41,6 +41,19 @@ Nothing found so far models an individual user's per-topic skill and picks
 problems against it. Static problem "ladders" exist, but they are the same
 list for everybody and most are unmaintained.
 
+*Measured 2026-09-18, and it changes what can be claimed here:* a user's
+skill in each topic, estimated from their own history, is worth +0.0002 of log
+loss — real, and far below everything else the model knows (ADR 0014). What
+does carry the information is each **problem's** own first-try record,
+measured from the crowd (+0.024), the user's level and ability beyond their
+rating, and each **topic's** difficulty for everybody. The likeliest reason the
+per-user topic signal is faint is §8's fourth assumption: people choose their
+own problems, so a weakness hides inside the choosing. A recommender that
+chooses for them is the one setting where it could surface, and it is measured
+again once recommendations are acted on. Until then, the page does not tell
+anyone they are weak at a topic, and the differentiator below stands on the
+number in §9, which is met.
+
 **The differentiator is measurement, and it is the only one.** Recommenders in
 this space are not hard to build, and several have been. What none of them
 publish is evidence that their recommendations beat sorting the problemset by
@@ -62,10 +75,13 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   sync.py         fetch one user's history as a background job, all or nothing
   collect.py      bulk collection of ~4000 users, run manually
   model.py        solve-probability prediction: the rating-only baseline
-                  (v0.4, ADR 0012), then the topic model (v0.6)
-  baseline.json   the baseline's two fitted numbers, committed; refit by
-                  `model.py fit-baseline`, checked against dataset.db
-  evaluate.py     the harness — train/test split, scoring
+                  (ADR 0012) and the topic model (ADR 0014), and the
+                  fold-in that fits a visitor into it
+  baseline.json   the baseline's two fitted numbers, committed
+  topic_model.json  the topic model's crowd part, 244 KB, committed; refit
+                  monthly by `model.py fit-topic` from a re-collected dataset
+  evaluate.py     the harness — date split, fold-in scoring, §9's number
+                  (ADR 0013)
   web.py          routes and pages
   scheduler.py    nightly re-sync of users already known
 ```
@@ -658,6 +674,12 @@ Written down because they are guesses, not facts, and should be revisited.
 4. **Public Codeforces histories are representative** of the users this is
    aimed at. Selection bias is likely: harder problems are attempted mostly by
    stronger users, so naive difficulty estimates will be biased.
+   *Seen twice since.* Elo's curve says 1% where 37% of first attempts succeed,
+   because people attempt hard problems when they already have a chance (ADR
+   0012). And per-user topic skill is nearly invisible in the data (ADR 0014),
+   most likely because people steer around their weak topics. Both are the
+   selection this assumption named. Recommended problems are chosen FOR people,
+   so they are the first data this project will have without it.
 
 ## 9. How we will know it worked
 
@@ -667,6 +689,20 @@ v1.0 is done when all three hold:
    than the rating-only baseline**, and that number is written down — for each
    of the five rating strata in ADR 0009, and as one total weighted by each
    stratum's real share of the audience.
+   **Met, 2026-09-18**, on the 527,388 first attempts of 2026, scored once
+   under the protocol in ADR 0013:
+
+   | | baseline | model |
+   |---|---|---|
+   | weighted total | 0.6535 | **0.5989** (8.4% lower) |
+   | 1000–1199 | 0.6684 | 0.6043 |
+   | 1200–1399 | 0.6540 | 0.6018 |
+   | 1400–1599 | 0.6416 | 0.5913 |
+   | 1600–1799 | 0.6328 | 0.5906 |
+   | 1800–1999 | 0.6225 | 0.5824 |
+
+   Calibration gap 1.6 points against the baseline's 4.8. What each part of
+   the model is worth, and what the result says about topics, is in ADR 0014.
    The baseline is a logistic curve in the rating gap, **fitted** to the data
    rather than Elo's own formula, which measured several times too steep and
    would be beaten by anything (ADR 0012). Two rules follow for the harness.
@@ -711,9 +747,9 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 | v0.1 | Enter a handle, see your submissions. Deployed. | end Aug |
 | v0.2 | Background job with a progress page; caching. Design tokens and base stylesheet — see §7.1 | early Sep |
 | v0.3 | Bulk collection into `dataset.db`, on the author's machine: 4000 users stratified by rating, with histories and rating changes — rate limited, resumable | mid Sep |
-| v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart | late Sep |
-| v0.5 | Evaluation harness; the baseline number written down | early Oct |
-| v0.6 | First real model (logistic / Rasch), scored against the baseline; `/how` | late Oct |
+| v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart. **Done 09-17**, except React taking the chart over — moved behind the model | late Sep |
+| v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
+| v0.6 | First real model, scored against the baseline; `/how`. **Model done 09-18**, §9's first criterion met (ADR 0014); `/how` and `collect.py`'s monthly refresh still to come | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts | early Nov |
 | v0.8 | Design polish pass and unhandled states — see §7.1 | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
@@ -721,6 +757,13 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 | v2.0 | See §11 | spring |
 
 Dates assume 10–15 hours a week and include no slack. They will slip.
+
+*Reordered 2026-09-18.* The author put the model's accuracy first, as the
+foundation the recommender stands on, so v0.5's harness and v0.6's model were
+built before the React work v0.4 still owed. That follows this document's own
+priorities — §7.1 says that if the budget overruns, design stops, not §9 — and
+the React island (ADR 0008) now arrives with the chart's interactive version
+rather than before it.
 
 ## 11. v1.5 and v2.0 candidates
 
@@ -836,57 +879,14 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
 
 - **Cold start.** What is shown to somebody with 3 submissions? Probably fall
   back to the rating-only baseline. Decide at v0.6.
-- **What counts as "solved"?** Solved on the first try, or after five attempts
-  and an editorial? The API does not distinguish. Affects everything. Decide at
-  v0.5: the harness cannot label a single test attempt without an answer.
-  **Arrived early, at v0.4,** because the recommender cannot pick a problem
-  without it: the event and the target probability together decide which
-  problems are shown. Measured over 1,578,181 first attempts (ADR 0012):
-  "first submission accepted" runs from 37% to 83% across the rating range;
-  "eventually accepted" runs from 82% to 99%, so it barely depends on
-  difficulty and a 70% target does not exist on it. *Provisionally* "first
-  try", target unchanged — the recommender runs on that, and the page says so
-  in words. The author's decision is still open, and it has two parts: the
-  event, and whether 70% stays the target once it is known to mean problems
-  about 500 points below your rating.
-  The v0.4 topic breakdown uses "any submission on this problem was accepted",
-  and that does **not** pre-empt this. They are two different questions. The
-  breakdown answers "what has this person done", where a problem solved on the
-  sixth try is still done and a visitor comparing the page against their own
-  Codeforces profile expects it to be counted. The harness answers "what
-  should the model have predicted about this attempt", where the sixth try and
-  the first are different events. Whatever is decided here changes the second
-  one; the first stays as it is unless there is a separate reason to move it.
-- **How is the data split into what the model learns from and what it is
-  tested on?** Proposed by the author: hold back each user's most recent
-  submissions — say the last 500 of 2000 — let the model learn from the
-  earlier ones, and test whether it predicts the recent ones: what the user
-  could do before, against what they do now. A split by time is the right
-  shape, because it asks exactly what NextCF asks — given your past, what will
-  you solve next — and it needs the rating history ADR 0009 collects, since a
-  recent attempt may only be predicted from the rating the user had then.
-  Three details to settle:
-  (1) *Per user, or one date for everyone.* Holding back each user's own last
-  submissions puts one user's test period alongside another user's learning
-  period, so a new problem's difficulty can be learned from other people
-  attempting it at the same time as the attempts being tested. A single cutoff
-  date — learn from everything before it, test everything after — matches the
-  day the model goes live, when nothing later is known. It costs the users
-  with nothing after the date.
-  (2) *A fixed count or a share.* "The last 500" does not exist for a user with
-  60 submissions.
-  (3) *What is tested: submissions or problems.* Three wrong answers and an
-  accepted one are four submissions and one problem, and NextCF recommends
-  problems. Tied to "what counts as solved".
-  *Evidence on (1), measured 2026-09-18:* time changes the answer. The
-  baseline fitted on attempts before 2025 and scored on the million from 2025
-  on had an average calibration gap of 3.4 points, all in one direction,
-  against 2.0 on the data it was fitted to; by year of attempt the error
-  drifts steadily from 2016 to 2026. A random split mixes every year into both
-  halves and would have reported the 2.0. A split by date reports what a model
-  in use actually faces. (The 2025 cutoff was for the demonstration, not a
-  proposal.)
-  Decide at v0.5, with the harness.
+  *Half answered by the model, 2026-09-18.* Somebody with three rated attempts
+  is folded in like anybody else, and the regularisation does the right thing
+  on its own: with little evidence their personal terms stay near zero, so
+  they are predicted as an average user at their rating, level and experience,
+  on problems whose difficulty the crowd has measured. No special case needed.
+  The half still open is a visitor with **no rating** at all, who has neither
+  the gap nor the level the model is built on; the page tells them so and
+  recommends nothing.
 - **Where do visit records live?** §9 needs to know who came back, and on the
   free instance nothing written survives a spin-down (§7). A paid disk keeps
   SQLite and costs money every month; a hosted database costs nothing on some
@@ -895,11 +895,6 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   visitor's stored history still exists to be shown or topped up — see the
   queue question below. Decide at v0.7, before anyone who is not the author
   uses the site.
-- **How does what the model learned reach the server?** The model is fitted on
-  the author's machine from `dataset.db`, which never goes to the server. What
-  the site needs is the result — per-problem and per-topic numbers, small
-  compared to the histories — and it has to arrive in a way that survives a
-  restart. Decide at v0.6, when there is a result to move.
 - **What does the tenth visitor in a queue see?** The Codeforces API
   documentation says requests are allowed "at most 1 time per two seconds"; an
   API key only unlocks private data, not a higher limit. Every request from the
@@ -941,13 +936,12 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   saying OK. A full fetch gets both right for free.
   Whichever is chosen, the progress page has to keep saying something true while
   a job waits for its turn. Decide at v0.7, with error handling.
-- **What happens to gym submissions?** 9.1% of the dataset's submissions
-  (353,922) are to gym problems — contest ids from 100000 up, 16,874 problems,
-  attempted by 2,142 of the 4,000 users. Gym problems have no Codeforces
-  rating and are never in the problemset, so the rating-only baseline cannot
-  score them and NextCF cannot recommend them. They may still say something
-  about a user's skill. Excluding them from the §9 evaluation is the simple
-  answer and has to be stated, not done silently. Decide at v0.5.
+  *Changed 2026-09-18:* every sync is now **three** requests — `user.info`, the
+  whole history, and the rating history, which the model needs to judge each
+  past attempt at the rating its author had then (ADR 0014). Ten visitors
+  arriving together is 30 requests, a minute for the last, against the 40
+  seconds (d) arrived at. Accuracy was chosen over the 20 seconds. The
+  arithmetic in (a) still holds, because every job is still the same size.
 - **Does a utility-class framework ever become worth it?** Settled for now as
   no — the styling system is the tokens in `static/style.css`, and React brings
   none of its own (ADR 0008, amended 2026-09-15). The reason is proportion
@@ -1041,3 +1035,33 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   start ADR 0003 already accepted. Component tests are Vitest and arrive at
   v0.7, where ADR 0008 already put them. See
   `docs/decisions/0011-bundle-built-locally.md`.
+- **What counts as "solved"?** *(asked 08-11, due at v0.5, arrived at v0.4,
+  answered 09-18.)* **The first submission being accepted.** "Eventually
+  accepted" runs from 82% to 99% across the whole rating range -- people keep
+  going until a problem falls -- so it can be neither predicted usefully nor
+  recommended from, and a 70% target does not exist on it. The recommender aims
+  at a **50%** first-try accept: about 200 points above the user under the
+  baseline, where ordinary advice puts practice; solved eventually about 93% of
+  the time; and the attempt that tells the model most about the person making
+  it. The topic breakdown still counts any accepted submission, because it
+  answers a different question -- what someone has done, not what the model
+  should have predicted. ADR 0012, ADR 0013.
+- **How is the data split into what the model learns from and what it is
+  tested on?** *(asked 08-11, answered 09-18, at v0.5 as scheduled.)* By date,
+  one cutoff for everybody: train before 2025-07-01, validation to the end of
+  2025 for every choice, test from 2026-01-01, scored once. The unit is the
+  first attempt per (user, canonical problem). A random split was measured to
+  flatter a model by more than a point of calibration, because the error drifts
+  by year. A user's own terms are refitted month by month from their past
+  only, the way the website does it. ADR 0013.
+- **How does what the model learned reach the server?** *(asked 09-13, due at
+  v0.6, answered 09-18.)* As `topic_model.json`: the crowd's part of the model,
+  keyed by tag name and problem id, 244 KB, committed, refitted monthly. A
+  visitor's own part is never stored; it is fitted from their history on each
+  visit. Answered for this model, not for any model -- one too large for a
+  repository would reopen it. ADR 0014.
+- **What happens to gym submissions?** *(asked 09-15, answered 09-18, at v0.5
+  as scheduled.)* Excluded from section 9, and said so: gym problems have no
+  rating, so the baseline cannot score them, and they are never recommended.
+  Whether they say something about a user is a question for a later model.
+  ADR 0013.

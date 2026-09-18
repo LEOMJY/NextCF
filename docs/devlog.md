@@ -3374,3 +3374,182 @@ genuinely is, and nothing gets below it.
 And the fit is already the best curve of its shape — that is what maximum
 likelihood means. Doing better needs more information in, or a different shape,
 not a better fit of this one.
+
+---
+
+## 2026-09-18 — The most accurate model the data allows
+
+The instruction was: add information to the prediction, whatever it costs,
+because everything the recommender does later stands on it. Two things were
+settled before any of that, and one was corrected.
+
+**Settled: first try, and 50%.** The recommender aims at problems whose first
+submission is accepted half the time. Under the baseline that is about 200
+points above the user's rating, where ordinary advice puts practice; such a
+problem is solved *eventually* about 93% of the time; and an attempt at 50% is
+the one that tells the model most about the person making it — in a Rasch model
+an item's information is P(1 − P), largest at one half, the reason adaptive
+exams work that way. 70% had meant problems 500 points below the user.
+
+**Corrected: "perfect".** No model can know whether one particular submission
+will pass; one attempt is a coin toss even to the true probabilities. What can
+be had is the lowest log loss on data the model has never seen, and
+probabilities that mean what they say. That is what was built towards.
+
+### The order: the harness first
+
+"More accurate" means nothing without something that can say a change made it
+worse. So v0.5's harness came before v0.6's model, and ADR 0013 fixed the
+protocol before any model was scored: first attempts per (user, problem); a
+date split — train before 2025-07, validation to the end of 2025, test from
+2026, looked at once; the baseline refitted on train; the user's own terms
+refitted month by month from their past only, the way the website will; strata
+weighted by population.
+
+The leakage rules got checks rather than comments. Flip every result a user has
+after some month, and every prediction before that month must not move by one
+bit. It does not.
+
+### The model
+
+Logistic, additive, one term per kind of information, each switched on in turn
+and kept only if validation log loss fell (ADR 0014 has every row):
+
+| added | validation | gain |
+|---|---|---|
+| rating-only baseline | 0.6533 | |
+| context: contest or practice | 0.6515 | 0.0018 |
+| how hard the topic is | 0.6456 | 0.0059 |
+| **how hard this particular problem is** | **0.6195** | **0.0261** |
+| the user, beyond their rating | 0.6148 | 0.0046 |
+| the user in each topic | 0.6147 | 0.0001 |
+| recent history counting more | 0.6139 | 0.0008 |
+| the gap's curve allowed to bend | 0.6126 | 0.0012 |
+| **the user's rating level itself** | **0.6058** | **0.0069** |
+| experience | 0.6049 | 0.0009 |
+| position in the contest | 0.6044 | 0.0005 |
+| a line in time | 0.6038 | 0.0005 |
+
+Two rows carry most of it. A problem's own first-try record, measured from the
+crowd, is worth more than everything else together — rating says how hard a
+problem is to solve, the record says how treacherous it is to submit. And the
+user's rating level, not only its distance from the problem's: at the same gap,
+a 1100 gets it right first time more often than an 1800 does.
+
+Calibration got worse through the first round, from 1.8 points to 3.0, and back
+to **1.0** by the end of the second. The time trend fixed it: first attempts
+succeed a little more often every year, and a model fitted on the past was
+pessimistic about the future until it could see time. In the 45–55% band where
+recommendations are chosen: said 45.0%, happened 45.0%; said 55.0%, happened
+55.4%. A calibration layer on top made things worse and was left out.
+
+### The row that matters most is the smallest
+
+"The user in each topic" — §3's "fine at greedy, weak at trees" — is worth
++0.0001 added and +0.0002 taken back out. It stays, because it helps, but it is
+nowhere near the story §3 tells. Topics matter as a property of the *topic*:
+constructive algorithms is harder on a first try than its rating says, for
+everybody.
+
+The likeliest reason is the one §8's fourth assumption named before any of
+this existed. People choose their own problems. Someone weak at trees attempts
+the tree problems they can do, so their record in trees looks fine, and the
+weakness is hidden in the choosing. A recommender that chooses *for* them is the
+one situation where the signal could surface — so it is not dead, it is
+unmeasurable from this data, and it should be measured again once
+recommendations are being acted on.
+
+§3 has been annotated with this, not rewritten. What the product can honestly
+claim changed; what it is for did not.
+
+### Three bugs in the fitting, all caught by checks built to catch them
+
+**It never converged.** The first full run hit its 60-sweep ceiling on every
+fit. An additive model has directions along which parameters trade a constant
+without changing a prediction — every user's number up by 0.1, the intercept
+down by 0.1 — so the loss is flat and coordinate steps crawl. Each has a closed-
+form best point, so the fit now jumps there after every sweep: 6 sweeps instead
+of 167 on the synthetic check, and a check recomputes the objective from the
+parameters to prove the jumps move no prediction.
+
+**Two directions were missed**, and the check found them: a topic's difficulty
+could sit in the topic or be spread across every user's skill in it, or across
+every problem carrying it. The topic's gradient sat at 0.06 until they were
+added. It mattered beyond speed — a new problem or a new visitor only ever sees
+the topic's number, so whatever of it was parked elsewhere, they never got.
+
+**A check that was wrong.** With all the extra columns in, the level column's
+gradient read 2.2e-2 and failed. Its curvature was about 8,000, so the parameter
+was 3e-6 from its optimum — closer than the tolerance on anything else. The
+check was measuring raw gradient where it should measure how far a Newton step
+would still move the column. Fixed in the check, not the model.
+
+### What the small runs got wrong
+
+Every ladder was first run on 200 users, to check the code before spending an
+hour. On those 200, topic difficulty made predictions *worse*, by 0.0037. On
+all 4,000 it made them better by 0.0059 and turned out to be what a new problem
+falls back on. A 200-user run exercises code and says nothing about models; the
+09-15 entry learned the same thing about a mean taken from 56 users, and it was
+true again.
+
+Three regularisation grids put their best value on the edge of the grid, which
+means the real best was outside it. Each was widened before the full run.
+
+And the first ladder added each kind of information in a fixed order and kept
+it regardless, so a part that only helps in company could not show it. An
+ablation was added at the end — the full model with each part taken out — and
+it is the table that decides what stays.
+
+### The test
+
+Configuration written into `evaluate.FINAL` and committed first (487c76a), so
+the record shows it was chosen without the test set. Then 2026, once:
+
+| | baseline | model |
+|---|---|---|
+| weighted total | 0.6535 | **0.5989** — 8.4% lower |
+| 1000–1199 | 0.6684 | 0.6043 |
+| 1200–1399 | 0.6540 | 0.6018 |
+| 1400–1599 | 0.6416 | 0.5913 |
+| 1600–1799 | 0.6328 | 0.5906 |
+| 1800–1999 | 0.6225 | 0.5824 |
+| calibration | 4.8 points | 1.6 points |
+
+Every stratum. **§9's first criterion is met.** The model is still about two
+points pessimistic in the middle of the range in 2026 — said 45.2%, 47.9%
+happened — where the baseline said 45.6% and 51.0% happened.
+
+### Shipping it
+
+`topic_model.json`: the crowd's part, 10,996 problems and 39 topics by name,
+244 KB, fitted on all 1,578,181 attempts. The website folds a visitor into it
+from their own history, having built their inputs with the harness's own SQL
+and derivations — a check compares the two on 25 real users, every field of
+every attempt, because the day they differ the site runs a model nobody scored.
+
+One thing was found only by thinking about who will actually visit. The model
+learned from users whose rating at the time sat, 99.8% of it, between about 350
+and 2370, and its level term is a straight line. At tourist's 3528 that line
+would add −1.95 to the log-odds — a thousand points of extrapolation dressed as
+a measurement. The shipped model holds the level to the range it saw, and the
+page tells anyone outside it that their chances are an extrapolation. The time
+line stops 183 days after the newest attempt, so if the monthly refits ever
+stop, predictions stop drifting instead of walking off.
+
+### What it cost
+
+- **A third request per sync**, for the rating history. Without it a visitor's
+  past would be judged at today's rating and anybody who has climbed would look
+  weaker than they are. Ten visitors at once now wait a minute for the last,
+  not forty seconds.
+- **A monthly re-collection**, about four and a half unattended hours, then a
+  refit and a commit. `collect.py` cannot do it yet — it skips users it has —
+  so a refresh mode is owed before the first one.
+- **About two hours of fitting** across the two ladders, the monthly-refit
+  comparison and the test. Pure Python throughout: nothing installed.
+
+### Next
+
+`/how`, which now has a number to hold. `collect.py --refresh`. Then React
+taking the chart over, which the reorder moved behind this.
