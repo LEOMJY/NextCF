@@ -61,7 +61,10 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   db.py           schema and queries
   sync.py         fetch one user's history as a background job, all or nothing
   collect.py      bulk collection of ~4000 users, run manually
-  model.py        skill estimation and solve-probability prediction
+  model.py        solve-probability prediction: the rating-only baseline
+                  (v0.4, ADR 0012), then the topic model (v0.6)
+  baseline.json   the baseline's two fitted numbers, committed; refit by
+                  `model.py fit-baseline`, checked against dataset.db
   evaluate.py     the harness — train/test split, scoring
   web.py          routes and pages
   scheduler.py    nightly re-sync of users already known
@@ -641,6 +644,12 @@ Written down because they are guesses, not facts, and should be revisited.
    research (desirable difficulty; the "85% rule", Wilson et al. 2019). Not
    established for competitive programming. Testing this properly is a v2.0
    experiment.
+   *First measurement, 2026-09-17:* it depends entirely on what "solve"
+   means. If it means the first submission is accepted, the fitted baseline
+   puts 70% at problems about 500 points **below** the user's rating — the
+   opposite direction from the usual advice to practise a little above it,
+   which this curve puts near 50%. If it means eventually accepted, 70% is not
+   on the curve at all. See ADR 0012 and "what counts as solved?" in §12.
 2. **Users want to be told what to solve.** Some people enjoy choosing, and
    some deliberately pick problems far above their level to learn new
    techniques. Unknown how large that group is.
@@ -658,6 +667,16 @@ v1.0 is done when all three hold:
    than the rating-only baseline**, and that number is written down — for each
    of the five rating strata in ADR 0009, and as one total weighted by each
    stratum's real share of the audience.
+   The baseline is a logistic curve in the rating gap, **fitted** to the data
+   rather than Elo's own formula, which measured several times too steep and
+   would be beaten by anything (ADR 0012). Two rules follow for the harness.
+   The baseline is refitted on the training portion only — the committed
+   `baseline.json` is fitted on everything, test set included, and scoring the
+   test set with it would be leakage that nothing warns about. And log losses
+   are compared only between predictors of the **same** event: "eventually
+   accepted" scores 0.207 against "first try"'s 0.639, and the lower number
+   means nothing, because an event that happens 94% of the time is easy to
+   predict.
 2. At least **50 people who are not the author** have used it, and at least
    **20 have returned** after their first visit.
 3. It is live at a URL and stays up.
@@ -820,6 +839,16 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
 - **What counts as "solved"?** Solved on the first try, or after five attempts
   and an editorial? The API does not distinguish. Affects everything. Decide at
   v0.5: the harness cannot label a single test attempt without an answer.
+  **Arrived early, at v0.4,** because the recommender cannot pick a problem
+  without it: the event and the target probability together decide which
+  problems are shown. Measured over 1,578,181 first attempts (ADR 0012):
+  "first submission accepted" runs from 37% to 83% across the rating range;
+  "eventually accepted" runs from 82% to 99%, so it barely depends on
+  difficulty and a 70% target does not exist on it. *Provisionally* "first
+  try", target unchanged — the recommender runs on that, and the page says so
+  in words. The author's decision is still open, and it has two parts: the
+  event, and whether 70% stays the target once it is known to mean problems
+  about 500 points below your rating.
   The v0.4 topic breakdown uses "any submission on this problem was accepted",
   and that does **not** pre-empt this. They are two different questions. The
   breakdown answers "what has this person done", where a problem solved on the

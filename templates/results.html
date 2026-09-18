@@ -21,6 +21,78 @@
       <time datetime="{{ last_synced }}">{{ last_synced }}</time>.
     </p>
 
+    {# Recommendations first: this is the product, and everything below it is
+       evidence for it.
+
+       recs.state is decided in web.py's recommendation_view, and each state
+       gets its own sentence, because "no recommendations" means four
+       different things and the visitor deserves to know which. #}
+    <section class="recs">
+      <h2>Next</h2>
+
+      {% if recs.state == "ok" %}
+        {# The sentence that says exactly what the number is. A bare "71%"
+           invites the reader to supply their own meaning, and the two
+           meanings on offer differ by a thousand rating points -- see the ADR
+           on the baseline. #}
+        {# "around 2800" is the PROBLEM rating. The first version said "at your
+           rating -- around 2800", which reads as if 2800 were the visitor's
+           own rating, so the problem rating now comes first and "your rating"
+           only ever means theirs. #}
+        <p class="meta">
+          Problems rated around {{ recs.centre }}, where
+          {% if recs.event == "first_try" %}
+            a first submission from somebody at your rating is accepted about
+            {{ recs.target }}% of the time.
+          {%- else %}
+            somebody at your rating solves them in the end about
+            {{ recs.target }}% of the time.
+          {%- endif %}
+          Rating only, so everybody at your rating is shown these five.
+        </p>
+
+        <table class="rec-table">
+          <thead>
+            <tr>
+              <th>Problem</th>
+              <th class="num">Rating</th>
+              <th class="num">Chance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for problem in recs.problems %}
+              <tr>
+                <td><a href="{{ problem.url }}">{{ problem.name }}</a></td>
+                <td class="num rating">{{ problem.rating }}</td>
+                {# The accent's defined meaning is "this is good, or this is
+                   where you act" -- ADR 0006. These five rows are the only
+                   place on the page where somebody is being asked to act. #}
+                <td class="num chance">{{ problem.percent }}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      {% elif recs.state == "unrated" %}
+        <p class="meta">
+          Codeforces has no rating for {{ handle }} yet, and this recommender
+          works from the rating alone, so there is nothing to base a
+          recommendation on until one exists.
+        </p>
+
+      {% elif recs.state == "not_ready" %}
+        <p class="meta">
+          The problem list is still loading. Reload in a few seconds.
+        </p>
+
+      {% else %}
+        <p class="meta">
+          You have solved every rated problem on Codeforces. There is nothing
+          left to recommend.
+        </p>
+      {% endif %}
+    </section>
+
     {# The topic breakdown, above the submissions table because it is the more
        useful of the two: the table is a log, this is a shape.
 

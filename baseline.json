@@ -1,0 +1,9 @@
+{
+  "event": "first_try",
+  "intercept": 0.254959,
+  "slope": 0.121536,
+  "attempts": 1578181,
+  "log_loss": 0.63922,
+  "fitted_on": "dataset.db",
+  "fitted_at": "2026-09-18T01:59:17Z"
+}

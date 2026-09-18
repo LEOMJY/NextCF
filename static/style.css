@@ -461,6 +461,28 @@ tbody tr:hover td {
   color: var(--accent);
 }
 
+/* ------------------------------------------- the tool: the recommendations
+ *
+ * Five rows, and the only place on the results page where somebody is being
+ * asked to do something. That is exactly ADR 0006's definition of the accent
+ * -- "this is good, or this is where you act" -- so the probability is the
+ * one number on the page drawn in it, a step larger than the text around it.
+ * Spec section 7.1: "70%" is the entire pitch, and it earns visual weight.
+ */
+
+.rec-table td {
+  /* The chance is a size larger than the problem name beside it. Baseline
+     alignment lines their letters up; the default, top, lines up their boxes
+     and leaves the name looking as if it had slipped. */
+  vertical-align: baseline;
+}
+
+.chance {
+  color: var(--accent);
+  font-size: var(--text-lead);
+  font-weight: 600;
+}
+
 /* ------------------------------------------- the tool: the topic breakdown
  *
  * A table with one cell drawn instead of written. There is no SVG and no

@@ -20,7 +20,7 @@ from waitress import serve
 # start the development server -- that call is guarded by
 # `if __name__ == "__main__"`, which is false when the file is imported. So
 # debug mode, and its interactive console, cannot reach the internet.
-from web import app
+from web import app, start_problemset_fetch
 
 # An environment variable is a named value living outside the program, set by
 # whoever starts it. The host picks a port at launch and announces it this way,
@@ -33,5 +33,9 @@ PORT = int(os.environ.get("PORT", "8000"))
 HOST = "0.0.0.0"
 
 if __name__ == "__main__":
+    # Before serve(), which blocks for as long as the server runs. The fetch is
+    # a background thread, so the server starts answering at once while the
+    # problemset arrives behind it -- ADR 0010.
+    start_problemset_fetch()
     print(f"serving on http://{HOST}:{PORT}")
     serve(app, host=HOST, port=PORT)

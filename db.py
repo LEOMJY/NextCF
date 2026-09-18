@@ -524,6 +524,69 @@ def problem_totals(conn, handle):
     ).fetchone()
 
 
+# ------------------------------------------------------------ recommendations
+
+def problemset_size(conn):
+    """How many problems the problemset lists here. 0 until one is fetched.
+
+    The web app fetches the problemset in a thread when it starts (ADR 0010),
+    so for the first few seconds after a start -- and for as long as a failed
+    fetch stays failed -- this is 0 and there is nothing to recommend from.
+    The results page asks this rather than guessing from an empty pool,
+    because an empty pool also happens to somebody who has solved everything,
+    and the two need different sentences.
+    """
+    return conn.execute(
+        "SELECT count(*) FROM problems WHERE in_problemset = 1"
+    ).fetchone()[0]
+
+
+def recommendation_pool(conn, handle):
+    """Every problem this user could be recommended. None if not synced.
+
+    Problemset problems that have a rating, minus the ones this user has
+    solved. 11,102 rows before the subtraction; model.recommend() scores all
+    of them, which is a few milliseconds of arithmetic.
+
+    Solved is decided on CANONICAL ids -- ADR 0010. Without that fold, a Div. 2
+    contestant who solved 1293C would be recommended 1292A, which is the same
+    problem, and 3,360 of the 4,000 users in the dataset have at least one
+    solve that only the fold can see.
+
+    Attempted-and-failed problems stay in the pool on purpose. "You tried this
+    and it beat you" is not a reason never to suggest it again, and whether it
+    should be suggested SOONER or LATER is a question for a model that knows
+    about time, which is v2.0 (spec section 11, knowledge tracing).
+
+    Only rated problems, because the baseline's whole input is the rating; a
+    problem without one cannot be given a probability, and showing it with a
+    made-up one would be worse than leaving it out.
+
+    NOT IN with a subquery is safe here only because the subquery can never
+    produce NULL -- COALESCE falls back to s.problem_id, which is NOT NULL.
+    If it ever could, `x NOT IN (..., NULL)` is NULL rather than true for
+    every x, and the pool would silently come back empty.
+    """
+    if not has_complete_data(conn, handle):
+        return None
+
+    return conn.execute(
+        """
+        SELECT p.id, p.contest_id, p.problem_index, p.name, p.rating
+          FROM problems p
+         WHERE p.in_problemset = 1
+           AND p.rating IS NOT NULL
+           AND p.id NOT IN (
+                 SELECT COALESCE(a.canonical_id, s.problem_id)
+                   FROM submissions s
+                   LEFT JOIN problem_aliases a ON a.alias_id = s.problem_id
+                  WHERE s.handle = ?
+                    AND s.verdict = 'OK')
+        """,
+        (handle,),
+    ).fetchall()
+
+
 def get_job(conn, job_id):
     """One job's row, or None. What /progress/<job> polls."""
     return conn.execute(

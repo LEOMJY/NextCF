@@ -6,23 +6,32 @@ progress page, which polls the jobs table until the work is done.
 
     GET  /                   the pitch, and the handle input
     POST /                   read the field, send them to /results/<handle>
-    GET  /results/<handle>   the topic breakdown and the submissions table
+    GET  /results/<handle>   five recommendations, the topic breakdown, and
+                             the submissions table
     GET  /progress/<job>     a sync in flight, reported honestly
 
+The recommendations come from the rating-only baseline in model.py, drawing
+on the problemset this program fetches when it starts (ADR 0010).
+
 Deliberately not here yet:
-    the problemset fetch at startup    v0.4, and the recommender needs it
-    recommendations, the model         v0.4 onwards
+    the model that knows about topics    v0.6
+    re-fetching the problemset nightly   v0.7, with the scheduler
 
 Usage:
     .venv\\Scripts\\python.exe web.py
     then open http://127.0.0.1:5000
 """
 
+import os
 import re
+import sys
+import threading
 
 from flask import Flask, g, redirect, render_template, request, url_for
 
+import api_client
 import db
+import model
 import sync
 
 # Flask has to find templates/ and static/, and it locates them relative to
@@ -52,7 +61,9 @@ FRESH_FOR_SECONDS = 600
 # send and impossible to read. The count of what is NOT shown goes on the page
 # too, because silently truncating a list is its own kind of lying.
 #
-# v0.4 replaces this table with five recommendations, so this is a stopgap.
+# The recommendations arrived at v0.4 and went ABOVE this table rather than
+# replacing it, as this comment used to predict. The log is still how a
+# visitor checks that the numbers above it are about them.
 RESULTS_LIMIT = 100
 
 # Create the tables if they are missing, then fail any job left behind by a
@@ -64,6 +75,54 @@ RESULTS_LIMIT = 100
 # just started -- ADR 0007. Every other program calls init_db() alone.
 db.init_db()
 db.fail_orphaned_jobs()
+
+
+def load_problemset():
+    """Fetch the problemset, store it, rebuild the alias map. Runs in a thread.
+
+    ADR 0010: the recommender draws from the problemset, and until 2026-09-15
+    nothing but collect.py ever fetched it, so the server's database knew only
+    the problems its visitors had submitted to -- a recommender there would
+    have had nothing to recommend but problems the visitor had already tried.
+
+    One request. It waits its two-second turn in api_client's limiter like any
+    sync, so it cannot jump ahead of a visitor, and a visitor cannot collide
+    with it.
+
+    A thread, not a step in startup, because the server should answer while
+    this is in flight: the landing page and a stored history do not need it.
+    The results page asks db.problemset_size() and says "not ready" honestly
+    until it is. A failure is printed and not retried here. On the free
+    instance a restart comes several times a day anyway; the nightly job at
+    v0.7 is the real retry, and it belongs in the scheduler, not bolted on.
+    """
+    conn = db.connect()
+    try:
+        problems = api_client.fetch_problemset()["problems"]
+        stored, aliases = db.save_problemset(conn, problems)
+        print(f"problemset: {stored} problems, {aliases} aliases", file=sys.stderr)
+    except Exception as exc:
+        # The same reasoning as sync.run_sync: an exception escaping a thread
+        # dies in silence, and here nobody would even see a stuck job. The log
+        # is the only place this can be told.
+        print(f"problemset fetch failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+    finally:
+        conn.close()
+
+
+def start_problemset_fetch():
+    """Start load_problemset() in the background. Called by the entry points.
+
+    Deliberately NOT called at import. Every check imports this module, and
+    they are built to run with no network; a fetch started by the import
+    itself would put a real Codeforces request inside every one of them. So
+    the two programs that actually serve -- serve.py, and `python web.py`
+    below -- start it, and importing web stays free of the network.
+
+    daemon=True: a daemon thread does not keep the process alive, so stopping
+    the server never waits on a download.
+    """
+    threading.Thread(target=load_problemset, name="problemset", daemon=True).start()
 
 
 def get_db():
@@ -184,6 +243,7 @@ def results(handle):
         last_synced=user["last_synced"],
         topics=topic_rows(db.topic_breakdown(conn, handle)),
         totals=db.problem_totals(conn, handle),
+        recs=recommendation_view(conn, user),
     )
 
 
@@ -254,6 +314,71 @@ def display_row(row):
     }
 
 
+def recommendation_view(conn, user):
+    """Everything the recommendations section needs, or the reason there are none.
+
+    Four outcomes, and each gets its own sentence on the page, because "no
+    recommendations" means four different things and a visitor deserves to
+    know which:
+
+        unrated    Codeforces has no rating for them, and a rating-only
+                   baseline has literally nothing to go on. What to show
+                   instead is spec section 12's cold-start question, due at
+                   v0.6, and this does not answer it early.
+        not_ready  the problemset has not arrived yet -- the few seconds after
+                   a restart, or a fetch that failed (ADR 0010).
+        exhausted  the pool is empty because they have solved everything
+                   rated. Nobody will see this; it costs one line to be true.
+        ok         five problems.
+
+    The rating used is TODAY's -- the visitor is choosing now. Fitting used the
+    rating each user had at the time of each attempt (model.training_counts),
+    and the difference is the point: the past is predicted from what was known
+    then, the future from what is known now.
+    """
+    if user["cf_rating"] is None:
+        return {"state": "unrated"}
+
+    if db.problemset_size(conn) == 0:
+        return {"state": "not_ready"}
+
+    target = user["target_prob"]
+    picks = model.recommend(
+        db.recommendation_pool(conn, user["handle"]), user["cf_rating"], target
+    )
+    if not picks:
+        return {"state": "exhausted"}
+
+    baseline = model.current_baseline()
+    return {
+        "state": "ok",
+        "target": round(target * 100),
+        # The rating the curve puts at exactly the target, for the sentence
+        # that explains the list. Clamped to the problemset's real range:
+        # an 1100-rated user at 70% comes out at 613, and there are no
+        # problems below 800 to point at.
+        #
+        # int() because round(x, -2) on a float returns a float: 2800.0,
+        # which is what the first version printed on the page.
+        "centre": max(800, int(round(model.rating_for_probability(user["cf_rating"], target), -2))),
+        "event": baseline["event"],
+        "problems": [
+            {
+                "name": pick["name"],
+                "rating": pick["rating"],
+                # Whole percentages. The curve is fitted to three decimal
+                # places and is not that good; "71%" claims enough.
+                "percent": round(pick["probability"] * 100),
+                "url": (
+                    f"https://codeforces.com/problemset/problem/"
+                    f"{pick['contest_id']}/{pick['problem_index']}"
+                ),
+            }
+            for pick in picks
+        ],
+    }
+
+
 def topic_rows(rows):
     """Turn db.topic_breakdown() rows into what the chart draws.
 
@@ -317,4 +442,10 @@ if __name__ == "__main__":
     # for anyone who can load the page. The host does not run this line anyway
     # -- serve.py imports `app` and runs it under waitress -- so this block is
     # the local-only path.
+    #
+    # The debug reloader runs this file twice: a parent that only watches for
+    # saved files, and a child that serves, which it marks with this variable.
+    # Fetching in both would spend two requests on one problemset.
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        start_problemset_fetch()
     app.run(debug=True)

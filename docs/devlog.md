@@ -3160,3 +3160,128 @@ accent rule.
 The rating-only baseline recommender, with the problemset fetch at startup that
 ADR 0010 says it needs, and which the chart also wants before it can say "you
 have never attempted flows".
+
+---
+
+## 2026-09-17 — The rating-only baseline, and the question it could not avoid
+
+The results page opens with five recommendations now. Getting there meant
+measuring what the baseline should be before writing it, and the measurement
+changed the plan twice.
+
+### Elo's formula is not a baseline for this data
+
+The obvious baseline was Elo's own curve, `1 / (1 + 10^(-gap/400))`, since that
+is how Codeforces ratings are built. Checked against 1,578,181 first attempts —
+one per (user, canonical problem), with the rating each user had *at the time*
+from `rating_changes`:
+
+| user − problem | first try accepted | Elo says |
+|---|---|---|
+| ≤ −800 | 37% | 1% |
+| −200..−1 | 50% | 36% |
+| +400..+599 | 72% | 95% |
+
+Several times too steep. People attempt hard problems when they already have a
+good chance — the selection effect §8 assumption 4 predicted, now with a number.
+A baseline that says 1% where the truth is 37% would lose to anything, and §9's
+"beats the baseline" would then be about calibration, not topics.
+
+So the baseline is fitted: a logistic curve in the rating gap, two parameters,
+maximum likelihood by Newton's method written out in `model.py`. `a = 0.2550`,
+`b = 0.1215`. Fitted on counts per distinct gap rather than 1.5 million rows,
+which gives the identical answer — ratings are integers and problem ratings are
+multiples of 100, so there are only a few thousand distinct gaps and the counts
+are everything logistic regression uses.
+
+The check that matters most on it feeds the fit expected counts from a curve
+chosen in advance and asserts that curve comes back out to six decimal places. A
+fitting routine only ever run on real data can be wrong forever, because nobody
+knows what the right answer was.
+
+### A bug that looked like a finding
+
+The first run of the measurement had "first try" and "eventually" identical in
+every row. That is not a property of competitive programmers; it is SQLite. The
+query leaned on the rule that a plain column in a `MIN()` query comes from the
+row holding the minimum — a rule that only holds when there is exactly *one*
+min or max in the query. There were two, so the "first verdict" came from an
+arbitrary row, which happened to be the accepted one.
+
+The tell was that the numbers were too tidy. Real data does not agree with
+itself to the percent in nine rows out of nine. Rewritten with `ROW_NUMBER()`,
+which says what it means and relies on no rule. Two days ago this same trick was
+kept out of `_rebuild_aliases` on the grounds that most readers would have to
+look it up. It turns out the writer did too.
+
+### The question that arrived two milestones early
+
+§12 scheduled "what counts as solved?" for v0.5. The recommender cannot pick a
+problem without it:
+
+- **Eventually accepted** runs from 82% to 99% across 1,600 rating points.
+  People keep going until the problem falls, so the curve barely moves. 70% is
+  not on it; the fit puts 70% at problems 1,318 points *above* the user, far
+  outside anything measured.
+- **First submission accepted** runs from 37% to 83%, and puts 70% at problems
+  about 490 points *below* the user.
+
+Which also means §1's 70% points the opposite way from the usual advice to
+practise a little above your rating, which this curve puts near 50%. §8 calls
+70% a guess not established for competitive programming, and this is the first
+thing measured that bears on it.
+
+That decision belongs to the author and was not taken silently. The recommender
+runs on "first try" with the target unchanged, the page says in words exactly
+what its percentage means, and ADR 0012 and §12 record both as provisional.
+
+Also noted: log losses cannot be compared across the two events. "Eventually"
+scores 0.207 and "first try" 0.639, and the smaller number means nothing — an
+event that happens 94% of the time is easy to predict. Written into §9 so the
+harness never compares them.
+
+### A trap written down before anyone falls in it
+
+`baseline.json` is fitted on all of `dataset.db`, and the page should use
+exactly that. But the v0.5 harness must not: whatever it holds back for testing
+is inside the data this file was fitted on, so scoring the test set with it
+gives the baseline a look at the answers, and nothing would warn anyone. The
+harness refits on its training portion. It is in ADR 0012 and §9 now, because
+by v0.5 the reason would be forgotten and the file would look like the obvious
+thing to reuse.
+
+### The problemset reaches the server
+
+ADR 0010 found that nothing but `collect.py` ever fetched the problemset. The web
+app now does, in a background thread when it starts — started by `serve.py` and
+by `python web.py`, never by importing the module, because every check imports
+it and none of them may reach Codeforces. The debug reloader runs `web.py`
+twice, so the fetch waits for the child that actually serves; otherwise every
+save during development would spend two requests. The results page says "still
+loading" until the problemset arrives rather than guessing from an empty pool,
+because an empty pool also means somebody has solved everything.
+
+### On the page
+
+Five problems, the rating of each, and the chance — in the accent colour, the
+first thing on the results page to use it outside an OK verdict, because it is
+the one place anybody is being asked to act. One sentence says what the number
+is, and that everybody at the visitor's rating is shown the same five, which is
+precisely what the baseline is and what the model exists to fix. An unrated
+visitor is told why there is nothing, rather than shown an empty table.
+
+Two things caught in the browser: the centre rating printed as `2800.0`, because
+`round(x, -2)` returns a float; and the sentence said "at your rating — around
+2800", which reads as if 2800 were the visitor's own rating. Both fixed, the
+first with a check.
+
+### Counted
+
+147 checks, 20 new. The staleness check refits the whole baseline from
+`dataset.db` and compares it with the committed file, the same way the React
+bundle will be guarded.
+
+### Next
+
+The author's decision on the event and the target. Then React takes over the
+topic chart, which is where ADR 0008 said it would start.
