@@ -116,8 +116,10 @@ screen, nothing on top of history (0.6008 with or without them). Recent
 contests say less about recent form than recent practice does.
 
 **Level × topic** — topic difficulty allowed to depend on the level: +0.0006
-in the screen, 39 more parameters. Not tried in the full model; the next
-candidate if more is wanted.
+in the screen, 39 more parameters. *Tried in the full model on 2026-09-19:*
+0.6016, worse than without it. The screen had fitted its weights on
+validation's own first half; learned from the training years, the pattern
+does not carry forward.
 
 **Screened at about zero:** having taken part in the problem's contest before
 attempting it; the problem's age at the attempt (upsolving against archive

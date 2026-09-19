@@ -3743,9 +3743,55 @@ refresh brings: months no model has seen.
 
 - The first `collect.py refresh` and refit in October — and with it a fresh
   test window.
-- Candidates for the round after, judged on that window: level × topic
-  (+0.0006 in the screen); what to do for a visitor with no rating at all,
-  now that Codeforces' own answer is known — it computes a new account from
-  1400, and the 4.6% of attempts made before a first rated contest can say
-  whether that works.
+- What to do for a visitor with no rating at all, now that Codeforces' own
+  answer is known — it computes a new account from 1400, and the 4.6% of
+  attempts made before a first rated contest can say whether that works.
 - `/how`, which now has a number to hold.
+
+---
+
+## 2026-09-19 — Round four: five more ideas, none of them better
+
+Asked whether anything more could be had, by any method, as long as the
+website did not get slower. Read first — item response theory, knowledge
+tracing benchmarks, Elo systems with adaptive update sizes, multidimensional
+models — then tested the five candidates that would cost the site at most a
+multiply per problem. Validation, frozen, against round three's 0.6010:
+
+| candidate | validation | |
+|---|---|---|
+| each problem its own slope on the rating gap (2PL), penalty 100 | 0.6009 | within noise |
+| the same, penalty 30 | 0.6015 | worse: it fits noise |
+| topic difficulty depending on the level | 0.6016 | worse |
+| the fold-in's half-life 365 days instead of 180 | 0.6010 | no change |
+| half of the users in training | 0.6017 | what 2,000 more users were worth |
+
+**2PL** is the textbook step up from this model's shape: a problem that
+separates strong and weak users sharply gets a steep slope, a trap that
+catches everybody a flat one. The slopes do differ — the middle 90% run from
+−0.09 to +0.08 around 0.10 — but knowing them predicts nothing better. The
+research summary matches: over a model that already has per-problem
+difficulty, per-item discrimination often does not pay.
+
+**Level × topic** was the screen's best remaining candidate at +0.0006 and is
+worse in the full model. The screen fitted its weights on the first half of
+validation and scored the second; fitted on the training years, the pattern
+does not carry forward. A screen says information exists *somewhere near the
+validation period*; only the full model says whether it can be learned from
+the past. That difference was always there, and this is the first time it
+decided something.
+
+**Half the users** costs 0.0007. Doubling the dataset again would be worth
+less than that, for four and a half hours of collection and double the
+monthly refresh. The model is not short of data.
+
+Every round has been worth less than the one before — 0.039, 0.010, 0.003 for
+the monthly refit, 0.003 for round three, nothing for round four — and the
+last five ideas moved the number by less than it moves between two random
+halves of a month. With this data and this kind of model, the prediction is
+about as good as it gets. What would move it is new information: the fresh
+sample and the October window for the pessimism, and above all what people do
+with problems the site chose for them — the one setting in which a weakness in
+a topic can show, because the user did not pick the problem.
+
+Nothing from this round ships; the code stayed in the experiment.
