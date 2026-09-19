@@ -1,7 +1,8 @@
 # 0013 — The evaluation protocol behind section 9's number
 
 **Date:** 2026-09-18
-**Status:** accepted
+**Status:** accepted; amended the same day for a second, pre-registered
+look at the test set — see "Amendment" at the end
 
 ## Context
 
@@ -116,3 +117,44 @@ in 1000–1999 and submits the least.
   and compares bit for bit.
 - **When the dataset is extended or re-collected**, the split dates move with
   it, and every number reported under the old dates is reported as such.
+
+## Amendment — 2026-09-18: the test set, looked at a second time
+
+"Scored once" was written for one model. Hours after that model was scored
+(0.5989, commit 0100491), a better one was found on validation — the practice
+history and the computed rating of ADR 0015, 0.6038 → 0.6010 frozen — and the
+only number that could describe *it* on unseen data is a test number.
+
+**Allowed once more, on these terms:**
+
+1. **The configuration is committed first.** `evaluate.FINAL` is set to round
+   three and committed before `evaluate.py final` runs, as the first time.
+2. **The test number decides nothing.** Round three ships because validation
+   chose it. The test number is reported whatever it is — better, the same or
+   worse than 0.5989 — and there is no going back to round two on its account.
+   A look that could change the choice would make the test set part of the
+   choosing, which is the one thing it exists not to be.
+3. **Both numbers stay on the record**, each with the configuration and the
+   commit it belongs to. §9 shows the latest and says it is the second look.
+4. **This is the last look at this test set.** The next model is judged on the
+   months after it: the monthly refresh (`collect.py refresh`) brings attempts
+   from after 2026-09-15 that no model has seen, and those become the test set
+   the next time one is needed, under the same rules.
+
+**Why the risk is small, and what it is.** The danger of a reused test set is
+choosing on it: try twenty things, keep whichever the test set liked, and the
+number it reports is the luck of the draw. Here nothing was tried on it — every
+choice in round three was made on validation — and the two looks are at two
+models chosen independently of it. What a second look does cost is the claim
+that the test set was never seen when *anything* was decided: round three
+was built by someone who knew round two's test result, and knew for example
+that 2026 was about two points pessimistic. That knowledge did not choose a
+single setting here, but it is stated rather than left for a reader to wonder
+about.
+
+**One thing the rerun changes that is not the model.** From this amendment on,
+`evaluate.load()` gives every model the rating Codeforces computes with (ADR
+0015), and only the baseline the shown one. The baseline's numbers are
+therefore unchanged — 0.6533 on validation, 0.6535 on test — and every model
+number before this date was measured on shown ratings, which is how the
+devlog reports them.

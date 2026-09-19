@@ -19,6 +19,13 @@ Four commands, in the order they are used:
         Raise how many users each stratum wants. Nobody is redrawn or
         refetched; the next `run` takes the next ones in line.
 
+    .venv\\Scripts\\python.exe collect.py refresh [--older-than-days N]
+        Once a month, before the monthly refit: fetch the problemset and every
+        collected user again, oldest first, so the refit sees last month's
+        attempts and problems. Same users -- nobody is drawn again. Stops
+        cleanly; run it again to carry on (users refreshed in the last N days,
+        25 by default, are skipped).
+
     .venv\\Scripts\\python.exe collect.py status
         How far it has got, per stratum.
 
@@ -280,12 +287,85 @@ def run(path=DATASET_PATH):
         conn.close()
 
 
-def _collect_one(conn, sample_id, candidate):
+def refresh(path=DATASET_PATH, older_than_days=25):
+    """Re-fetch every collected user whose data is older than `older_than_days`.
+    Returns an exit code, as run() does.
+
+    The monthly refit (ADR 0014) needs this: a model refitted on a dataset
+    nobody refreshes is a frozen model with extra steps, and the monthly refit
+    was worth +0.0031 on validation precisely because it knows about problems
+    released since the last one. Same users, same sample -- nobody is drawn
+    again -- with their histories and rating changes brought up to date.
+
+    RESUMABLE WITHOUT NEW STATE. The users due are those whose last_synced is
+    older than the cutoff, oldest first; a refreshed user's last_synced is
+    rewritten inside the same transaction as their rows (ADR 0004), so a
+    refresh stopped at user 2,000 simply skips those 2,000 when run again.
+    The completeness flag is the progress marker, as it already is for run().
+
+    save_sync is already correct for a user it has seen: submissions are
+    upserted with their verdict updated -- a hack or a rejudge since the last
+    fetch is picked up -- and rating changes are replaced whole.
+    """
+    db.init_db(path)
+    conn = db.connect(path)
+    try:
+        sample = db.get_sample(conn)
+        if sample is None:
+            print(f"Nothing drawn yet in {path}. Run: collect.py draw")
+            return 2
+        try:
+            problems = api_client.fetch_problemset()["problems"]
+        except (urllib.error.URLError, RuntimeError) as exc:
+            return _stopped(f"could not fetch the problemset: {exc}", "refresh")
+        stored, aliases = db.save_problemset(conn, problems)
+        print(f"problemset: {stored} problems, {aliases} aliases", flush=True)
+
+        cutoff = db.utc_ago(older_than_days * 86400)
+        due = conn.execute(
+            """
+            SELECT c.handle, c.stratum, c.rating_when_drawn, u.last_synced
+              FROM sample_candidates c JOIN users u ON u.handle = c.handle
+             WHERE c.sample_id = ? AND u.last_synced < ?
+             ORDER BY u.last_synced, c.handle
+            """,
+            (sample["id"], cutoff),
+        ).fetchall()
+        print(f"{len(due):,} users last fetched before {cutoff}", flush=True)
+
+        started = time.monotonic()
+        for n, candidate in enumerate(due, 1):
+            try:
+                outcome = _collect_one(conn, sample["id"], candidate, refreshing=True)
+            except (urllib.error.URLError, RuntimeError) as exc:
+                return _stopped(f"{candidate['handle']}: {exc}", "refresh")
+            except Exception:
+                print(f"\nUnexpected error while refreshing {candidate['handle']}:", file=sys.stderr)
+                raise
+            if outcome is None:
+                # A collected account that is gone now -- renamed or deleted.
+                # Its rows stay: they are a true record of the past, and
+                # removing a collected user would change the sample itself.
+                print(f"  {candidate['handle']}: no longer found, kept as it was", flush=True)
+                continue
+            n_submissions, n_changes = outcome
+            per_user = (time.monotonic() - started) / n
+            print(f"  {n:>5}/{len(due)}  {candidate['handle']:<24} {n_submissions:>6,} submissions"
+                  f"   about {_duration((len(due) - n) * per_user)} left", flush=True)
+        print("\nRefreshed. Next: model.py fit-topic, then commit topic_model.json.")
+        return 0
+    finally:
+        conn.close()
+
+
+def _collect_one(conn, sample_id, candidate, refreshing=False):
     """Fetch and store one candidate. Two requests, one transaction.
 
     Returns (submissions stored, rating changes) when collected, or None when
     Codeforces says the handle does not exist -- recorded, so the next
-    candidate in the stratum takes the place.
+    candidate in the stratum takes the place. When `refreshing` a user already
+    collected, a missing handle is NOT recorded as unavailable: the user is in
+    the sample, and marking them would let somebody else take their place.
     """
     handle = candidate["handle"]
     try:
@@ -303,7 +383,8 @@ def _collect_one(conn, sample_id, candidate):
         # re-raised, and run() stops for a person to look.
         if "not found" not in str(exc).lower():
             raise
-        db.mark_unavailable(conn, sample_id, handle, str(exc))
+        if not refreshing:
+            db.mark_unavailable(conn, sample_id, handle, str(exc))
         return None
 
     # cf_rating is the user's current rating: the last change, since
@@ -318,9 +399,9 @@ def _collect_one(conn, sample_id, candidate):
     return stored, len(changes)
 
 
-def _stopped(reason):
+def _stopped(reason, command="run"):
     print(f"\nStopped: {reason}")
-    print("Nothing is half-written. Run `collect.py run` again to carry on from here.")
+    print(f"Nothing is half-written. Run `collect.py {command}` again to carry on from here.")
     return 1
 
 
@@ -381,6 +462,10 @@ def main(argv=None):
     extend_cmd.add_argument("--per-stratum", type=int, required=True)
 
     commands.add_parser("run", help="collect until every stratum is full")
+    refresh_cmd = commands.add_parser("refresh", help="fetch every collected user again (monthly)")
+    # 25, not 30: a month is 28 to 31 days, and a refresh started a day early
+    # must still include everybody refreshed last month.
+    refresh_cmd.add_argument("--older-than-days", type=int, default=25)
     commands.add_parser("status", help="show progress per stratum")
 
     args = parser.parse_args(argv)
@@ -410,6 +495,8 @@ def main(argv=None):
             return 0
         if args.command == "run":
             return run(DATASET_PATH)
+        if args.command == "refresh":
+            return refresh(DATASET_PATH, args.older_than_days)
         return status(DATASET_PATH)
     except (SampleExists, ResizeRefused) as exc:
         print(exc)
@@ -417,7 +504,7 @@ def main(argv=None):
     except KeyboardInterrupt:
         # Ctrl+C. The user being written, if any, rolled back with its
         # transaction (ADR 0004), so the next run starts them over.
-        print("\nStopped by Ctrl+C. Nothing is half-written; run `collect.py run` again to carry on.")
+        print(f"\nStopped by Ctrl+C. Nothing is half-written; run `collect.py {args.command}` again to carry on.")
         return 130
 
 

@@ -354,7 +354,13 @@ def recommendation_view(conn, user):
     # in words which of the two chose these problems, because they are
     # different claims -- one is about everybody at a rating, the other about
     # this person.
-    picks = model.topic_recommend(conn, user["handle"], user["cf_rating"], pool, target)
+    #
+    # The topic model reads the rating Codeforces COMPUTES with, which for a
+    # new account's first six rated contests is more than its profile shows
+    # (model.HIDDEN_AFTER); the page says so when the two differ. The
+    # baseline keeps the shown one, as it was fitted on (ADR 0012).
+    rating = model.rating_now(conn, user["handle"], user["cf_rating"])
+    picks = model.topic_recommend(conn, user["handle"], rating, pool, target)
     source = "topic"
     if picks is None:
         picks = model.recommend(pool, user["cf_rating"], target)
@@ -369,7 +375,10 @@ def recommendation_view(conn, user):
         # A rating outside what the model was fitted on is answered, but as an
         # extrapolation, and the page says so -- see model.outside_range.
         "extrapolated": source == "topic" and model.outside_range(
-            model.current_topic_model(), user["cf_rating"]),
+            model.current_topic_model(), rating),
+        "hidden": source == "topic" and rating != user["cf_rating"],
+        "shown": user["cf_rating"],
+        "computed": rating,
         "target": round(target * 100),
         # The rating the curve puts at exactly the target, for the sentence
         # that explains the list. Clamped to the problemset's real range:

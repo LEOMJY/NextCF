@@ -169,7 +169,9 @@ validation, and worse every month it ages.
   not fit in a repository.
 - **Syncs fetch the rating history**, a third request. Without it a visitor's
   past attempts would be judged at today's rating, and anybody who has climbed
-  would be judged weaker than they are.
+  would be judged weaker than they are. *Amended 2026-09-18:* `user.info` was
+  then dropped, since the rating history and the submissions already carry
+  what it was fetched for, so a sync is two requests again (spec §12).
 - **Guard rails on the shipped model.** Straight lines are only safe inside the
   data they were fitted to. The level term is held to the middle 99.8% of
   levels the model saw — roughly 350 to 2370 — and the page tells a visitor

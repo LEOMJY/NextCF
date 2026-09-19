@@ -240,22 +240,6 @@ def fetch_submissions(handle, count=None):
     return call("user.status", handle=handle, count=count)
 
 
-def fetch_user(handle):
-    """One user's profile: the canonical spelling of the handle, and a rating.
-
-    Two things sync.py needs and user.status does not give. Codeforces handles
-    are case-insensitive, so a visitor typing "TOURIST" must still be stored
-    under the spelling the API returns -- otherwise the same person can end up
-    displayed three different ways.
-
-    "rating" is absent for anyone who has never competed, so read it with
-    .get(), never with [].
-    """
-    # user.info takes "handles", plural, and answers with a list in the same
-    # order. One handle in, one user out.
-    return call("user.info", handles=handle)[0]
-
-
 def fetch_rating_changes(handle):
     """Every rating change `handle` has had, oldest first: one per rated contest.
 

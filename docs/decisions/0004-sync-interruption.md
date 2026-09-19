@@ -115,4 +115,6 @@ with more moving parts. Rejected on the same grounds §7 rejects Celery.
   and no longer shown, because one request has no count between none and all.
   The incremental option remains the upgrade path, but it now saves no request
   — `user.info` plus one call either way — and fetching only new submissions
-  would miss verdicts that change after they were stored (§12).
+  would miss verdicts that change after they were stored (§12). *(2026-09-18:
+  a sync is now the history and the rating history, with no `user.info`; the
+  argument is unchanged — an incremental fetch would still save no request.)*

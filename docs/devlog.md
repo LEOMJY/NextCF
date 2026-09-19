@@ -3553,3 +3553,157 @@ stop, predictions stop drifting instead of walking off.
 
 `/how`, which now has a number to hold. `collect.py --refresh`. Then React
 taking the chart over, which the reorder moved behind this.
+
+---
+
+## 2026-09-18 (evening) — What the user did lately, and a rating the profile hides
+
+The brief, after the push: find any way at all to make the predictions more
+accurate — read what has been published, try what has not been tried here —
+and make the site faster wherever it can be.
+
+### Faster pages, steadier picks
+
+**A results page spent 42% of its time scoring problems**, one `predict()` call
+per problem, 11,000 of them, on a host with a tenth of a CPU. Most of each
+problem's logit does not depend on the visitor at all — context, the problem's
+own difficulty, its topics, its position — so `PracticeScorer` works that part
+out once per fitted model and adds each visitor's part in one tight loop.
+79 ms to 32 ms locally for one real history, 64 ms for tourist's. It is a
+second copy of the model's arithmetic, which this project otherwise avoids, so
+a check scores every problem both ways, with every column switched on and both
+guard rails in play, and fails on any difference.
+
+**The five recommendations reshuffled** whenever the clock moved. For a typical
+user 143 unsolved problems sit within half a point of 50%, and the model is
+calibrated to about a point and a half — so "the five nearest" was choosing on
+noise. Now every problem within 2.5 points of the target counts as equally
+right, and the five are chosen among them on something that means something:
+the newest first, then each one sharing the fewest topics with those already
+picked. The first version picked whatever added the most *new* topics and so
+always opened with the problem carrying the most tags — eleven, for one real
+user. A long tag list says more about the labelling than the lesson.
+
+### Reading first
+
+What has been measured on data like this, and what of it applies:
+
+- **DAS3H** (Choffin et al., EDM 2019): this model's exact shape — ability,
+  item and skill difficulty — plus counts of recent attempts and successes per
+  skill, in time windows. The most direct fit.
+- **Gervet et al.** (JEDM 2020): logistic regression on such counts did best
+  on datasets of moderate size or with very many attempts per learner; deep
+  knowledge tracing on the largest, or where precise timing matters most.
+  Ours has hundreds of attempts per user, and no deep learning stack.
+- **Logistic knowledge tracing** (Pavlik et al.): a recency-weighted share of
+  recent successes.
+- **Knowledge tracing machines** (Vie & Kashima 2019): this model already is
+  one, with the pairs that matter.
+- **Debiasing for self-selection** (TSDR, 2026): real, and untestable here —
+  the test set chooses its problems the same way the training set does.
+
+### A screen before a fit
+
+A full fit with new columns takes a quarter of an hour, so candidates were
+screened first: stack them on the current model's validation predictions, fit
+on 2025-07..09, score on 2025-10..12. It answers "is there information here the
+model lacks?" in minutes. Gains in log loss:
+
+| candidate | gain |
+|---|---|
+| overall recent form, 1 hour to 30 days | +0.0023 |
+| practice in the problem's topics, 1 hour to 30 days | +0.0016 |
+| practice in the problem's topics, all time | +0.0012 |
+| recency-weighted success share | +0.0012 |
+| a new account's hidden rating (below) | +0.0012 |
+| rating dynamics: peak minus current, recent changes | +0.0011 |
+| previous attempt's outcome | +0.0007 |
+| level × topic | +0.0006 |
+| all-time successes | +0.0004 |
+| time since the previous attempt | +0.0003 |
+| the problem's age at the attempt | +0.0002 |
+| having been in the problem's contest | +0.0000 |
+
+### The rating on the profile is not the rating
+
+The screen's second round asked what the rating itself might be hiding, and
+Codeforces' own rules answered. Since May 2020 a new account is computed from
+1400 but shown 0, and what is shown gets 500, 350, 250, 150, 100 and 50 added
+after its first six rated contests. After one contest the profile says 900
+less than the rating Codeforces works with. The model read the profile.
+
+| contests so far | hidden | model said | happened |
+|---|---|---|---|
+| 1 | 900 | 46.3% | 56.7% |
+| 2 | 550 | 51.1% | 59.8% |
+| 3 | 300 | 55.2% | 58.4% |
+| 4 | 150 | 58.1% | 60.3% |
+| 5 | 50 | 58.8% | 57.7% |
+
+The error shrinks exactly as the hidden amount does, and 12% of all attempts
+in the dataset are by accounts still inside their first six contests.
+
+**The first rule for spotting a new account was wrong.** It took "first rating
+change starts from 0" to mean the new system. All 4,000 accounts start from 0
+in the API — the ones from before 2020 jump straight to about 1400 after their
+first contest, the new ones to about 400. Looking at the first contests of
+2020 in order put the switch between contest 1355 (16 May) and contest 1358
+(26 May), so the rule is by date.
+
+### The full model
+
+Validation, frozen at its start:
+
+| | log loss |
+|---|---|
+| round two (ADR 0014) | 0.6038 |
+| + the computed rating alone | 0.6031 |
+| + practice history | 0.6012 |
+| + practice history + computed rating | **0.6010** |
+| + practice history + hidden amount as learned columns | 0.6008 |
+| + that + rating dynamics | 0.6008 |
+
+History is the prize: 0.0026, every stratum better, a quarter as much again as
+all of round two's columns. On top of it the rating's contribution is small,
+because a newcomer's rapid improvement already shows in how much they are
+winning lately.
+
+**The computed rating was kept over the learned columns** despite 0.0002. That
+difference is below what validation can resolve, and the learned version would
+be learning partly from how the sample was drawn: everyone in it reached
+1000–1999 by September 2026, so its new accounts are the ones that succeeded.
+A real newcomer is not preselected to succeed. Adding back what Codeforces hid
+is arithmetic that is true of every account. The results page now says so when
+it applies — "Codeforces shows you 700 but computes with 1250" — because
+otherwise a newcomer sees problems picked for a rating they have never seen.
+
+### Tried and taken out
+
+With history on, a fit needs 33 sweeps instead of 5 to 13. The guess was that
+the history columns and each user's own number, both saying how strong a user
+is, were undoing each other's steps, so they were stepped together — an exact
+Newton step for the global columns and every user's b at once, cheap because
+each attempt has one user. Built, checked, measured: still short of
+converging after 27 sweeps, against 33 for the plain step to finish. The slow
+direction is somewhere else — most likely the topic columns against each
+user's topic numbers — and seventy lines that would save a tenth of a fit
+at best were deleted.
+
+### Smaller things
+
+- **A sync is two requests again.** `user.info` was fetched for the handle's
+  spelling and the current rating, and both were already in the other two
+  answers. Two seconds off every sync; the tenth visitor in a queue waits
+  40 seconds, not 60.
+- **`collect.py refresh`** fetches every collected user again, oldest first,
+  resumable, drawing nobody new: the monthly refit can now actually happen.
+  A collected user whose handle has gone keeps their rows and their place.
+- **The laptop went to sleep for three and a half hours** in the middle of the
+  full-model runs. Two of them report 13,500 seconds for work that takes 800.
+  Long runs need sleep switched off.
+
+### The test, a second time
+
+Round three is committed in `evaluate.FINAL` with this entry, before the test
+set is scored for it — on the terms of ADR 0013's amendment: the number is
+reported whatever it is, and decides nothing.

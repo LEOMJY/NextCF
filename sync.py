@@ -56,6 +56,26 @@ def fetch_history(handle, job_id, conn):
     return submissions
 
 
+def canonical_spelling(typed, submissions, changes):
+    """The handle as Codeforces spells it, from what the sync fetched anyway.
+
+    Stored under that spelling, never the typed one, or "TOURIST" and
+    "tourist" would be displayed as two people. A rating change carries it.
+    Failing that, a submission made alone does -- a team's lists several
+    members, and the visitor need not be the first. Failing both, nothing
+    fetched spells it and the typed form is kept: somebody with no contests
+    and no solo submissions has nothing on the page to misspell.
+    """
+    for change in changes:
+        if change.get("handle"):
+            return change["handle"]
+    for sub in submissions:
+        members = sub.get("author", {}).get("members", [])
+        if len(members) == 1 and members[0].get("handle", "").lower() == typed.lower():
+            return members[0]["handle"]
+    return typed
+
+
 def run_sync(handle, job_id):
     """Do one whole sync. This is what the background thread runs.
 
@@ -67,29 +87,32 @@ def run_sync(handle, job_id):
         db.start_job(conn, job_id)
 
         try:
-            # user.info first, for two things user.status does not give: the
-            # canonical spelling of the handle, and the Codeforces rating.
-            # Everything after this uses the API's spelling, never the one
-            # typed into the form.
-            user = api_client.fetch_user(handle)
-            canonical = user["handle"]
+            # Codeforces handles are case-insensitive, so both requests accept
+            # the handle as typed; a handle that does not exist is refused by
+            # the first of them.
+            submissions = fetch_history(handle, job_id, conn)
 
-            submissions = fetch_history(canonical, job_id, conn)
+            # The rating history: the model predicts each past attempt from
+            # the rating its author had AT THE TIME (ADR 0009, 0014). With
+            # only today's rating, somebody who climbed from 1200 to 1600
+            # would have their 1200-era failures read as a 1600-rated user
+            # failing, be judged weaker than they are, and be recommended
+            # problems that are too easy.
+            changes = api_client.fetch_rating_changes(handle)
 
-            # The rating history too -- a third request, and the reason a sync
-            # takes two seconds longer than it did. The model predicts each
-            # past attempt from the rating its author had AT THE TIME (ADR
-            # 0009, 0014); with only today's rating, somebody who climbed from
-            # 1200 to 1600 would have their 1200-era failures read as a
-            # 1600-rated user failing, be judged weaker than they are, and be
-            # recommended problems that are too easy. collect.py has always
-            # fetched this; the website now does the same thing for the same
-            # reason.
-            changes = api_client.fetch_rating_changes(canonical)
+            # Two requests, not three. user.info used to come first, for the
+            # canonical spelling of the handle and the current rating -- and
+            # both were already in what these two return: every rating change
+            # carries the handle as Codeforces spells it, and the newest one's
+            # newRating IS the current rating. Every request waits for a
+            # two-second turn, so this took two seconds off every sync and off
+            # everybody queued behind it: the tenth visitor in a queue now
+            # waits about 40 seconds, not 60.
+            canonical = canonical_spelling(handle, submissions, changes)
+            rating = changes[-1]["newRating"] if changes else None
 
             # One call, one transaction, all or nothing. ADR 0004.
-            db.save_sync(conn, canonical, user.get("rating"), submissions,
-                         rating_changes=changes)
+            db.save_sync(conn, canonical, rating, submissions, rating_changes=changes)
 
         except RuntimeError as exc:
             # Codeforces answered and refused -- nearly always a handle that

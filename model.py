@@ -40,6 +40,7 @@ import functools
 import json
 import math
 import sys
+from array import array
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -397,6 +398,133 @@ def main():
     print(f"\nwrote {BASELINE_PATH.name}")
 
 
+# ================================================ practice history features
+
+class HistoryState:
+    """One user's practice history, and the HISTORY_COLUMNS it implies at any
+    moment. The ONE implementation of those features: evaluate.load builds
+    everybody's through it attempt by attempt, and the website builds a
+    visitor's through it once per page -- the same code, so the same numbers.
+
+    Every feature counts only attempts STRICTLY before the moment asked
+    about. Two attempts in the same second do not see each other; the website
+    asks about five hypothetical problems at once without adding them, so
+    they never see each other either. The window counts get that from bisect
+    on the sorted times. The running shares, the last outcome and the time
+    since it do not bisect, so an attempt is held back in `pending` until an
+    attempt at a LATER second arrives, and only then folded in.
+
+    Keys of `tags` can be anything hashable: tag indices in the harness, tag
+    names on the website.
+    """
+
+    def __init__(self):
+        self.times, self.wins = [], [0]                    # wins: prefix sums
+        self.tag_times, self.tag_wins = {}, {}
+        self.num = self.den = 0.0
+        self.tag_num, self.tag_den = {}, {}
+        self.last_y = self.last_t = None
+        self.pending, self.pending_t = [], None
+
+    def _fold(self, before):
+        """Fold held-back attempts into the running values, if they are
+        strictly older than `before`."""
+        if self.pending and self.pending_t < before:
+            for t, y, tags in self.pending:
+                self.num = SHARE_DECAY * self.num + y
+                self.den = SHARE_DECAY * self.den + 1.0
+                for k in tags:
+                    self.tag_num[k] = SHARE_DECAY * self.tag_num.get(k, 0.0) + y
+                    self.tag_den[k] = SHARE_DECAY * self.tag_den.get(k, 0.0) + 1.0
+                self.last_y, self.last_t = y, t
+            self.pending = []
+
+    def add(self, t, y, tags):
+        """Record an attempt at time t. Times must not go backwards."""
+        self._fold(t)
+        self.times.append(t)
+        self.wins.append(self.wins[-1] + y)
+        for k in tags:
+            self.tag_times.setdefault(k, []).append(t)
+            wins = self.tag_wins.setdefault(k, [0])
+            wins.append(wins[-1] + y)
+        self.pending.append((t, y, tags))
+        self.pending_t = t
+
+    def overall(self, t):
+        """The columns that do not depend on the problem's topics, at time t:
+        per window (tries, wins); then all-time wins; the recent success share;
+        the last outcome; log hours since the last attempt."""
+        self._fold(t)
+        hi = bisect.bisect_left(self.times, t)
+        out = []
+        for w in HISTORY_WINDOWS:
+            lo = bisect.bisect_left(self.times, t - w)
+            out.append((math.log1p(hi - lo), math.log1p(self.wins[hi] - self.wins[lo])))
+        rest = (math.log1p(self.wins[hi]),
+                (self.num + 1.0) / (self.den + 2.0),
+                0.5 if self.last_y is None else float(self.last_y),
+                math.log1p((t - self.last_t) / 3600.0) if self.last_t is not None
+                else math.log1p(24 * 365))
+        return out, rest
+
+    def per_tag(self, t, k):
+        """The topic columns for one tag at time t: per window (tries, wins);
+        all-time (tries, wins); the tag's recent success share."""
+        self._fold(t)
+        times = self.tag_times.get(k, ())
+        wins = self.tag_wins.get(k, (0,))
+        hi = bisect.bisect_left(times, t)
+        out = []
+        for w in HISTORY_WINDOWS:
+            lo = bisect.bisect_left(times, t - w)
+            out.append((math.log1p(hi - lo), math.log1p(wins[hi] - wins[lo])))
+        share = (self.tag_num.get(k, 0.0) + 1.0) / (self.tag_den.get(k, 0.0) + 2.0)
+        return out, (math.log1p(hi), math.log1p(wins[hi])), share
+
+    @staticmethod
+    def combine(overall, per_tags):
+        """HISTORY_COLUMNS, in order, from overall() and one per_tag() for each
+        of the problem's tags -- topic columns are the mean over its tags."""
+        windows, rest = overall
+        n = len(per_tags)
+        row = []
+        for w in range(len(HISTORY_WINDOWS)):
+            row.append(windows[w][0])
+            row.append(windows[w][1])
+            row.append(sum(pt[0][w][0] for pt in per_tags) / n)
+            row.append(sum(pt[0][w][1] for pt in per_tags) / n)
+        row.append(sum(pt[1][0] for pt in per_tags) / n)
+        row.append(sum(pt[1][1] for pt in per_tags) / n)
+        row.append(rest[0])
+        row.append(rest[1])
+        row.append(sum(pt[2] for pt in per_tags) / n)
+        row.append(rest[2])
+        row.append(rest[3])
+        return row
+
+    def features(self, t, tags):
+        return self.combine(self.overall(t), [self.per_tag(t, k) for k in tags])
+
+
+def compute_history(data):
+    """Fill data.h with HISTORY_COLUMNS for every attempt in `data`, which must
+    be in time order. One HistoryState per user, asked BEFORE each attempt is
+    added -- so no attempt ever sees itself or anything after it."""
+    n = len(data)
+    data.h = [array("d", bytes(8 * n)) for _ in HISTORY_COLUMNS]
+    states = {}
+    for i in range(n):
+        state = states.get(data.u[i])
+        if state is None:
+            state = states[data.u[i]] = HistoryState()
+        tags = _tags(data, data.p[i])
+        for c, v in enumerate(state.features(data.t[i], tags)):
+            data.h[c][i] = v
+        state.add(data.t[i], data.y[i], tags)
+    return data
+
+
 # ======================================================== the topic model
 #
 # v0.6's model, brought forward on 2026-09-18 when the author asked for the
@@ -444,6 +572,21 @@ GROUPS = ("tag", "problem", "user", "user_topic")
 NO_TAG = -1
 
 
+def layout(extras):
+    """({extra: its first column in w}, total columns), in EXTRAS order. The
+    one place that decides where each extra's weights sit: the model, the
+    centring moves and the website's scorer all read it, so none of them can
+    count the columns differently from the others."""
+    widths = {"shape": len(KNOTS), "level": 1, "experience": 1,
+              "position": N_POSITIONS - 1, "trend": 1, "history": len(HISTORY_COLUMNS)}
+    starts, col = {}, 0
+    for name in EXTRAS:
+        if name in extras:
+            starts[name] = col
+            col += widths[name]
+    return starts, col
+
+
 def _tags(data, problem):
     return data.problem_tags[problem] or (NO_TAG,)
 
@@ -474,7 +617,31 @@ def _tags(data, problem):
 #               is the simplest thing that can follow it. Extrapolating a line
 #               is a risk, which is exactly what validation -- itself the
 #               future of the training data -- is there to judge.
-EXTRAS = ("shape", "level", "experience", "position", "trend")
+#   history     what the user has done RECENTLY, counted before each attempt:
+#               23 columns, from the student-modelling literature's answer to
+#               "the rating lags the skill". DAS3H (Choffin et al., EDM 2019)
+#               adds to exactly this model's shape -- ability, item and skill
+#               difficulty -- log-counts of attempts and successes in time
+#               windows, per skill; Best-LR (Gervet et al., JEDM 2020) adds
+#               overall counts, and found a logistic model with such features
+#               matches deep knowledge tracing where students have many
+#               interactions each, which is this dataset. LKT's R-PFA adds a
+#               decayed success share. See HISTORY_COLUMNS for the list.
+EXTRAS = ("shape", "level", "experience", "position", "trend", "history")
+
+# The windows, in seconds: an hour catches the contest in progress, a day
+# the session, a week and a month the stretch of practice. DAS3H's own set,
+# minus its "forever" window, which is here as separate all-time columns.
+HISTORY_WINDOWS = (3600.0, 86400.0, 7 * 86400.0, 30 * 86400.0)
+HISTORY_COLUMNS = tuple(
+    [f"{scope}_{kind}_{name}" for name in ("1h", "1d", "7d", "30d")
+     for scope in ("all", "topic") for kind in ("tries", "wins")]
+    + ["topic_tries_ever", "topic_wins_ever", "all_wins_ever",
+       "all_share_recent", "topic_share_recent", "last_was_ok", "log_hours_since_last"])
+# A success share over the last attempts, each one counting 0.8 of the one
+# after it -- R-PFA's "propdec" -- with one imaginary success and one failure
+# so that a user with no history reads as 1/2 rather than 0/0.
+SHARE_DECAY = 0.8
 
 # Participant types, in a fixed order so each maps to the same index in every
 # run and every file. Anything Codeforces adds later is read as practice, the
@@ -505,7 +672,9 @@ class Attempts:
 
         u[i]  user index            p[i]  canonical problem index
         c[i]  context index         g[i]  (user rating - problem rating) / 100,
-                                          the user's rating AT THE TIME
+                                          the user's rating AT THE TIME, as
+                                          Codeforces computes with it -- see
+                                          computed_ratings()
         y[i]  1 if accepted         t[i]  seconds since 1970, first submission
         s[i]  the user's stratum    month[i]  "2026-03", for the fold-in
         r[i]  (user rating at the time - 1500) / 100: the LEVEL, where g is
@@ -514,6 +683,10 @@ class Attempts:
         n[i]  log(1 + how many first attempts this user made before this
               one): experience. Counted from earlier rows only, so it is
               known at the moment of the attempt.
+        g_shown[i]  the gap by the rating Codeforces SHOWS. Read by the
+              rating-only baseline and nothing else: the baseline is the
+              reference every model is measured against, defined on the
+              number on the profile (ADR 0012), and stays exactly that.
 
     plus the lookups that turn indices back into names, each problem's tags
     as a tuple of tag indices, and each problem's position in its contest
@@ -526,11 +699,54 @@ class Attempts:
         self.problem_position = []
         self.u, self.p, self.c, self.g, self.y, self.t, self.s = [], [], [], [], [], [], []
         self.r, self.n = [], []
+        self.g_shown = []
         self.month = []
         self.population = {}
 
     def __len__(self):
         return len(self.y)
+
+
+# The rating Codeforces SHOWS a new account is not the one it computes with.
+# Since May 2020 a new account is computed from 1400 but shown 0, and what is
+# shown gets 500, 350, 250, 150, 100 and 50 added after its first six rated
+# contests -- 1400 in all. So after one contest the profile says 900 less than
+# the rating Codeforces itself works with, after two 550, then 300, 150, 50,
+# and from the sixth contest on the two agree. Read as the user's level, the
+# shown number made the model 10 points too pessimistic about users one
+# contest in (said 46%, happened 57%, on validation) and 9 points two in. 12%
+# of all attempts in dataset.db are made by accounts still in those six.
+HIDDEN_AFTER = (1400, 900, 550, 300, 150, 50)
+
+# Accounts first rated before the change started at 1500, shown and computed
+# alike, and the API cannot tell them apart by their first oldRating: it is 0
+# for both. In dataset.db the last first contest under the old rule is 1355
+# (2020-05-16, straight to about 1400 after it) and the first under the new
+# one is 1358 (2020-05-26, to about 400).
+NEW_RULE_FROM = "2020-05-20T00:00:00Z"
+
+
+def computed_ratings(changes):
+    """[(rated_at, rating as Codeforces computes with it)] from a user's
+    [(rated_at, new_rating)], oldest first -- the shown rating plus whatever
+    is still hidden after that many contests (see HIDDEN_AFTER)."""
+    new_rule = bool(changes) and changes[0][0] >= NEW_RULE_FROM
+    return [
+        (at, rating + (HIDDEN_AFTER[k] if new_rule and k < len(HIDDEN_AFTER) else 0))
+        for k, (at, rating) in enumerate(changes, 1)
+    ]
+
+
+def rating_now(conn, handle, shown):
+    """A visitor's rating as Codeforces computes with it today: `shown` when
+    nothing is hidden any more (or they have no rating changes stored)."""
+    changes = conn.execute(
+        "SELECT rated_at, new_rating FROM rating_changes WHERE handle = ? ORDER BY rated_at",
+        (handle,),
+    ).fetchall()
+    if not changes or shown is None:
+        return shown
+    return shown + computed_ratings(changes)[-1][1] - changes[-1][1]
 
 
 # Every first attempt at a pool problem: one row per (user, canonical problem),
@@ -621,10 +837,7 @@ class TopicModel:
         self.trend_until = None      # latest moment the time line is followed
 
     def _n_extra(self):
-        return ((len(KNOTS) if "shape" in self.extras else 0)
-                + ("level" in self.extras) + ("experience" in self.extras)
-                + ((N_POSITIONS - 1) if "position" in self.extras else 0)
-                + ("trend" in self.extras))
+        return layout(self.extras)[1]
 
     def _extra(self, data, i):
         """The extra global columns of attempt i, as (column, value) pairs,
@@ -658,6 +871,12 @@ class TopicModel:
             if self.trend_until is not None:
                 when = min(when, self.trend_until)
             out.append((col, (when - TREND_ORIGIN) / YEAR))
+            col += 1
+        if "history" in self.extras:
+            for c, column in enumerate(data.h):
+                value = column[i]
+                if value:
+                    out.append((col + c, value))
         return out
 
     # ------------------------------------------------------------ fitting
@@ -837,8 +1056,7 @@ class TopicModel:
             # Position A is the reference and has no column: its shared part
             # goes to the intercepts, and comes back off every other column so
             # that problems at other positions do not move.
-            first = ((len(KNOTS) if "shape" in self.extras else 0)
-                     + ("level" in self.extras) + ("experience" in self.extras))
+            first = layout(self.extras)[0]["position"]
             for position, problems in problems_by_position.items():
                 delta = sum(self.d.get(p, 0.0) for p in problems) / len(problems)
                 for p in problems:
@@ -1097,10 +1315,11 @@ def visitor_attempts(conn, handle, data=None, problem_index=None, tag_index=None
     problem_index = problem_index if problem_index is not None else {}
     tag_index = tag_index if tag_index is not None else {}
     tags_of = tags_of if tags_of is not None else tags_by_problem(conn)
-    changes = conn.execute(
+    shown = conn.execute(
         "SELECT rated_at, new_rating FROM rating_changes WHERE handle = ? ORDER BY rated_at",
         (handle,),
     ).fetchall()
+    changes = computed_ratings(shown)
     moments = [at for at, _ in changes]
     rows = conn.execute(FIRST_ATTEMPTS_SQL.format(where="WHERE s.handle = ?"), (handle,)).fetchall()
 
@@ -1110,23 +1329,25 @@ def visitor_attempts(conn, handle, data=None, problem_index=None, tag_index=None
         if i == 0:
             continue                          # no rating at the time
         rating = changes[i - 1][1]
-        kept.append((at, pid, rating - prating, ok, ptype, rating, pindex))
+        kept.append((at, pid, rating - prating, ok, ptype, rating, pindex, shown[i - 1][1] - prating))
     kept.sort()
 
     contexts = {name: i for i, name in enumerate(CONTEXTS)}
     history = []
-    for n, (at, pid, gap, ok, ptype, rating, pindex) in enumerate(kept):
+    for n, (at, pid, gap, ok, ptype, rating, pindex, gap_shown) in enumerate(kept):
         history.append(len(data))
         data.u.append(0)
         data.p.append(_register(data, problem_index, tag_index, tags_of, pid, pindex))
         data.c.append(contexts.get(ptype, 0))
         data.g.append(gap / SCALE)
+        data.g_shown.append(gap_shown / SCALE)
         data.y.append(ok)
         data.t.append(_stamp(at))
         data.r.append((rating - 1500) / SCALE)
         data.n.append(math.log1p(n))
         data.s.append(None)
         data.month.append(at[:7])
+    compute_history(data)
     return data, history, problem_index, tag_index, tags_of
 
 
@@ -1144,6 +1365,180 @@ def _register(data, problem_index, tag_index, tags_of, pid, pindex):
         data.problem_tags.append(tuple(tags))
         data.problem_position.append(position_of(pindex))
     return problem_index[pid]
+
+
+class PracticeScorer:
+    """Every problemset problem's chance of a first-try accept, for one
+    visitor practising NOW -- the same arithmetic as TopicModel.predict, split
+    so that what does not depend on the visitor is done once per process.
+
+    The logit of a practice attempt on problem p is
+
+        [gamma_practice + d[p] + mean tau[p's tags] + position[p]]    <- per problem
+      + beta * g + sum of hinge weights * max(0, g - knot)            <- the gap
+      + w_level * level + w_exp * experience + w_trend * years + b    <- per visitor
+      + mean over p's tags of s[tag]                                  <- both
+
+    The bracket is the same for every visitor, so it is computed when the
+    scorer is built -- once per fitted model and problemset -- and a request
+    adds the rest in one tight loop. Measured on a real history, 42% of a
+    results page went on scoring problems one predict() call at a time, and
+    the free host has a tenth of a CPU.
+
+    It is a second copy of the model's arithmetic, which is exactly what this
+    project avoids elsewhere, so a check scores every problem both ways for
+    real users and fails on any difference. If that check is ever deleted,
+    delete this class too.
+    """
+
+    def __init__(self, fitted, problems):
+        """`problems`: (id, rating, problem_index, tag names) for each
+        problemset problem with a rating."""
+        self.fitted = fitted
+        w = list(fitted["w"])
+        self.beta = fitted["beta"]
+        starts, _ = layout(fitted["extras"])
+        self.hinges = ([(knot, w[starts["shape"] + a]) for a, knot in enumerate(KNOTS)]
+                       if "shape" in starts else [])
+        self.w_level = w[starts["level"]] if "level" in starts else 0.0
+        self.w_exp = w[starts["experience"]] if "experience" in starts else 0.0
+        self.w_trend = w[starts["trend"]] if "trend" in starts else 0.0
+        positions = [0.0] * N_POSITIONS
+        if "position" in starts:
+            for q in range(1, N_POSITIONS):
+                positions[q] = w[starts["position"] + q - 1]
+        self.w_history = (w[starts["history"]:starts["history"] + len(HISTORY_COLUMNS)]
+                          if "history" in starts else None)
+        self.level_range = fitted.get("level_range")
+        self.trend_until = fitted.get("trend_until")
+
+        tau, d = fitted["tau"], fitted["d"]
+        practice = fitted["gamma"][CONTEXTS.index("PRACTICE")]
+        self.rows = []
+        for pid, rating, pindex, tags in problems:
+            names = tuple(tags) or (NO_TAG_NAME,)
+            base = (practice + d.get(pid, 0.0)
+                    + sum(tau.get(k, 0.0) for k in names) / len(names)
+                    + positions[position_of(pindex)])
+            self.rows.append((pid, rating, names, base))
+
+    def scores(self, rating, experience, now, b, s_by_name, history=None):
+        """{problem id: P(first-try accept)} for every problem it was built with.
+
+        `history` is the visitor's HistoryState keyed by tag NAME, as
+        fold_in_visitor returns it. The history columns are split exactly:
+        the topic columns are a mean over the problem's tags and a dot
+        product distributes over a mean, so
+
+            w . combine(overall, [each tag]) = w . combine(overall, [nothing])
+                                             + mean over tags of w . combine(nothing, [tag])
+
+        -- the overall part once per page, each tag's part once per tag, and
+        per problem only the mean. combine() itself does both halves, so the
+        column order lives in one place."""
+        level = (rating - 1500) / SCALE
+        if self.level_range:
+            level = min(max(level, self.level_range[0]), self.level_range[1])
+        when = now if self.trend_until is None else min(now, self.trend_until)
+        visitor = (b + self.w_level * level + self.w_exp * experience
+                   + self.w_trend * (when - TREND_ORIGIN) / YEAR)
+        tag_part = {}
+        if self.w_history is not None:
+            state = history if history is not None else HistoryState()
+            dot = lambda row: sum(wc * v for wc, v in zip(self.w_history, row))
+            windows = [(0.0, 0.0)] * len(HISTORY_WINDOWS)
+            no_tag = (windows, (0.0, 0.0), 0.0)
+            visitor += dot(HistoryState.combine(state.overall(now), [no_tag]))
+            no_overall = (windows, (0.0, 0.0, 0.0, 0.0))
+            for _, _, names, _ in self.rows:
+                for k in names:
+                    if k not in tag_part:
+                        tag_part[k] = dot(HistoryState.combine(no_overall, [state.per_tag(now, k)]))
+        beta, hinges = self.beta, self.hinges
+        out = {}
+        for pid, prating, names, base in self.rows:
+            g = (rating - prating) / SCALE
+            z = base + visitor + beta * g
+            for knot, weight in hinges:
+                if g > knot:
+                    z += weight * (g - knot)
+            if s_by_name:
+                z += sum(s_by_name.get(k, 0.0) for k in names) / len(names)
+            if tag_part:
+                z += sum(tag_part[k] for k in names) / len(names)
+            out[pid] = _p(z)
+        return out
+
+
+def fitted_model(fitted, problem_index, tag_index):
+    """A TopicModel carrying topic_model.json's numbers for the problems and
+    tags one Attempts object knows about -- the reference implementation the
+    fold-in runs on, and the one the check compares PracticeScorer against."""
+    m = TopicModel(fitted["groups"], fitted["lam"], extras=fitted["extras"])
+    m.gamma, m.beta, m.w = list(fitted["gamma"]), fitted["beta"], list(fitted["w"])
+    if fitted.get("level_range"):
+        m.level_range = tuple(fitted["level_range"])
+    m.trend_until = fitted.get("trend_until")
+    for name, value in fitted["tau"].items():
+        key = NO_TAG if name == NO_TAG_NAME else tag_index.get(name)
+        if key is not None:
+            m.tau[key] = value
+    d = fitted["d"]
+    for pid, index in problem_index.items():
+        if pid in d:
+            m.d[index] = d[pid]
+    return m
+
+
+def fold_in_visitor(conn, handle, fitted, now, tags_of=None):
+    """The visitor's own numbers, from their history as known NOW.
+
+    Returns (b, {tag name: s}, number of attempts in their history, their
+    HistoryState keyed by tag name). The same
+    fold-in the evaluation scored, on inputs built by the same code the
+    evaluation used (visitor_attempts), with older attempts counting half as
+    much for every `halflife` days.
+    """
+    data, history, problem_index, tag_index, _ = visitor_attempts(conn, handle, tags_of=tags_of)
+    m = fitted_model(fitted, problem_index, tag_index)
+    weights = None
+    if fitted.get("halflife") and history:
+        decay = fitted["halflife"] * 86400.0
+        weights = [0.5 ** ((now - data.t[i]) / decay) for i in history]
+    b, s = m.fold_in(data, history, weights)
+    name = lambda k: NO_TAG_NAME if k == NO_TAG else data.tag_names[k]
+    # The same history again, keyed by tag NAME, for the scorer's pool --
+    # replayed through the same HistoryState, so it cannot disagree with the
+    # columns the fold-in above just used.
+    by_name = HistoryState()
+    for i in history:
+        by_name.add(data.t[i], data.y[i], tuple(name(k) for k in _tags(data, data.p[i])))
+    return b, {name(k): v for k, v in (s or {}).items()}, len(history), by_name
+
+
+_scorer_cache = {}
+
+
+def practice_scorer(conn, fitted):
+    """The PracticeScorer for this fitted model and this problemset, built
+    once per process and rebuilt when either changes. The problemset is only
+    fetched when the web app starts (ADR 0010) and the model changes only
+    with a deploy, so in practice it is built once per start."""
+    size = conn.execute("SELECT count(*) FROM problems WHERE in_problemset = 1").fetchone()[0]
+    key = (fitted.get("fitted_at"), size)
+    if key not in _scorer_cache:
+        tags = tags_by_problem(conn)
+        problems = [(pid, rating, pindex, tags.get(pid, ()))
+                    for pid, rating, pindex in conn.execute(
+                        "SELECT id, rating, problem_index FROM problems "
+                        "WHERE in_problemset = 1 AND rating IS NOT NULL")]
+        _scorer_cache.clear()
+        scorer = PracticeScorer(fitted, problems)
+        # Kept with the scorer so a visitor's history reuses it rather than
+        # reading 30,000 tag rows again on every page.
+        scorer.tags_of = tags
+        _scorer_cache[key] = scorer
+    return _scorer_cache[key]
 
 
 def topic_recommend(conn, handle, current_rating, pool, target, count=5, now=None,
@@ -1165,51 +1560,61 @@ def topic_recommend(conn, handle, current_rating, pool, target, count=5, now=Non
         return None
     now = now if now is not None else datetime.now(timezone.utc).timestamp()
 
-    data, history, problem_index, tag_index, tags_of = visitor_attempts(conn, handle)
-    first_pool = len(data)
-    experience = math.log1p(len(history))
-    for row in pool:
-        data.u.append(0)
-        data.p.append(_register(data, problem_index, tag_index, tags_of, row["id"], row["problem_index"]))
-        data.c.append(0)                              # PRACTICE
-        data.g.append((current_rating - row["rating"]) / SCALE)
-        data.y.append(0)
-        data.t.append(now)
-        data.r.append((current_rating - 1500) / SCALE)
-        data.n.append(experience)
-        data.s.append(None)
-        data.month.append("")
+    scorer = practice_scorer(conn, fitted)
+    b, s_by_name, n_history, history = fold_in_visitor(conn, handle, fitted, now, scorer.tags_of)
+    chances = scorer.scores(current_rating, math.log1p(n_history), now, b, s_by_name, history)
 
-    m = TopicModel(fitted["groups"], fitted["lam"], extras=fitted["extras"])
-    m.gamma, m.beta, m.w = list(fitted["gamma"]), fitted["beta"], list(fitted["w"])
-    if fitted.get("level_range"):
-        m.level_range = tuple(fitted["level_range"])
-    m.trend_until = fitted.get("trend_until")
-    for name, value in fitted["tau"].items():
-        key = NO_TAG if name == NO_TAG_NAME else tag_index.get(name)
-        if key is not None:
-            m.tau[key] = value
-    for pid, value in fitted["d"].items():
-        if pid in problem_index:
-            m.d[problem_index[pid]] = value
-
-    weights = None
-    if fitted.get("halflife") and history:
-        decay = fitted["halflife"] * 86400.0
-        weights = [0.5 ** ((now - data.t[i]) / decay) for i in history]
-    user = m.fold_in(data, history, weights)
-
-    scored = []
-    for i, row in zip(range(first_pool, len(data)), pool):
-        p = m.predict(data, i, user)
-        scored.append((abs(p - target), -(row["contest_id"] or 0), row["id"], p, row))
-    scored.sort(key=lambda item: item[:3])
+    candidates = [(chances[row["id"]], row) for row in pool if row["id"] in chances]
     return [
         {"id": row["id"], "contest_id": row["contest_id"],
          "problem_index": row["problem_index"], "name": row["name"],
          "rating": row["rating"], "probability": p}
-        for _, _, _, p, row in scored[:count]
+        for p, row in choose(candidates, target, count, scorer.tags_of)
     ]
+
+
+# How close to the target counts as "at the target". The model's calibration
+# gap on the test year was 1.6 points, so it cannot tell 50.1% from 50.4% --
+# and for a typical user 143 unsolved problems sit within half a point of 50%,
+# 531 within two. Picking "the nearest" among those picked on differences far
+# below the model's precision, and the five reshuffled whenever the clock
+# moved the time line or the history weights a little.
+BAND = 0.025
+
+
+def choose(candidates, target, count, tags_of):
+    """`count` of (probability, row), all within BAND of `target`, spread
+    across as many topics as possible.
+
+    Inside the band every problem is equally right as far as the model can
+    tell, so the choice between them is made on something that means
+    something: each pick is the problem sharing the FEWEST topics with the
+    picks before it, the newest contest breaking ties -- so the first pick is
+    simply the newest problem in the band. Five problems on five topics is a
+    better practice set than five on one, and the same inputs always give the
+    same five.
+
+    Fewest shared, not most new: the first version picked the problem adding
+    the most uncovered topics, and so always opened with whatever problem
+    carried the most tags -- eleven, for one real user. A long tag list says
+    more about how a problem was labelled than about what it teaches.
+
+    If fewer than `count` problems are in the band -- a very strong user, a
+    nearly exhausted pool -- it widens, doubling, until there are enough.
+    """
+    for band in (BAND, 2 * BAND, 4 * BAND, 8 * BAND, 1.0):
+        near = [(p, row) for p, row in candidates if abs(p - target) <= band]
+        if len(near) >= count:
+            break
+    near.sort(key=lambda pr: (-(pr[1]["contest_id"] or 0), pr[1]["id"]))
+    chosen, covered = [], set()
+    while near and len(chosen) < count:
+        best = min(range(len(near)),
+                   key=lambda i: (len(set(tags_of.get(near[i][1]["id"], ())) & covered), i))
+        p, row = near.pop(best)
+        chosen.append((p, row))
+        covered |= set(tags_of.get(row["id"], ()))
+    return chosen
 
 
 def outside_range(fitted, rating):

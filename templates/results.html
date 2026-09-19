@@ -59,6 +59,18 @@
               chances are an extrapolation and less reliable than they look.
             </p>
           {% endif %}
+          {# Codeforces shows a new account less than it computes with, for
+             six rated contests. The chances use the computed number, and
+             without this line a visitor who sees 700 on their profile gets
+             problems picked for 1250 and no reason why. #}
+          {% if recs.hidden %}
+            <p class="footnote">
+              Codeforces shows you {{ recs.shown }} but computes with
+              {{ recs.computed }}: for a new account's first six rated contests
+              it holds part of the rating back and returns it contest by
+              contest. These chances use {{ recs.computed }}.
+            </p>
+          {% endif %}
         {% else %}
           <p class="meta">
             Problems rated around {{ recs.centre }}, where

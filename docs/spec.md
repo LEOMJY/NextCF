@@ -95,6 +95,10 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
     resumable: dies at minute 40, restarts at minute 40
     progress is printed to the terminal; no jobs rows
 
+    monthly: collect.py refresh fetches the same 4000 again, oldest
+    first (about 4.5 hours), then model.py fit-topic refits, and the
+    new topic_model.json is committed
+
     model.py, evaluate.py  ←  [ dataset.db ]
   ─────────────────────────────────────────────────────
 
@@ -216,6 +220,14 @@ not slipped in while coding.
 - No changelog page — see §4.1.
 - No knowledge tracing, bandits, spaced repetition, or USACO problem ratings.
   All v2.0 — see §11.
+  *Argued 2026-09-18:* the model now reads a user's recent practice — attempts
+  and successes in the last hour, day, week and month, per topic (ADR 0015) —
+  which is where the knowledge tracing literature's best simple models get
+  their accuracy. That is an **input to the prediction**, measured on
+  validation like every other, and it changes nothing a visitor sees except
+  better numbers. Knowledge tracing **as a feature** — showing a skill's
+  trajectory, warning that one is fading, scheduling reviews — stays v2.0,
+  with everything it would need to be designed.
 
 ## 6. Data
 
@@ -749,7 +761,7 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 | v0.3 | Bulk collection into `dataset.db`, on the author's machine: 4000 users stratified by rating, with histories and rating changes — rate limited, resumable | mid Sep |
 | v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart. **Done 09-17**, except React taking the chart over — moved behind the model | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
-| v0.6 | First real model, scored against the baseline; `/how`. **Model done 09-18**, §9's first criterion met (ADR 0014); `/how` and `collect.py`'s monthly refresh still to come | late Oct |
+| v0.6 | First real model, scored against the baseline; `/how`. **Model done 09-18**, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh` done; `/how` still to come | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts | early Nov |
 | v0.8 | Design polish pass and unhandled states — see §7.1 | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
@@ -942,6 +954,13 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   arriving together is 30 requests, a minute for the last, against the 40
   seconds (d) arrived at. Accuracy was chosen over the 20 seconds. The
   arithmetic in (a) still holds, because every job is still the same size.
+  *Changed back the same day:* **two** requests again, with nothing given up.
+  `user.info` was fetched for two things — the handle as Codeforces spells it,
+  and the current rating — and both were already in the other two answers:
+  every rating change carries the spelled handle, and the newest one's
+  `newRating` is the current rating. A visitor with no contests is spelled from
+  a submission they made alone. Ten visitors: 20 requests, 40 seconds for the
+  last.
 - **Does a utility-class framework ever become worth it?** Settled for now as
   no — the styling system is the tokens in `static/style.css`, and React brings
   none of its own (ADR 0008, amended 2026-09-15). The reason is proportion

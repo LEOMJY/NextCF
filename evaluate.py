@@ -78,11 +78,15 @@ def load(conn):
         data.population[stratum] = population
     stratum_of = dict(conn.execute("SELECT handle, stratum FROM sample_candidates"))
 
-    history = defaultdict(list)
+    shown = defaultdict(list)
     for handle, rated_at, rating in conn.execute(
         "SELECT handle, rated_at, new_rating FROM rating_changes ORDER BY handle, rated_at"
     ):
-        history[handle].append((rated_at, rating))
+        shown[handle].append((rated_at, rating))
+    # The rating Codeforces computes with, which a new account's profile
+    # understates for six contests (model.HIDDEN_AFTER). The shown one is kept
+    # for the baseline alone.
+    history = {h: model.computed_ratings(v) for h, v in shown.items()}
     moments = {h: [at for at, _ in v] for h, v in history.items()}
 
     tags_of = defaultdict(list)
@@ -98,13 +102,14 @@ def load(conn):
         if i == 0:
             continue                              # no rating at the time
         rating = history[handle][i - 1][1]
-        kept.append((at, handle, pid, rating - prating, ok, ptype, rating, pindex))
+        kept.append((at, handle, pid, rating - prating, ok, ptype, rating, pindex,
+                     shown[handle][i - 1][1] - prating))
     kept.sort()
 
     user_index, problem_index, tag_index = {}, {}, {}
     context_index = {name: i for i, name in enumerate(CONTEXTS)}
     seen = defaultdict(int)
-    for at, handle, pid, gap, ok, ptype, rating, pindex in kept:
+    for at, handle, pid, gap, ok, ptype, rating, pindex, gap_shown in kept:
         if handle not in user_index:
             user_index[handle] = len(data.handles)
             data.handles.append(handle)
@@ -128,11 +133,15 @@ def load(conn):
         data.p.append(problem_index[pid])
         data.c.append(context_index.get(ptype, 0))
         data.g.append(gap / model.SCALE)
+        data.g_shown.append(gap_shown / model.SCALE)
         data.y.append(ok)
         data.t.append(datetime.strptime(at, db.TIMESTAMP_FORMAT)
                       .replace(tzinfo=timezone.utc).timestamp())
         data.s.append(stratum_of.get(handle))
         data.month.append(at[:7])
+    # The practice-history columns, attempt by attempt, each from what came
+    # strictly before it -- the same HistoryState the website uses.
+    model.compute_history(data)
     return data
 
 
@@ -212,14 +221,18 @@ def baseline_predictions(data, train, idx):
 
     Not read from baseline.json: that file was fitted on all of dataset.db,
     test set included, and using it here would let the baseline see the
-    answers -- ADR 0012's first consequence."""
+    answers -- ADR 0012's first consequence.
+
+    On the SHOWN rating's gap, as the baseline has always been defined: it is
+    the fixed reference, and the fact that a new account's profile
+    understates its rating is something a model gets credit for knowing."""
     counts = defaultdict(lambda: [0, 0])
     for i in train:
-        gap = round(data.g[i] * model.SCALE)
+        gap = round(data.g_shown[i] * model.SCALE)
         counts[gap][0] += 1
         counts[gap][1] += data.y[i]
     a, b, _ = model.fit_logistic(dict(counts))
-    return [model.sigmoid(a + b * data.g[i]) for i in idx], (a, b)
+    return [model.sigmoid(a + b * data.g_shown[i]) for i in idx], (a, b)
 
 
 # ------------------------------------------------------------- the fold-in
@@ -499,12 +512,32 @@ ROUND_ONE = {
 # column had already fixed what it was there for, so there is none.
 ROUND_TWO = dict(ROUND_ONE, extras=("shape", "level", "experience", "position", "trend"))
 
+# Round three, 2026-09-18, on top of round two (ADR 0015). Validation, frozen:
+# + the 23 practice-history columns 0.6012 (from 0.6038), every stratum
+# better, calibration 1.0 point; then the rating Codeforces computes with in
+# place of the one it shows, for a new account's first six contests: 0.6010.
+# Screened and not kept, each on top of history: the hidden amount as two
+# learned columns 0.6008 and with rating dynamics 0.6008 -- differences below
+# what validation can resolve, and learned from a sample drawn on its FUTURE
+# rating (ADR 0015); level x topic +0.0006 and three others ~0 in the screen.
+# The computed rating is not a switch here: evaluate.load() builds every
+# model's inputs from it, and only the baseline keeps the shown one.
+ROUND_THREE = dict(ROUND_TWO, extras=ROUND_TWO["extras"] + ("history",))
+
 # The configuration section 9's number is reported for. Chosen on validation
-# and committed before `evaluate.py final` was run for the first time.
-# Refitting on the 1st of every month was worth +0.0031 on validation
-# (0.6038 frozen, 0.6007 monthly), in every stratum, with calibration unchanged
-# at 1.0 point -- so the product re-collects and refits monthly (ADR 0014).
-FINAL = dict(ROUND_TWO, rolling=True, platt=False)
+# and committed before `evaluate.py final` is run for it.
+#
+# The first FINAL was ROUND_TWO: refitting on the 1st of every month was worth
+# +0.0031 on validation (0.6038 frozen, 0.6007 monthly), in every stratum,
+# with calibration unchanged at 1.0 point -- so the product re-collects and
+# refits monthly (ADR 0014). It scored 0.5989 on the test set, once, on
+# 2026-09-18 (commit 0100491).
+#
+# This is the second, and the second look at the same test set: ADR 0013's
+# amendment says why that is allowed once and on what terms. Round three
+# ships on its validation result; the test number is reported whatever it is,
+# and does not decide between the two.
+FINAL = dict(ROUND_THREE, rolling=True, platt=False)
 
 
 def run_final(data, train, valid, test):
@@ -586,7 +619,7 @@ def main():
         return
 
     if args.command == "rolling":
-        config = ROUND_TWO or ROUND_ONE
+        config = ROUND_THREE or ROUND_TWO or ROUND_ONE
         if config is None:
             raise SystemExit("record a ladder's choice first.")
         run_rolling(data, train, valid, config)
