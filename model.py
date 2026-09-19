@@ -1550,7 +1550,10 @@ def topic_recommend(conn, handle, current_rating, pool, target, count=5, now=Non
     here, from their history, with everything else held fixed, and their
     older attempts counting less -- exactly the fold-in the evaluation scored.
     Each unsolved problem in `pool` is then scored as an attempt made NOW: in
-    practice, at today's rating, with today's experience.
+    practice, at today's rating, with today's experience. `current_rating`
+    must be the rating Codeforces computes with -- rating_now() -- because
+    that is the one the model was fitted on; the one a new account's profile
+    shows is up to 900 points lower.
 
     Ties, now rare because problems no longer share a probability by rating
     alone, go to the newest contest as in recommend().

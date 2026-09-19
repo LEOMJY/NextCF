@@ -81,6 +81,17 @@ page says which number the chances were worked out for.
 | + practice history | **0.6012** | 1.0 pt |
 | + practice history, computed rating | **0.6010** | 1.1 pt |
 
+Refitted on the 1st of every month, as the product does, round three scores
+**0.5980** on validation against round two's 0.6007 — the monthly refit is
+worth +0.0030 to it, as it was to round two, and the two gains add.
+
+**On the test set** — the second look, on ADR 0013's amended terms — round
+three scores **0.5934** against round two's 0.5989 and the baseline's 0.6535,
+lower in every stratum by 0.004 to 0.006, calibration 1.5 points against 1.6.
+The gain on 2026 is twice the gain on validation, which fits the account of
+where it comes from: the newer the attempt, the more of it is made by new
+accounts and by users mid-way through a burst of practice.
+
 History is worth 0.0026, and helps every stratum — 1000–1199 by 0.0033 and
 1800–1999 by 0.0040. Round two's five extra columns together were worth
 0.0101, so this is a quarter as much again from the user's own recent past.
@@ -143,10 +154,19 @@ of a fit were taken out again.
 
 ## Consequences
 
+- **The evaluation's history is fresher than the website's.** Each attempt is
+  scored with its history counted up to the second before it; the website
+  counts up to the moment the page is opened, and the attempt comes later.
+  Measured by refitting with the columns counted as of a fixed time before
+  each attempt: an hour earlier 0.6007, a day earlier 0.6015, against 0.6010
+  at the moment and 0.6031 without history. The gain survives an hour's
+  staleness untouched and a day's with three quarters of it left.
 - **A fit takes about 14 minutes on the training period, not 3.** The monthly
-  refit on everything is correspondingly longer; it runs unattended.
-- **The website's cost is small.** The scorer adds the overall history once
-  per page and each topic's once per topic; per problem only a mean over its
+  refit on everything took 41 sweeps and 37 minutes; it runs unattended.
+- **The website's cost is small**: 40 to 46 ms for one real history's
+  recommendations, 93 to 102 ms for tourist's, timed side by side. The scorer
+  adds the overall history once per page and each topic's once per topic; per
+  problem only a mean over its
   tags. A check scores every problem both ways against `predict()` with every
   column on and fails on any difference.
 - **A second look at the test set**, on the terms in ADR 0013's amendment.

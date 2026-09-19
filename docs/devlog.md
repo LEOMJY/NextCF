@@ -3664,9 +3664,19 @@ Validation, frozen at its start:
 | + that + rating dynamics | 0.6008 |
 
 History is the prize: 0.0026, every stratum better, a quarter as much again as
-all of round two's columns. On top of it the rating's contribution is small,
+all of round two's columns. Refitted monthly, as the product runs, the whole
+of round three scores 0.5980 on validation against round two's 0.6007. On top of it the rating's contribution is small,
 because a newcomer's rapid improvement already shows in how much they are
 winning lately.
+
+**Is the history too fresh to be fair?** Every attempt in the evaluation has
+its history counted up to the second before it. The website counts up to the
+moment the page is opened, and the attempt comes minutes or days later. So
+the whole model was refitted twice more with the history counted as of an
+hour, then a day, before each attempt: 0.6007 and 0.6015, against 0.6010 fresh
+and 0.6031 without. An hour costs nothing — slightly better, within noise — and
+a day keeps three quarters of the gain. The number was not flattered by the
+freshness.
 
 **The computed rating was kept over the learned columns** despite 0.0002. That
 difference is below what validation can resolve, and the learned version would
@@ -3704,6 +3714,38 @@ at best were deleted.
 
 ### The test, a second time
 
-Round three is committed in `evaluate.FINAL` with this entry, before the test
-set is scored for it — on the terms of ADR 0013's amendment: the number is
-reported whatever it is, and decides nothing.
+Round three was committed in `evaluate.FINAL` (fb5a987) before the test set
+was scored for it — on the terms of ADR 0013's amendment: the number is
+reported whatever it is, and decides nothing. Nine monthly refits, from 37
+sweeps for the first (cold) to 6–12 for the rest, about 75 minutes:
+
+| | baseline | round two | round three |
+|---|---|---|---|
+| weighted total | 0.6535 | 0.5989 | **0.5934** |
+| 1000–1199 | 0.6684 | 0.6043 | 0.5992 |
+| 1200–1399 | 0.6540 | 0.6018 | 0.5956 |
+| 1400–1599 | 0.6416 | 0.5913 | 0.5855 |
+| 1600–1799 | 0.6328 | 0.5906 | 0.5868 |
+| 1800–1999 | 0.6225 | 0.5824 | 0.5766 |
+| calibration | 4.8 pt | 1.6 pt | 1.5 pt |
+
+9.2% below the baseline now, against 8.4%, in every stratum. The gain on the
+test year is twice the gain on validation (0.0055 against 0.0027), which fits
+where it comes from: the newer the attempt, the more of it is made by new
+accounts and by people in the middle of a burst of practice. The model is
+still about two points pessimistic in 2026 — said 45.2%, happened 47.5% —
+which is what ADR 0015 expects of a sample drawn on its future rating.
+
+This test set is now spent. The next model is judged on what the October
+refresh brings: months no model has seen.
+
+### Next
+
+- The first `collect.py refresh` and refit in October — and with it a fresh
+  test window.
+- Candidates for the round after, judged on that window: level × topic
+  (+0.0006 in the screen); what to do for a visitor with no rating at all,
+  now that Codeforces' own answer is known — it computes a new account from
+  1400, and the 4.6% of attempts made before a first rated contest can say
+  whether that works.
+- `/how`, which now has a number to hold.

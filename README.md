@@ -4,24 +4,22 @@
 
 Tells a competitive programmer which Codeforces problem to solve next.
 
-You enter your Codeforces handle. It reads your public submission history, works
-out which topics you are strong and weak at, and recommends problems that should
-be just hard enough — roughly a 70% chance you solve them.
+You enter your Codeforces handle. It reads your public submission history,
+shows how you do in each topic, and recommends five problems where your first
+submission has about an even chance of being accepted — hard enough to teach
+you something, and chosen from a model that is measured, not guessed.
 
 ---
 
-## Status: v0.3 done, v0.4 next
-
-**Nothing on this page is finished yet.** What exists today is a three-page web
-app that reads a Codeforces history into a database and lists it back. There is
-no model yet — so it recommends nothing, which is the entire point of the
-project.
+## Status: v0.6 — the model works; `/how` next
 
 | | |
 |---|---|
-| Works now | Enter a handle; the history is fetched in the background behind a progress page, stored, listed, and styled |
-| Collected (v0.3) | A dataset of 4000 users stratified by rating: 3.9 million submissions and every rating change |
-| Next (v0.4) | Per-topic solve counts, a rating-only baseline recommender, and the topic-breakdown chart |
+| Works now | Enter a handle; the history is fetched in the background, then shown with a breakdown by topic and five recommended problems |
+| The model | A logistic model of a first submission being accepted, learned from 4,000 other users: the problem's own record, its topics, the user's rating, their recent practice — [ADR 0014](docs/decisions/0014-topic-model.md), [ADR 0015](docs/decisions/0015-practice-history-and-computed-rating.md) |
+| Measured | Log loss on the first attempts of 2026, which no model was fitted on: **0.5934** against a rating-only baseline's 0.6535, lower in every rating band ([spec §9](docs/spec.md)) |
+| Collected (v0.3) | A dataset of 4000 users stratified by rating: 3.9 million submissions and every rating change, refreshed monthly |
+| Next | `/how`, the page that explains the model and its number; then logging, error handling and tests (v0.7) |
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a
@@ -45,8 +43,9 @@ problemset by rating.**
 
 That measurement is the point of this project, not an appendix to it. v1.0 is
 not done until the model scores a lower log loss than a rating-only baseline on
-held-out submissions and **that number is written down publicly**. Skip it and
-this is just a website — see [spec §9](docs/spec.md).
+held-out submissions and **that number is written down publicly**. It now is —
+see [spec §9](docs/spec.md), and [ADR 0013](docs/decisions/0013-evaluation-protocol.md)
+for how it was measured so that it could not flatter itself.
 
 ## Running it locally
 
@@ -90,8 +89,8 @@ The handle is optional and defaults to `tourist`. An unknown handle prints an
 explanation rather than a stack trace.
 
 > On Windows, use `py -3.14` rather than bare `py`. The launcher defaults to the
-> free-threaded build (`3.14t`), which does not reliably have prebuilt packages
-> for the scientific libraries this project needs later.
+> free-threaded build (`3.14t`), which does not reliably have prebuilt packages.
+> The model itself needs none: it is plain Python.
 
 ## Layout
 
@@ -101,7 +100,11 @@ templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
 db.py                the database: opening it, creating it, and every query
 sync.py              fetches one user's history in the background
-collect.py           draws and collects the 4000-user dataset — see docs/decisions/0009-dataset-sample.md
+collect.py           draws, collects and refreshes the 4000-user dataset — see docs/decisions/0009-dataset-sample.md
+model.py             the rating-only baseline and the topic model; fits a visitor into it
+evaluate.py          the evaluation harness behind spec §9's number — see docs/decisions/0013-evaluation-protocol.md
+baseline.json        the baseline's two fitted numbers
+topic_model.json     the topic model's crowd part, refitted monthly
 static/style.css     the whole design system — see docs/decisions/0006-design-direction.md
 static/fonts/        IBM Plex Mono, served from this site, with its licence
 schema.sql           the tables and the view — see docs/spec.md §6
@@ -113,8 +116,8 @@ docs/devlog.md       dated entries: what was tried, what broke, what was learned
 docs/decisions/      one short file per significant technical decision (ADRs)
 ```
 
-Modules still to come — `model.py`, `evaluate.py`, `scheduler.py` — are
-described in [spec §4](docs/spec.md).
+Still to come: `scheduler.py`, the nightly re-sync — see
+[spec §4](docs/spec.md).
 
 ### Collecting the dataset
 
@@ -137,12 +140,24 @@ where it stopped:
 Do not use the local site while it runs: each program keeps its own
 two-second pace, and together they would go twice as fast as Codeforces allows.
 
+Once a month the same users are fetched again and the model refitted, so it
+knows the problems released since — about four and a half hours, resumable,
+then about forty minutes of fitting:
+
+```bash
+.venv\Scripts\python.exe collect.py refresh
+```
+
+```bash
+.venv\Scripts\python.exe model.py fit-topic
+```
+
 ## Stack
 
-Python 3.14, Flask, SQLite, hand-written CSS. Today there is no JavaScript
-build step and no frontend framework; from v0.4, React components handle the
-interactive parts of pages Flask still renders
-([ADR 0008](docs/decisions/0008-react-islands.md)). Reasoning, and the list of things explicitly rejected, is in
+Python 3.14, Flask, SQLite, hand-written CSS; the model is plain Python, with
+no numerical libraries. Today there is no JavaScript build step and no frontend
+framework; React components are planned for the interactive parts of pages
+Flask still renders ([ADR 0008](docs/decisions/0008-react-islands.md)). Reasoning, and the list of things explicitly rejected, is in
 [spec §7](docs/spec.md).
 
 ## Notes

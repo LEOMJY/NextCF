@@ -536,7 +536,9 @@ ROUND_THREE = dict(ROUND_TWO, extras=ROUND_TWO["extras"] + ("history",))
 # This is the second, and the second look at the same test set: ADR 0013's
 # amendment says why that is allowed once and on what terms. Round three
 # ships on its validation result; the test number is reported whatever it is,
-# and does not decide between the two.
+# and does not decide between the two. Refitted monthly it scored 0.5980 on
+# validation (round two 0.6007), and on the test set, on 2026-09-18, 0.5934 --
+# lower than round two's 0.5989 in every stratum. The test set is now spent.
 FINAL = dict(ROUND_THREE, rolling=True, platt=False)
 
 

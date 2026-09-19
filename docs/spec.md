@@ -12,8 +12,11 @@ A website that tells a competitive programmer which problem to solve next.
 
 You enter your Codeforces handle. It reads your public submission history,
 works out which topics you are strong and weak at, and recommends problems
-that should be just hard enough — roughly a 70% chance you solve them. It also
-shows you the topic breakdown it computed, because that is useful on its own.
+that should be just hard enough — about an even chance that your first
+submission is accepted. It also shows you the topic breakdown it computed,
+because that is useful on its own.
+*(First written as "roughly a 70% chance you solve them"; the target became a
+50% first-try accept on 2026-09-18 — see "what counts as solved?" in §12.)*
 
 ## 2. Who it is for
 
@@ -701,20 +704,27 @@ v1.0 is done when all three hold:
    than the rating-only baseline**, and that number is written down — for each
    of the five rating strata in ADR 0009, and as one total weighted by each
    stratum's real share of the audience.
-   **Met, 2026-09-18**, on the 527,388 first attempts of 2026, scored once
-   under the protocol in ADR 0013:
+   **Met, 2026-09-18**, on the 527,388 first attempts of 2026, under the
+   protocol in ADR 0013 — scored twice, the second time for the improved
+   model and on the terms of that ADR's amendment (configuration committed
+   first; the number reported whatever it said, deciding nothing):
 
-   | | baseline | model |
-   |---|---|---|
-   | weighted total | 0.6535 | **0.5989** (8.4% lower) |
-   | 1000–1199 | 0.6684 | 0.6043 |
-   | 1200–1399 | 0.6540 | 0.6018 |
-   | 1400–1599 | 0.6416 | 0.5913 |
-   | 1600–1799 | 0.6328 | 0.5906 |
-   | 1800–1999 | 0.6225 | 0.5824 |
+   | | baseline | round two, first look | **round three, second look** |
+   |---|---|---|---|
+   | weighted total | 0.6535 | 0.5989 (8.4% lower) | **0.5934** (9.2% lower) |
+   | 1000–1199 | 0.6684 | 0.6043 | 0.5992 |
+   | 1200–1399 | 0.6540 | 0.6018 | 0.5956 |
+   | 1400–1599 | 0.6416 | 0.5913 | 0.5855 |
+   | 1600–1799 | 0.6328 | 0.5906 | 0.5868 |
+   | 1800–1999 | 0.6225 | 0.5824 | 0.5766 |
+   | calibration gap | 4.8 points | 1.6 points | 1.5 points |
 
-   Calibration gap 1.6 points against the baseline's 4.8. What each part of
-   the model is worth, and what the result says about topics, is in ADR 0014.
+   Round three is what ships. What each part of the model is worth, and what
+   the result says about topics, is in ADR 0014; what round three added — a
+   user's recent practice, and the rating Codeforces computes with rather
+   than the one a new account's profile shows — in ADR 0015. This test set is
+   now spent: the next model is judged on the months after 2026-09-15, which
+   the monthly refresh collects.
    The baseline is a logistic curve in the rating gap, **fitted** to the data
    rather than Elo's own formula, which measured several times too steep and
    would be beaten by anything (ADR 0012). Two rules follow for the harness.
