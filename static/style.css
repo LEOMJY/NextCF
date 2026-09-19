@@ -277,6 +277,14 @@ time {
   font-size: var(--text-small);
 }
 
+/* The nav sits at the far end of the header. margin-left: auto takes all the
+   free space on its left in a flex row, which pushes it right without a
+   width or a position anywhere. */
+.site-nav {
+  margin-left: auto;
+  font-size: var(--text-small);
+}
+
 main {
   max-width: var(--page);
   margin: 0 auto;
@@ -320,8 +328,9 @@ main {
   margin-bottom: var(--s2);
 }
 
-/* The honest paragraph about what the site cannot do yet. It is deliberately
-   not hidden away in small print. */
+/* The honest paragraph: what the site can back up, and where to check it. It
+   began as the one about what the site could not do yet, and is deliberately
+   not hidden away in small print either way. */
 .caveat {
   max-width: var(--measure);
   margin-bottom: var(--s4);
@@ -572,6 +581,58 @@ tbody tr:hover td {
   font-size: var(--text-small);
   max-width: var(--measure);
   margin-top: var(--s2);
+}
+
+/* ------------------------------------------------------ reading pages: /how
+ *
+ * The quiet surface, for a page that is read rather than scanned: running
+ * prose at the measure, paragraphs a step apart, and tables no wider than
+ * the text around them -- three columns of numbers stretched across 1100px
+ * read as three islands.
+ */
+
+.prose p,
+.prose ul,
+.prose .table-wrap {
+  max-width: var(--measure);
+}
+
+.prose p + p,
+.prose p + ul,
+.prose ul + p,
+.prose .table-wrap + p,
+.prose p + .table-wrap {
+  margin-top: var(--s2);
+}
+
+.prose ul {
+  padding-left: var(--s3);
+}
+
+.prose li + li {
+  margin-top: var(--s1);
+}
+
+/* A two-column table of numbers reads as pairs only when the pairs sit
+   together; at full width they are two columns a page apart. */
+.prose .table-wrap.compact {
+  width: fit-content;
+}
+
+.prose .compact table {
+  width: auto;
+}
+
+.prose .compact th,
+.prose .compact td {
+  padding-right: var(--s4);
+}
+
+/* The weighted total under the five bands: the one row the whole table is
+   there to support. */
+.total td {
+  font-weight: 600;
+  border-top: 1px solid var(--muted);
 }
 
 

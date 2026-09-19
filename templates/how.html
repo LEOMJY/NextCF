@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}How it works &mdash; NextCF{% endblock %}
+
+{% block content %}
+  {# Spec section 4.1: the section 9 number needs a permanent home on the
+     site, one click from any page, for a visitor deciding whether to trust
+     the recommendations.
+
+     The quiet surface (spec section 7.1): it is read, not glanced at, so
+     prose at the measure, the head size for the title, tables for anything
+     with numbers in it -- the house style since ADR 0001's amendment -- and
+     the accent nowhere it does not already mean something. Every number
+     comes from web.EVALUATION, which is the same table as spec section 9. #}
+  <div class="tool prose">
+    <h1>How it works</h1>
+    <p class="meta">
+      What the percentage on each problem means, where it comes from, and how
+      well it has held up on attempts it never saw.
+    </p>
+
+    <h2>The number</h2>
+    <p>
+      Every recommended problem carries one number: the chance that your
+      <strong>first</strong> submission to it is accepted. The five shown are
+      the ones nearest 50% &mdash; hard enough to teach you something, and
+      still problems people at that level solve in the end about nine times in
+      ten.
+    </p>
+
+    <h2>Where it comes from</h2>
+    <p>
+      A model learned from 4,000 other Codeforces users rated 1000&ndash;1999
+      and their 1.58 million first attempts. About each problem it knows:
+    </p>
+    <ul>
+      <li>how often people get it right first time &mdash; some problems are
+        traps, whatever their rating says;</li>
+      <li>how hard its topics are for everybody;</li>
+      <li>where it sits in its contest.</li>
+    </ul>
+    <p>
+      About you, it uses your rating, how your own past attempts went &mdash;
+      recent ones counting more &mdash; and what you have practised in the
+      last hour, day, week and month. For a new account's first six rated
+      contests Codeforces computes with a higher rating than the profile
+      shows, and the model uses that one.
+    </p>
+    <p>
+      Your visit does not train it. The model is learned from that separate
+      sample and refitted once a month; your history is only used to place
+      you inside it.
+    </p>
+
+    <h2>How well it holds up</h2>
+    <p>
+      It was tested on the {{ ev.attempts }} first attempts made in 2026, none
+      of which it learned from. The score is <strong>log loss</strong>: the
+      average penalty per prediction, where a confident wrong answer costs far
+      more than a cautious one. Lower is better. Guessing 50% every time
+      scores {{ "%.3f"|format(ev.coin) }}; guessing the usual success rate every
+      time, {{ "%.3f"|format(ev.average) }}.
+    </p>
+    {# The same five strata as ADR 0009 and spec section 9, and the total
+       weighted by each stratum's real share of active users rather than by
+       how many attempts it happened to contribute. #}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            {# Short on purpose: headers do not wrap, and "rating at the time"
+               made this table 9px wider than a 375px phone. #}
+            <th>Rating band</th>
+            <th class="num">Rating only</th>
+            <th class="num">This model</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for band, base, ours in ev.strata %}
+            <tr>
+              <td>{{ band }}</td>
+              <td class="num">{{ "%.4f"|format(base) }}</td>
+              <td class="num">{{ "%.4f"|format(ours) }}</td>
+            </tr>
+          {% endfor %}
+          <tr class="total">
+            <td>All, weighted by how many users each band has</td>
+            <td class="num">{{ "%.4f"|format(ev.baseline) }}</td>
+            <td class="num">{{ "%.4f"|format(ev.model) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Knowing only your rating gets {{ "%.3f"|format(gain_baseline) }} below
+      always guessing the usual rate. The model gets
+      {{ "%.3f"|format(gain_model) }} below it &mdash; about four times as far,
+      and it is lower in every band.
+    </p>
+
+    <h2>Does 50% mean 50%?</h2>
+    <p>
+      A probability is only worth showing if it comes true as often as it
+      says. This is what happened in 2026 to attempts the model put in each
+      range:
+    </p>
+    <div class="table-wrap compact">
+      <table>
+        <thead>
+          <tr>
+            <th class="num">Model said</th>
+            <th class="num">Happened</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for said, happened in ev.calibration %}
+            <tr>
+              <td class="num">{{ "%.0f"|format(said) }}%</td>
+              <td class="num">{{ "%.0f"|format(happened) }}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="footnote">
+      Off by {{ ev.gap_model }} points on average, against
+      {{ ev.gap_baseline }} for rating alone, which was wrong by more than
+      twenty points at the low end. In the middle the model is about two
+      points pessimistic: problems it called 50% were solved first time about
+      52% of the time.
+    </p>
+
+    <h2>What it cannot know</h2>
+    <ul>
+      <li>Whether you read the editorial first, how long you spent, or whether
+        it was a bad day. Even the true probability leaves one attempt a coin
+        toss.</li>
+      <li>Which topics you are weak at. Measured, a user's strength in a topic
+        added almost nothing: people choose their own problems, and a weakness
+        hides in the choosing. So the results page does not claim it.</li>
+      <li>Anyone with no rating yet. They get the topic breakdown and no
+        recommendations.</li>
+    </ul>
+
+    <h2>The details</h2>
+    <p>
+      Every number here, how it was measured, and the ideas that did not work
+      are in the project's
+      <a href="https://github.com/LEOMJY/NextCF/blob/main/docs/spec.md#9-how-we-will-know-it-worked">specification</a>
+      and <a href="https://github.com/LEOMJY/NextCF/tree/main/docs/decisions">decision records</a>.
+      The 2026 attempts were scored twice, once for the first version of this
+      model and once for this one, each time with the configuration committed
+      before the test &mdash;
+      <a href="https://github.com/LEOMJY/NextCF/blob/main/docs/decisions/0013-evaluation-protocol.md">why that matters</a>.
+    </p>
+  </div>
+{% endblock %}

@@ -3795,3 +3795,42 @@ with problems the site chose for them — the one setting in which a weakness in
 a topic can show, because the user did not pick the problem.
 
 Nothing from this round ships; the code stayed in the experiment.
+
+---
+
+## 2026-09-19 — `/how`, and a landing page that had stopped telling the truth
+
+**The landing page was wrong on the live site for two days.** Written at v0.2,
+it said the site would *eventually* pick problems at a 70% chance, and then, in
+bold: "Right now it does none of that." Both became false on 09-17, when the
+recommendations went live, and nothing checked the pitch against the product.
+Now it says what the site does and what it can back up, and links to where
+that is shown. The version beside the name still said v0.3, and the button
+still said "Show my submissions". A check now fails if the landing page claims
+the site does nothing, or mentions 70%.
+
+**`/how`** is §4.1's page: what the percentage means, what the model knows
+about a problem and about a visitor, §9's number by rating band, and a
+calibration table — *when it said 50%, what happened*. It ends with what the
+model cannot know, including that it does not claim anybody is weak at a
+topic, and why. It is on the quiet surface: prose at the measure, tables for
+numbers, no new token.
+
+Two decisions in it:
+
+- **The numbers live in one place in the code**, `web.EVALUATION`, and a check
+  compares them with spec §9. The page and the spec making different claims
+  about the one number the project exists to publish would be worse than
+  either being missing.
+- **An honest zero point.** Log loss has no natural scale for a reader, so the
+  page gives two: guessing 50% every time scores 0.693, and always guessing
+  the usual success rate 0.672. Measured from the second, rating alone gets
+  0.019 below it and the model 0.079 — "about four times as far" is a claim a
+  reader can check with a subtraction.
+
+Two layout fixes found only by looking: a two-column table of numbers at full
+width read as two columns a page apart, so it is now as wide as its contents;
+and a header that does not wrap made the first table 9px wider than a 375px
+phone, fixed by shortening "Rating at the time" to "Rating band".
+
+v0.6 is done. Next is v0.7.

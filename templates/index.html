@@ -13,14 +13,19 @@
     <h1>Which Codeforces problem should you solve <span class="accent">next?</span></h1>
 
     <p class="lede">
-      Enter your handle. Eventually this reads your submission history, works out
-      which topics you are strong and weak at, and picks problems you have roughly
-      a 70% chance of solving.
+      Enter your handle. It reads your submission history and picks five
+      problems where your first submission has about an even chance of being
+      accepted &mdash; hard enough to teach you something.
     </p>
 
+    {# The claim, and where to check it. Until 2026-09-19 this paragraph said
+       the site did none of the above, which had stopped being true at v0.4
+       and went on saying so to every visitor for two days. #}
     <p class="caveat">
-      <strong>Right now it does none of that.</strong> It reads your submission
-      history into a database and prints it in a table. That is all.
+      <strong>Tested, not assumed.</strong> On 527,388 attempts from 2026 that
+      it never learned from, it predicted first submissions better than rating
+      alone in every rating band.
+      <a href="{{ url_for('how') }}">How it works, and how that was measured</a>
     </p>
 
     {# `error` is only passed in when the POST was rejected, and an undefined

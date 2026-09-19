@@ -771,7 +771,7 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 | v0.3 | Bulk collection into `dataset.db`, on the author's machine: 4000 users stratified by rating, with histories and rating changes — rate limited, resumable | mid Sep |
 | v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart. **Done 09-17**, except React taking the chart over — moved behind the model | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
-| v0.6 | First real model, scored against the baseline; `/how`. **Model done 09-18**, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh` done; `/how` still to come | late Oct |
+| v0.6 | First real model, scored against the baseline; `/how`. **Done 09-19**: model 09-18, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh`; `/how` 09-19 | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts | early Nov |
 | v0.8 | Design polish pass and unhandled states — see §7.1 | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |

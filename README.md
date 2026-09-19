@@ -11,7 +11,7 @@ you something, and chosen from a model that is measured, not guessed.
 
 ---
 
-## Status: v0.6 — the model works; `/how` next
+## Status: v0.6 done — the model works, and `/how` says how well; v0.7 next
 
 | | |
 |---|---|
@@ -19,7 +19,7 @@ you something, and chosen from a model that is measured, not guessed.
 | The model | A logistic model of a first submission being accepted, learned from 4,000 other users: the problem's own record, its topics, the user's rating, their recent practice — [ADR 0014](docs/decisions/0014-topic-model.md), [ADR 0015](docs/decisions/0015-practice-history-and-computed-rating.md) |
 | Measured | Log loss on the first attempts of 2026, which no model was fitted on: **0.5934** against a rating-only baseline's 0.6535, lower in every rating band ([spec §9](docs/spec.md)) |
 | Collected (v0.3) | A dataset of 4000 users stratified by rating: 3.9 million submissions and every rating change, refreshed monthly |
-| Next | `/how`, the page that explains the model and its number; then logging, error handling and tests (v0.7) |
+| Next (v0.7) | Nightly re-sync, logging, error handling and tests; `/privacy`; counting visits on storage that survives restarts |
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a

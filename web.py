@@ -68,6 +68,39 @@ FRESH_FOR_SECONDS = 600
 # visitor checks that the numbers above it are about them.
 RESULTS_LIMIT = 100
 
+# Spec section 9's number, for /how: `evaluate.py final` on 2026-09-18, the
+# second look at the 2026 test set (ADR 0013's amendment), for the model that
+# ships. It is the same table as spec section 9, so change the two together --
+# and only after a new test. A monthly refit does not change it: the test
+# measured how well this KIND of model predicts a year it never saw.
+#
+# Log losses are population-weighted across the five strata, as section 9
+# reports them. "average" is the score of always guessing the success rate
+# seen before 2026 (57.4%), the honest zero point: a predictor that knows
+# nothing about the user or the problem.
+EVALUATION = {
+    "attempts": "527,388",
+    "coin": 0.6931,
+    "average": 0.6720,
+    "baseline": 0.6535,
+    "model": 0.5934,
+    "strata": [
+        ("1000–1199", 0.6684, 0.5992),
+        ("1200–1399", 0.6540, 0.5956),
+        ("1400–1599", 0.6416, 0.5855),
+        ("1600–1799", 0.6328, 0.5868),
+        ("1800–1999", 0.6225, 0.5766),
+    ],
+    # (model said, happened), in per cent, for the test year's attempts binned
+    # by what the model said. From the same run.
+    "calibration": [
+        (7.8, 8.4), (16.4, 18.8), (25.6, 27.8), (35.3, 37.6), (45.2, 47.5),
+        (55.1, 57.1), (65.1, 66.5), (75.0, 75.9), (84.4, 84.3), (93.1, 91.3),
+    ],
+    "gap_model": 1.5,
+    "gap_baseline": 4.8,
+}
+
 # Create the tables if they are missing, then fail any job left behind by a
 # process that died. Runs on import, which means once per server start, before
 # any request is served.
@@ -280,6 +313,24 @@ def progress(job_id):
         )
 
     return render_template("progress.html", job=job)
+
+
+@app.route("/how")
+def how():
+    """How the model works, and section 9's number (spec section 4.1).
+
+    Static apart from the numbers, which come from EVALUATION above so that
+    the page and the spec are updated from one place in the code.
+    """
+    ev = EVALUATION
+    return render_template(
+        "how.html",
+        ev=ev,
+        # How far below the know-nothing guess each predictor gets: the plain
+        # way to say "the model knows about four times as much as the rating".
+        gain_baseline=ev["average"] - ev["baseline"],
+        gain_model=ev["average"] - ev["model"],
+    )
 
 
 def display_row(row):
