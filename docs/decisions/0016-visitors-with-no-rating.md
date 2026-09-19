@@ -83,3 +83,31 @@ need the answer.
   round three fitted on everything before 2026 and frozen there — no monthly
   refits, so the number can only understate the site. The result is recorded
   below, whatever it is.
+
+## Test — 2026-09-19, once
+
+Run as committed in 36f0b52: round three fitted on everything before 2026
+and frozen there (37 sweeps, 23 minutes), each visitor folded in from their
+own earlier pre-rating attempts, starting at 1000.
+
+| 2026's 15,659 pre-rating first attempts, 942 users | log loss |
+|---|---|
+| always guessing the pre-2026 pre-rating rate (53.1%) | 0.6835 |
+| **the model, from 1000** | **0.6271** |
+
+Well clear of knowing nothing — and **6.0 points pessimistic**: attempts it
+put at 45% succeeded 54% of the time, at 35% 46%. First-try success among
+these attempts was 59.3%, against 57.5% in validation and 51.6% before it.
+
+The likeliest reading is the sample's selection at its sharpest. Somebody
+with no rating in 2026 who is in a sample drawn on September 2026's ratings
+reached 1000–1999 within months of their first contest: the fastest
+newcomers of the year. A real unrated visitor is not chosen that way. How
+much of the six points is selection and how much is the model this data
+cannot say; the fresh months after 2026-09-15 are no better placed to, since
+their unrated attempts are selected the same way.
+
+The decision stands, as it was committed to: the start stays at 1000. Its
+error runs in the safe direction for a newcomer — problems a little easier
+than intended, not harder — and the page now says that an unrated account's
+chances are less certain than a rated one's.

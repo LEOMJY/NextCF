@@ -3834,3 +3834,45 @@ and a header that does not wrap made the first table 9px wider than a 375px
 phone, fixed by shortening "Rating at the time" to "Rating band".
 
 v0.6 is done. Next is v0.7.
+
+---
+
+## 2026-09-19 — Recommending to somebody with no rating
+
+Until today a visitor who had never entered a rated contest got the topic
+breakdown and nothing else: the model is built on the rating at the time of
+each attempt, and they have none. They are exactly the people who most need
+to be told what to practise.
+
+**The data for the question was already there, unused.** The harness drops
+every first attempt made before the user's first rated contest — 79,453 of
+them — because there is no rating at the time. That is what an unrated
+visitor's history looks like, and since every decision so far excluded those
+attempts, the 2026 ones had never been scored: a fresh test for this one.
+
+**The obvious answer was measurably wrong.** Codeforces computes a new account
+from 1400, and after ADR 0015 — the model reads the rating Codeforces computes
+with — 1400 was the consistent choice. On validation it made the model too
+hopeful: problems it put at 55% were solved first time 49% of the time. The
+best start was 1000 (0.5927, against 0.5990 at 1400 and 0.6888 for knowing
+nothing), with 1200 close behind. A first contest usually takes a new
+account's rating *down* from 1400, and the people who have not entered one
+yet are weaker, on average, than the system's starting number.
+
+**The rating-only curve cannot do this at all**: given any starting rating it
+scores 0.68–0.72, no better than guessing, because the rating it runs on is
+exactly what is missing. The topic model scores about as well on unrated
+attempts as on rated ones — most of what it knows is about the problem, and
+the rest comes from the visitor's own practice.
+
+**The test, once, as committed (36f0b52):** 0.6271 against 0.6835 for knowing
+nothing on 2026's 15,659 pre-rating attempts — and six points pessimistic.
+These were people who reached 1000–1999 within months of their first contest,
+the fastest newcomers of the year in a sample drawn on its future; a real
+unrated visitor was not chosen for that. The start stayed at 1000, as
+committed: its error makes problems a little easier than intended, which is
+the safe way round for a newcomer, and the page says an unrated account's
+chances are less certain.
+
+Shown on the page: "You have no rating yet, so these chances start from
+1000 …", checked with a real history re-saved under a handle with no rating.
