@@ -909,6 +909,10 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   The half still open is a visitor with **no rating** at all, who has neither
   the gap nor the level the model is built on; the page tells them so and
   recommends nothing.
+  *Answered 2026-09-19 (ADR 0016):* they are served from a starting rating of
+  **1000**, chosen on the attempts people made before their first rated
+  contest, and moved from there by their own practice. 1400 — what Codeforces
+  itself starts a new account from — made the model too hopeful about them.
 - **Where do visit records live?** §9 needs to know who came back, and on the
   free instance nothing written survives a spin-down (§7). A paid disk keeps
   SQLite and costs money every month; a hosted database costs nothing on some

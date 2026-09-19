@@ -64,6 +64,18 @@
              six rated contests. The chances use the computed number, and
              without this line a visitor who sees 700 on their profile gets
              problems picked for 1250 and no reason why. #}
+          {# Nobody has a rating before their first rated contest. The model
+             still needs one, so it starts them at the value that predicted
+             such attempts best, and their own practice moves them -- ADR
+             0016. Said, because the number is a choice and not theirs. #}
+          {% if recs.unrated %}
+            <p class="footnote">
+              You have no rating yet, so these chances start from
+              {{ recs.computed }} &mdash; the starting point that predicted best
+              for people who had not yet entered a rated contest &mdash; and
+              move with how your own practice has gone.
+            </p>
+          {% endif %}
           {% if recs.hidden %}
             <p class="footnote">
               Codeforces shows you {{ recs.shown }} but computes with
@@ -110,9 +122,9 @@
 
       {% elif recs.state == "unrated" %}
         <p class="meta">
-          Codeforces has no rating for {{ handle }} yet, and this recommender
-          works from the rating alone, so there is nothing to base a
-          recommendation on until one exists.
+          Codeforces has no rating for {{ handle }} yet, and the rating-only
+          recommender in use right now needs one, so there is nothing to base
+          a recommendation on until one exists.
         </p>
 
       {% elif recs.state == "not_ready" %}

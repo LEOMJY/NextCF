@@ -330,6 +330,7 @@ def how():
         # way to say "the model knows about four times as much as the rating".
         gain_baseline=ev["average"] - ev["baseline"],
         gain_model=ev["average"] - ev["model"],
+        unrated_start=model.UNRATED_START,
     )
 
 
@@ -374,10 +375,10 @@ def recommendation_view(conn, user):
     recommendations" means four different things and a visitor deserves to
     know which:
 
-        unrated    Codeforces has no rating for them, and a rating-only
-                   baseline has literally nothing to go on. What to show
-                   instead is spec section 12's cold-start question, due at
-                   v0.6, and this does not answer it early.
+        unrated    Codeforces has no rating for them AND there is no topic
+                   model to fall back on: the rating-only baseline has
+                   literally nothing to go on. With the model, an unrated
+                   visitor is served from model.UNRATED_START (ADR 0016).
         not_ready  the problemset has not arrived yet -- the few seconds after
                    a restart, or a fetch that failed (ADR 0010).
         exhausted  the pool is empty because they have solved everything
@@ -389,8 +390,7 @@ def recommendation_view(conn, user):
     and the difference is the point: the past is predicted from what was known
     then, the future from what is known now.
     """
-    if user["cf_rating"] is None:
-        return {"state": "unrated"}
+    unrated = user["cf_rating"] is None
 
     if db.problemset_size(conn) == 0:
         return {"state": "not_ready"}
@@ -410,10 +410,16 @@ def recommendation_view(conn, user):
     # new account's first six rated contests is more than its profile shows
     # (model.HIDDEN_AFTER); the page says so when the two differ. The
     # baseline keeps the shown one, as it was fitted on (ADR 0012).
+    #
+    # Somebody with no rating at all is served by the topic model from
+    # model.UNRATED_START, which rating_now returns for them; without the
+    # model file there is nothing to serve them from.
     rating = model.rating_now(conn, user["handle"], user["cf_rating"])
     picks = model.topic_recommend(conn, user["handle"], rating, pool, target)
     source = "topic"
     if picks is None:
+        if unrated:
+            return {"state": "unrated"}
         picks = model.recommend(pool, user["cf_rating"], target)
         source = "rating"
     if not picks:
@@ -427,7 +433,8 @@ def recommendation_view(conn, user):
         # extrapolation, and the page says so -- see model.outside_range.
         "extrapolated": source == "topic" and model.outside_range(
             model.current_topic_model(), rating),
-        "hidden": source == "topic" and rating != user["cf_rating"],
+        "hidden": source == "topic" and not unrated and rating != user["cf_rating"],
+        "unrated": unrated,
         "shown": user["cf_rating"],
         "computed": rating,
         "target": round(target * 100),
@@ -438,7 +445,11 @@ def recommendation_view(conn, user):
         #
         # int() because round(x, -2) on a float returns a float: 2800.0,
         # which is what the first version printed on the page.
-        "centre": max(800, int(round(model.rating_for_probability(user["cf_rating"], target), -2))),
+        #
+        # Only the baseline's sentence uses it, and the baseline never serves
+        # somebody unrated -- who has no rating to put into the curve.
+        "centre": (max(800, int(round(model.rating_for_probability(user["cf_rating"], target), -2)))
+                   if not unrated else None),
         "event": baseline["event"],
         "problems": [
             {

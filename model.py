@@ -726,6 +726,16 @@ HIDDEN_AFTER = (1400, 900, 550, 300, 150, 50)
 NEW_RULE_FROM = "2020-05-20T00:00:00Z"
 
 
+# A visitor with NO rating -- never in a rated contest -- is served from this
+# one. Codeforces' own answer would be 1400, what it computes a new account
+# from; but measured on the 15,952 attempts people made before their first
+# rated contest in the second half of 2025, a start of 1400 made the model
+# too hopeful (said 55%, happened 49%) and 1000 predicted best: log loss
+# 0.5927, against 0.5990 at 1400 and 0.6888 for knowing nothing (ADR 0016).
+# The visitor's own practice then moves them from here, like anybody else.
+UNRATED_START = 1000
+
+
 def computed_ratings(changes):
     """[(rated_at, rating as Codeforces computes with it)] from a user's
     [(rated_at, new_rating)], oldest first -- the shown rating plus whatever
@@ -738,12 +748,15 @@ def computed_ratings(changes):
 
 
 def rating_now(conn, handle, shown):
-    """A visitor's rating as Codeforces computes with it today: `shown` when
-    nothing is hidden any more (or they have no rating changes stored)."""
+    """The rating the model reads for a visitor today: the one Codeforces
+    computes with, which is `shown` once nothing is hidden any more -- or
+    UNRATED_START for somebody with no rating at all."""
     changes = conn.execute(
         "SELECT rated_at, new_rating FROM rating_changes WHERE handle = ? ORDER BY rated_at",
         (handle,),
     ).fetchall()
+    if shown is None and not changes:
+        return UNRATED_START
     if not changes or shown is None:
         return shown
     return shown + computed_ratings(changes)[-1][1] - changes[-1][1]
@@ -1308,6 +1321,11 @@ def visitor_attempts(conn, handle, data=None, problem_index=None, tag_index=None
     users, because the day they drift apart, the website is running a model
     nobody evaluated.
 
+    One deliberate exception: a visitor with NO rating changes at all. The
+    harness drops attempts made before a first rated contest, so for them it
+    would keep nothing; here every attempt is taken at UNRATED_START instead
+    -- the way ADR 0016's evaluation served such attempts, and scored them.
+
     Appends to `data` (a fresh Attempts if None), with every attempt as user
     0, and returns (data, history indices, problem_index, tag_index).
     """
@@ -1319,6 +1337,9 @@ def visitor_attempts(conn, handle, data=None, problem_index=None, tag_index=None
         "SELECT rated_at, new_rating FROM rating_changes WHERE handle = ? ORDER BY rated_at",
         (handle,),
     ).fetchall()
+    if not shown:
+        # "" sorts before every timestamp, so every attempt is "after" it.
+        shown = [("", UNRATED_START)]
     changes = computed_ratings(shown)
     moments = [at for at, _ in changes]
     rows = conn.execute(FIRST_ATTEMPTS_SQL.format(where="WHERE s.handle = ?"), (handle,)).fetchall()

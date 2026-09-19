@@ -44,7 +44,10 @@
       recent ones counting more &mdash; and what you have practised in the
       last hour, day, week and month. For a new account's first six rated
       contests Codeforces computes with a higher rating than the profile
-      shows, and the model uses that one.
+      shows, and the model uses that one. Somebody with no rating yet starts
+      from {{ unrated_start }}, the value that predicted best for people who
+      had not entered a rated contest, and their own practice moves them from
+      there.
     </p>
     <p>
       Your visit does not train it. The model is learned from that separate
@@ -138,8 +141,6 @@
       <li>Which topics you are weak at. Measured, a user's strength in a topic
         added almost nothing: people choose their own problems, and a weakness
         hides in the choosing. So the results page does not claim it.</li>
-      <li>Anyone with no rating yet. They get the topic breakdown and no
-        recommendations.</li>
     </ul>
 
     <h2>The details</h2>
