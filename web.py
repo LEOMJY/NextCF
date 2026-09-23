@@ -387,15 +387,25 @@ def results(handle):
         # queueing a second.
         return redirect(url_for("progress", job_id=sync.start_sync(handle)))
 
-    # Stored but old: show it NOW, and re-sync behind it -- ADR 0018. The
-    # returning visitor is the one person who never has to watch a queue, and
-    # section 9's second criterion is entirely about returning visitors.
+    # Stored: show it NOW, and start nothing -- ADR 0018, amended. An earlier
+    # version began a fresh sync behind this page automatically. Two things
+    # were wrong with that. The visitor was never told it was happening, and
+    # it spent two API requests on work nobody asked for -- which, on the day
+    # a blog post sends a crowd, is every returning visitor lengthening the
+    # queue for everybody who is actually waiting.
+    #
+    # So the page offers a button instead. Only the visitor knows whether they
+    # have solved anything since, which makes it their decision and not this
+    # function's.
     #
     # Staleness is a plain text comparison because every timestamp has the
     # same fixed shape -- see db.utc_ago.
-    syncing = None
-    if user["last_synced"] < db.utc_ago(FRESH_FOR_SECONDS):
-        syncing = sync.start_sync(handle)
+    stale = user["last_synced"] < db.utc_ago(FRESH_FOR_SECONDS)
+
+    # Somebody may already be syncing this handle -- this visitor a minute
+    # ago, or another visitor entirely. Then the honest offer is not a button
+    # that would queue a second one, but a link to the work already running.
+    active = db.get_active_job(conn, "sync", handle)
 
     rows = db.get_submissions(conn, handle, limit=RESULTS_LIMIT)
 
@@ -411,10 +421,37 @@ def results(handle):
         topics=topic_rows(db.topic_breakdown(conn, handle)),
         totals=db.problem_totals(conn, handle),
         recs=recommendation_view(conn, user),
-        # The job id of the re-sync running behind this page, or None. The
-        # page says so rather than pretending these numbers are current.
-        syncing=syncing,
+        # Older than the freshness window: the page says so rather than
+        # letting the numbers pass for current.
+        stale=stale,
+        # The id of a sync already running for this handle, or None.
+        active_job=active["id"] if active is not None else None,
     )
+
+
+@app.route("/results/<handle>/sync", methods=["POST"])
+def resync(handle):
+    """Fetch this handle again, because the visitor asked for it. ADR 0018.
+
+    POST, not a link. A GET that starts work is followed by anything that
+    walks the page -- a browser prefetching what it thinks you will click, a
+    crawler, a link checker -- and each of those would spend two requests from
+    a queue everybody shares. A form button cannot be followed by accident.
+
+    It redirects to the progress page rather than rendering anything, so the
+    visitor lands on an address they can reload without asking for the work
+    twice, and sees exactly what a first-time visitor sees: their place in the
+    queue. start_sync returns the job already running for this handle if there
+    is one, so two people asking at once watch one sync.
+    """
+    if not HANDLE_PATTERN.match(handle):
+        return render_template(
+            "error.html",
+            handle=handle,
+            message="That does not look like a Codeforces handle.",
+        ), 404
+
+    return redirect(url_for("progress", job_id=sync.start_sync(handle)))
 
 
 @app.route("/progress/<int:job_id>")

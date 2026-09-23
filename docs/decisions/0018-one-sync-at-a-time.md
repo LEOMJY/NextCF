@@ -1,7 +1,8 @@
 # 0018 — One sync at a time, and a progress page that can count
 
 **Date:** 2026-09-22
-**Status:** accepted
+**Status:** accepted; decisions 3 and 4 amended the same day, once the
+page they describe existed to look at -- see "Amendment" at the end
 
 ## Context
 
@@ -84,9 +85,10 @@ stored.
   exists without being taken. It becomes the common path the day the site is
   paid for.
 - **Stale results need a visible timestamp** and a page that says plainly that
-  it is showing something old while fetching something new. Making that state
-  look deliberate is §7.1's unhandled-states work at v0.8; the sentence itself
-  has to exist at v0.7, or the page lies.
+  the numbers are from then. *(As amended below, it says that and offers a
+  button, rather than announcing a fetch it started by itself.)* Making the
+  state look deliberate is §7.1's unhandled-states work at v0.8; the sentence
+  itself has to exist at v0.7, or the page lies.
 - **One worker means one stuck job holds the queue.** A single request is
   already bounded — three attempts at a 10-second timeout with waits between,
   about 36 seconds at worst — so nothing hangs forever, but the job as a whole
@@ -94,3 +96,45 @@ stored.
 - **The progress page shows a position rather than a count.** It lost the count
   on 2026-09-13, when one request replaced paging (§6); a position is the
   number a waiting visitor actually wants.
+
+## Amendment — 2026-09-22: the visitor presses the button
+
+Decision 3 said a returning visitor's stored page is served at once "while a
+fresh sync runs behind them". Built and looked at, that is wrong in a way the
+words hid.
+
+**It was not their decision.** The page announced the sync after starting it,
+which is not the same as being asked. Nobody but the visitor knows whether
+they have solved anything since the last sync, so nobody but the visitor can
+say whether two more requests are worth making.
+
+**And those two requests come out of a queue everybody shares.** That is the
+part that matters at the moment this ADR was written for. Decision 4 is about
+the day a blog post sends a crowd: under the original wording, every returning
+visitor who merely opened a page added two requests in front of somebody who
+was actually waiting. The amendment makes that case strictly better -- a
+returning visitor costs nothing at all unless they ask.
+
+**What the page does now.** It shows what is stored, says which sync the
+numbers are from when they are older than the freshness window, and offers a
+button. Pressing it queues the sync and lands on the progress page, where the
+visitor sees the same position and estimate as anybody else. If a sync for
+that handle is already running -- theirs from a minute ago, or another
+visitor's -- the page offers a link to that job instead of a button that would
+queue a second.
+
+**A form, not a link.** A GET that starts work is followed by whatever walks
+the page: a browser prefetching what it thinks will be clicked, a crawler, a
+link checker. Each would take a turn in the queue. A POST cannot be followed
+by accident, and it redirects to the progress page so that reloading does not
+ask again.
+
+**The button is offered inside the freshness window too**, without the
+sentence about old numbers. Somebody who solved a problem two minutes ago is
+exactly the person who wants it, and the ten-minute window would otherwise
+tell them to wait for no reason.
+
+**What it costs.** A returning visitor's page stays stale until they press the
+button, where before it refreshed itself. Accepted: the click sits where the
+knowledge is, and the page no longer spends anybody else's place in the queue
+to answer a question that was not asked.

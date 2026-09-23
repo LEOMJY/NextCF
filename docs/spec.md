@@ -133,8 +133,8 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
          v
     results page  ←── model.py predicts, picks 5 near target
                       a visitor whose history is already stored gets this
-                      page at once, labelled, while the fresh sync runs
-                      behind it (ADR 0018)
+                      page at once, labelled, and a button that queues a
+                      fresh sync if they want one (ADR 0018)
   ─────────────────────────────────────────────────────
                           |
   SCHEDULER — nightly, a thread inside the web app
@@ -1101,5 +1101,9 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   seconds untouched, cuts the average from 31 to 22 and the first visitor from
   22 to 4, and it is what makes a position quotable at all: under interleaving
   everybody is tenth. A returning visitor whose rows are still stored sees
-  them at once, labelled, while the re-sync runs behind — option (c), which
-  depends on the disk above. ADR 0018.
+  them at once, labelled, and a button that queues a fresh sync if they
+  want one — option (c), which depends on the disk above. The page starts
+  nothing by itself: only the visitor knows whether they have solved
+  anything since, and two requests spent on a page nobody asked to refresh
+  come out of the queue somebody else is waiting in. ADR 0018 and its
+  amendment.

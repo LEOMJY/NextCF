@@ -215,10 +215,12 @@ def acmsguru_problem_has_no_link():
 check("a problem with no contest id is shown as text, not a broken link", acmsguru_problem_has_no_link)
 
 
-def stale_data_is_shown_and_resynced_behind():
-    """Changed by ADR 0018. Until 2026-09-22 a stale page redirected to a
-    queue and the visitor waited again; now they get what is stored at once,
-    the page says which sync it is from, and the fresh one runs behind it."""
+def stale_data_is_shown_with_a_button_and_nothing_else_happens():
+    """Changed by ADR 0018 and its amendment, both on 2026-09-22. Until then a
+    stale page redirected to a queue and the visitor waited again. Then it
+    served the stored page and re-synced behind it, which nobody was told
+    about and which spent two requests nobody had asked for. Now the page is
+    served, says which sync it is from, and offers a button."""
     synced("epsilon", [api_sub(4)])
     conn = db.connect()
     try:
@@ -229,17 +231,18 @@ def stale_data_is_shown_and_resynced_behind():
 
     response, html = get("/results/epsilon")
     assert response.status_code == 200, f"a returning visitor was sent to a queue ({response.status_code})"
-    assert "running now" in html, "the page showed old numbers without saying so"
+    assert "These numbers are from the sync above" in html, "old numbers were shown as if current"
+    assert "Update from Codeforces" in html, "no way to ask for a fresh copy"
 
     conn = db.connect()
     try:
         active = db.get_active_job(conn, "sync", "epsilon")
     finally:
         conn.close()
-    assert active is not None, "nothing was queued to refresh it"
+    assert active is None, "reading a page queued a sync nobody asked for"
 
 
-check("data older than the freshness window is shown, and re-synced behind", stale_data_is_shown_and_resynced_behind)
+check("stale data is shown with a button, and queues nothing by itself", stale_data_is_shown_with_a_button_and_nothing_else_happens)
 
 
 def fresh_data_is_not_refetched():

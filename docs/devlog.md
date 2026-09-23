@@ -4174,3 +4174,49 @@ instantly with the banner and a job queued behind it.
 ### Next
 
 The nightly scheduler, then logging and error handling.
+
+---
+
+## 2026-09-22 (later) — The re-sync becomes a button
+
+The queue shipped an hour ago with a returning visitor's page re-syncing
+behind them. Reading the finished page, the author asked the question the code
+had answered for everybody: how would the visitor know that is happening, and
+who decided they wanted it?
+
+The banner did say a sync was running. Saying so after starting it is not the
+same as asking, and two things follow from that.
+
+**Only the visitor knows whether it is worth doing.** The numbers change when
+they solve something, which is a fact about their afternoon and not about the
+timestamp in the database.
+
+**The requests come out of a shared queue.** This is the part that decides it.
+ADR 0018's fourth decision is about the day a blog post sends a crowd; under
+the original wording every returning visitor who merely opened a page put two
+more requests in front of somebody who was actually waiting for a first sync.
+Now a returning visitor costs nothing unless they ask, which is strictly
+better exactly when it matters most.
+
+So: the page shows what is stored, says which sync the numbers are from when
+they are old, and offers a button. Pressing it queues the sync and lands on
+the progress page with everybody else's position and estimate. If a sync for
+that handle is already running -- theirs, or another visitor's -- the page
+offers a link to it rather than a button that would queue a second.
+
+A form and a POST, not a link: a GET that starts work is followed by browsers
+prefetching, crawlers and link checkers, and each would take a turn in the
+queue. The button is offered inside the freshness window too, quietly and
+without the caveat, because somebody who solved a problem two minutes ago is
+exactly who wants it.
+
+Five checks now cover what the page starts and what it does not: reading a
+stale page queues nothing, the button queues one and redirects to the queue, a
+GET to the same address is 405, a sync already running is offered as a link,
+and a fresh page still shows the button. Four mutations -- re-sync behind the
+page again, allow GET, forget the running job, never call the numbers old --
+were each caught by the check meant for them.
+
+The quiet surface keeps its one rule: the button is bordered, not filled. The
+accent means "this is where you act" (ADR 0006), and where to act on this page
+is a recommendation, not a refresh.

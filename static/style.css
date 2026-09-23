@@ -424,6 +424,38 @@ main {
   margin-bottom: var(--s3);
 }
 
+/* The one button on the quiet surface: fetch this handle again (ADR 0018).
+   Bordered rather than filled, because the accent means "this is good, or
+   this is where you act" (ADR 0006) and the thing to act on here is a
+   recommendation, not a refresh. A filled green button would be the loudest
+   thing on the page and would be pointing at the wrong place. */
+.resync {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  margin-bottom: var(--s3);
+}
+
+.resync button {
+  background: none;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: 400 var(--text-small) / 1 var(--mono);
+  padding: var(--s1) var(--s2);
+  cursor: pointer;
+}
+
+.resync button:hover {
+  border-color: var(--muted);
+  background: var(--panel);
+}
+
+.resync .meta {
+  margin: 0;
+}
+
 /* A table wider than the screen scrolls inside its own box rather than
    pushing the whole page sideways. */
 .table-wrap {

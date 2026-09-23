@@ -226,36 +226,72 @@ def the_estimate_follows_the_rate_limit():
 
 
 # ---------------------------------------------------- what a returning visitor sees
-def stale_results_are_shown_at_once_and_resynced_behind():
+def active_job_for(handle):
+    conn = db.connect()
+    try:
+        return db.get_active_job(conn, "sync", handle)
+    finally:
+        conn.close()
+
+
+def stale_results_are_shown_at_once_and_nothing_is_queued():
+    """ADR 0018 as amended: the visitor decides whether to spend two requests
+    from a queue everybody shares. Looking at a page is not asking for that."""
     clear_jobs()
     stored("returning", "2026-01-01T00:00:00Z")
     response = client.get("/results/returning")
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200, f"a returning visitor was sent to a queue ({response.status_code})"
-    assert "running now" in html, "the page did not admit it was showing old numbers"
-
-    conn = db.connect()
-    try:
-        active = db.get_active_job(conn, "sync", "returning")
-    finally:
-        conn.close()
-    assert active is not None, "no re-sync was queued"
-    assert active["state"] == "pending", active["state"]
+    assert "These numbers are from the sync above" in html, "old numbers were shown as if current"
+    assert "Update from Codeforces" in html, "there is no way to ask for a fresh copy"
+    assert active_job_for("returning") is None, "reading a page queued a sync nobody asked for"
 
 
-def fresh_results_queue_nothing():
+def fresh_results_offer_the_button_quietly():
     clear_jobs()
     stored("current", db.utc_now())
-    response = client.get("/results/current")
-    assert response.status_code == 200, response.status_code
-    assert "running now" not in response.get_data(as_text=True), "a fresh page claimed to be syncing"
+    html = client.get("/results/current").get_data(as_text=True)
 
-    conn = db.connect()
-    try:
-        assert db.get_active_job(conn, "sync", "current") is None, "a fresh page queued a sync"
-    finally:
-        conn.close()
+    assert "These numbers are from the sync above" not in html, "fresh numbers were called old"
+    # Still offered: somebody who solved a problem two minutes ago is inside
+    # the freshness window and is exactly who wants this button.
+    assert "Update from Codeforces" in html, "a fresh page offers no way to update"
+    assert active_job_for("current") is None, "a fresh page queued a sync"
+
+
+def the_button_queues_a_sync_and_shows_the_queue():
+    clear_jobs()
+    stored("asks", "2026-01-01T00:00:00Z")
+    response = client.post("/results/asks/sync")
+
+    assert response.status_code == 302, response.status_code
+    assert "/progress/" in response.headers["Location"], response.headers["Location"]
+
+    job = active_job_for("asks")
+    assert job is not None, "the button queued nothing"
+    assert str(job["id"]) in response.headers["Location"], "sent to somebody else's job"
+
+
+def only_a_post_can_start_a_sync():
+    """A GET that starts work is followed by prefetchers, crawlers and link
+    checkers, and each would take a turn in the queue."""
+    clear_jobs()
+    stored("get_only", "2026-01-01T00:00:00Z")
+    response = client.get("/results/get_only/sync")
+
+    assert response.status_code == 405, response.status_code
+    assert active_job_for("get_only") is None, "a GET started a sync"
+
+
+def a_sync_already_running_is_a_link_not_a_second_button():
+    clear_jobs()
+    stored("watching", "2026-01-01T00:00:00Z")
+    queue("watching")
+    html = client.get("/results/watching").get_data(as_text=True)
+
+    assert "running now" in html, "the page did not mention the sync in flight"
+    assert "Update from Codeforces" not in html, "offered to queue a second sync for one handle"
 
 
 def a_visitor_with_nothing_stored_waits():
@@ -390,8 +426,11 @@ check("the page polls less often further back", the_page_polls_less_often_furthe
 check("the estimate follows the rate limit", the_estimate_follows_the_rate_limit)
 
 print("\nwhat a returning visitor sees")
-check("stale results at once, re-synced behind", stale_results_are_shown_at_once_and_resynced_behind)
-check("fresh results queue nothing", fresh_results_queue_nothing)
+check("stale results at once, and nothing queued", stale_results_are_shown_at_once_and_nothing_is_queued)
+check("fresh results offer the button quietly", fresh_results_offer_the_button_quietly)
+check("the button queues a sync and shows the queue", the_button_queues_a_sync_and_shows_the_queue)
+check("only a POST can start a sync", only_a_post_can_start_a_sync)
+check("a sync already running is a link, not a button", a_sync_already_running_is_a_link_not_a_second_button)
 check("nothing stored means waiting", a_visitor_with_nothing_stored_waits)
 check("two visitors, one handle, one job", two_visitors_asking_for_one_handle_share_a_job)
 
