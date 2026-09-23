@@ -4290,3 +4290,40 @@ day a blog post sends a crowd is the day to check it. The lever is written
 into ADR 0018: lengthen the window, or start automatically only while the
 queue is short. And one thing the button did and this does not: force a
 refresh inside the window, for somebody who solved a problem two minutes ago.
+
+---
+
+## 2026-09-23 — Both: the sync starts itself, and the button is there anyway
+
+The third shape kept the automatic refresh and showed it happening; the second
+had replaced it with a button. Neither on its own is right, because they cover
+different pages.
+
+**Automatic** covers a page that is out of date by the clock: the stored copy
+is older than ten minutes, so fetch it and say so.
+
+**The button** covers a page that is out of date in fact: somebody was here
+eight minutes ago, has solved something since, and the freshness window tells
+them to wait for no reason. Nothing the server knows can tell it that. Only
+the visitor can.
+
+So both, and the page shows whichever is true -- the live line while a sync is
+running, the button while none is. They never appear together, because "a sync
+is running" and "press to start a sync" are not both true at once.
+
+One thing that changed with it: the button now comes back to the results page
+rather than sending the visitor to the progress page. That was the right
+destination when the button was the only mechanism and the results page said
+nothing; now the line there gives the position, the estimate and the end of
+the sync without taking away the page they were reading. Landing on a queue
+page they will be redirected off again is a round trip ending where it
+started.
+
+Five mutations, all caught: redirect to the queue instead of the page, allow
+GET, show the button while a sync runs, redirect without starting anything,
+and delete the button. 227 checks pass.
+
+Measured in a browser: an old page started its own sync and showed the line
+with no button; nine seconds later the same page reloaded fresh with the
+button and no line; pressing it brought back the line, counting down, and then
+"Fresh numbers are ready".

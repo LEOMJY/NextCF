@@ -250,6 +250,7 @@ def stale_results_are_shown_at_once_and_resynced_behind():
     job = active_job_for("returning")
     assert job is not None, "nothing was queued to refresh it"
     assert f"/progress/{job['id']}/status" in html, "the line points at no job"
+    assert "Update from Codeforces" not in html, "offered to start what is already running"
 
 
 def the_line_carries_the_queue_without_javascript():
@@ -265,7 +266,7 @@ def the_line_carries_the_queue_without_javascript():
     assert f">{seconds}</span>" in without_script, f"expected {seconds} seconds in the page"
 
 
-def fresh_results_start_nothing():
+def fresh_results_start_nothing_and_offer_the_button():
     clear_jobs()
     stored("current", db.utc_now())
     html = client.get("/results/current").get_data(as_text=True)
@@ -273,6 +274,43 @@ def fresh_results_start_nothing():
     assert "Re-syncing" not in html, "a fresh page started a sync"
     assert "from the sync above" not in html, "fresh numbers were called old"
     assert active_job_for("current") is None, "a fresh page queued a sync"
+    # The case the automatic refresh cannot cover: somebody who was here eight
+    # minutes ago and has solved something since.
+    assert "Update from Codeforces" in html, "no way to refresh a page that counts as fresh"
+
+
+def the_button_starts_a_sync_and_comes_back_to_the_page():
+    clear_jobs()
+    stored("presses", db.utc_now())
+    response = client.post("/results/presses/sync")
+
+    assert response.status_code == 302, response.status_code
+    assert response.headers["Location"].endswith("/results/presses"), response.headers["Location"]
+
+    job = active_job_for("presses")
+    assert job is not None, "the button queued nothing"
+
+    # And the page it lands back on now carries the live line instead.
+    html = client.get("/results/presses").get_data(as_text=True)
+    assert "Re-syncing" in html, "the page did not show the sync the visitor asked for"
+    assert f"/progress/{job['id']}/status" in html, "the line points at no job"
+
+
+def only_a_post_can_start_a_sync():
+    """A GET that starts work is followed by prefetchers, crawlers and link
+    checkers, and each would take a turn in the queue."""
+    clear_jobs()
+    stored("get_only", db.utc_now())
+    response = client.get("/results/get_only/sync")
+
+    assert response.status_code == 405, response.status_code
+    assert active_job_for("get_only") is None, "a GET started a sync"
+
+
+def a_junk_handle_cannot_be_queued_by_the_button():
+    clear_jobs()
+    response = client.post("/results/!!!/sync")
+    assert response.status_code == 404, response.status_code
 
 
 def a_running_sync_is_shown_even_when_the_numbers_are_fresh():
@@ -502,8 +540,13 @@ check("the estimate follows the rate limit", the_estimate_follows_the_rate_limit
 print("\nwhat a returning visitor sees")
 check("stale results at once, re-synced behind", stale_results_are_shown_at_once_and_resynced_behind)
 check("the line carries the queue without JavaScript", the_line_carries_the_queue_without_javascript)
-check("fresh results start nothing", fresh_results_start_nothing)
+check("fresh results start nothing, and offer the button", fresh_results_start_nothing_and_offer_the_button)
 check("a running sync shows even on a fresh page", a_running_sync_is_shown_even_when_the_numbers_are_fresh)
+
+print("\nthe button, for when the page counts as fresh")
+check("the button starts a sync and comes back to the page", the_button_starts_a_sync_and_comes_back_to_the_page)
+check("only a POST can start a sync", only_a_post_can_start_a_sync)
+check("a junk handle cannot be queued", a_junk_handle_cannot_be_queued_by_the_button)
 check("a sync already running is watched, not duplicated", a_sync_already_running_is_watched_not_duplicated)
 check("nothing stored means waiting", a_visitor_with_nothing_stored_waits)
 check("two visitors, one handle, one job", two_visitors_asking_for_one_handle_share_a_job)

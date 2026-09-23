@@ -1,9 +1,10 @@
 # 0018 — One sync at a time, and a progress page that can count
 
 **Date:** 2026-09-22
-**Status:** accepted; decision 3 amended twice the same day, once the page
-it describes existed to look at. **The second amendment supersedes the
-first** -- read them in order at the end.
+**Status:** accepted; decision 3 amended three times, twice on the day it
+was written and once the morning after, each time because the page it
+describes existed to look at. Read them in order at the end: the second
+supersedes the first, and the third adds to the second.
 
 ## Context
 
@@ -191,5 +192,31 @@ surprise.
 
 **What is gone with the button:** a visitor inside the freshness window has no
 way to force a refresh. Two minutes after solving something they see the old
-numbers with no control to press. Re-adding the button for that case is a
-half-hour of work and the ADR is unchanged by it; nobody has asked yet.
+numbers with no control to press. *(Asked for the next morning, and added --
+see the amendment below.)*
+
+## Amendment — 2026-09-23: the button comes back, beside the automatic sync
+
+Not instead of it. The two cover different pages, and the page shows whichever
+one is true:
+
+| the page | what it shows |
+|---|---|
+| a sync is running -- started by arriving on an old page, by this visitor's button, or by another visitor asking for the same handle | the live line: re-syncing, position, estimate, and the end of it |
+| nothing is running | the button, and the sentence about old numbers if they are old |
+
+The automatic refresh covers a page that is out of date by the clock. The
+button covers a page that is out of date in fact: somebody who was here eight
+minutes ago, solved something, and is told by a ten-minute window to wait for
+no reason. Neither knows what the other knows, which is why both exist.
+
+**The button comes back to the results page, not to the progress page.** The
+visitor is in the middle of reading something, and the live line already gives
+them the position, the estimate and the end of the sync without taking their
+page away. Landing on a queue page that they will be redirected off again is a
+round trip that ends where it started. The redirect is also what makes a
+second press safe: it reloads a page rather than repeating a POST.
+
+**Still a form and still a POST**, for the reason the first amendment gave: a
+GET that starts work is followed by prefetchers, crawlers and link checkers,
+each taking a turn in a queue everybody shares.

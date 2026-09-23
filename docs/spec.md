@@ -136,7 +136,9 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
                       page at once, and a line saying a fresh sync is
                       running, where it is in the queue and how long that
                       is -- kept current from /progress/<job>/status,
-                      which answers with the line itself (ADR 0018)
+                      which answers with the line itself; and a button to
+                      fetch again at any time, for the page that is out of
+                      date in fact rather than by the clock (ADR 0018)
   ─────────────────────────────────────────────────────
                           |
   SCHEDULER — nightly, a thread inside the web app
@@ -184,6 +186,7 @@ because the landing page has a different job from the tool — see §7.1.
 | `/` | The pitch, **with the handle input in the hero itself** | v0.1 |
 | `/progress/<job>` | Show a long job making progress without lying about it | v0.2 |
 | `/progress/<job>/status` | The same job as one line, for a results page to keep current — ADR 0018 | v0.7 |
+| `POST /results/<handle>/sync` | Fetch this handle again because the visitor asked, then back to their page — ADR 0018 | v0.7 |
 | `/results/<handle>` | Five problems, the probability on each, the topic breakdown | v0.1 crude, v0.4 real |
 | `/how` | How the model works, and the §9 number | v0.6 |
 | `/privacy` | What data is read, what is stored, how to have it removed | v0.7 |
@@ -1108,5 +1111,6 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   depends on the disk above. What that page shows is a line under the
   timestamp: re-syncing, how many syncs are ahead of it, and about how
   long, counting down and asking `/progress/<job>/status` for the line
-  again until it says the fresh numbers are ready. ADR 0018 and its two
-  amendments, both from the day it was written.
+  again until it says the fresh numbers are ready. When no sync is running
+  the same place holds a button, because a page can be out of date in fact
+  while the clock still calls it fresh. ADR 0018 and its three amendments.

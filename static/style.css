@@ -439,6 +439,37 @@ main {
   color: var(--ink);
 }
 
+/* The other half of the same spot: when nothing is running, the button that
+   starts a sync on demand (ADR 0018). Bordered rather than filled, because
+   the accent means "this is where you act" (ADR 0006) and on this page that
+   is a recommendation, not a refresh. */
+.resync {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  margin-bottom: var(--s3);
+}
+
+.resync button {
+  background: none;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: 400 var(--text-small) / 1 var(--mono);
+  padding: var(--s1) var(--s2);
+  cursor: pointer;
+}
+
+.resync button:hover {
+  border-color: var(--muted);
+  background: var(--panel);
+}
+
+.resync .meta {
+  margin: 0;
+}
+
 /* The same blink as the progress page's cursor, small and grey. It is the
    only way a page that is otherwise still can show that it is not finished. */
 .syncing-dot {

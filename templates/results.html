@@ -32,10 +32,23 @@
          data-status="{{ url_for('sync_status', job_id=syncing.job_id) }}">
         {% include "_sync_line.html" %}
       </p>
-    {% elif stale %}
-      {# Nothing is running and the numbers are old: rare, and it would be
-         worse to say nothing. #}
-      <p class="caveat">These numbers are from the sync above.</p>
+    {% else %}
+      {# Nothing is running. If the numbers are old, say so -- that is rare,
+         since an old page starts a sync on arrival, and it means one failed
+         or has not been claimed yet. #}
+      {% if stale %}
+        <p class="caveat">These numbers are from the sync above.</p>
+      {% endif %}
+
+      {# And the button, for the case the automatic refresh does not cover:
+         somebody who was here eight minutes ago, solved something, and knows
+         the page is out of date even though it counts as fresh. A form, not a
+         link -- a GET that starts work gets followed by prefetchers, crawlers
+         and link checkers, each taking a turn in the queue. #}
+      <form class="resync" method="post" action="{{ url_for('resync', handle=handle) }}">
+        <button type="submit">Update from Codeforces</button>
+        <span class="meta">takes a few seconds, longer if others are waiting</span>
+      </form>
     {% endif %}
 
     {# Recommendations first: this is the product, and everything below it is

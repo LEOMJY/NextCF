@@ -455,6 +455,38 @@ def results(handle):
     )
 
 
+@app.route("/results/<handle>/sync", methods=["POST"])
+def resync(handle):
+    """Fetch this handle again because the visitor pressed the button.
+
+    The automatic refresh above only happens when the stored copy is older
+    than FRESH_FOR_SECONDS. This is for the other case, and it is the common
+    one for somebody who has just solved something: they were here eight
+    minutes ago, the page is technically fresh, and they know perfectly well
+    that it is out of date.
+
+    POST, not a link. A GET that starts work is followed by whatever walks the
+    page -- a browser prefetching what it thinks will be clicked, a crawler, a
+    link checker -- and each would take a turn in a queue everybody shares.
+
+    It redirects back to the results page rather than to the queue. The
+    visitor is in the middle of reading something; the live line there already
+    shows the position, the estimate and the end of the sync, so there is
+    nothing the progress page could add except taking their page away.
+    Redirecting at all is what makes the button safe to press twice: the
+    second press reloads a page rather than repeating a POST.
+    """
+    if not HANDLE_PATTERN.match(handle):
+        return render_template(
+            "error.html",
+            handle=handle,
+            message="That does not look like a Codeforces handle.",
+        ), 404
+
+    sync.start_sync(handle)
+    return redirect(url_for("results", handle=handle))
+
+
 @app.route("/progress/<int:job_id>/status")
 def sync_status(job_id):
     """The live line on a results page, asked for again every few seconds.
