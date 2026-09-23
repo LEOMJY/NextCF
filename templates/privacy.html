@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy &mdash; NextCF{% endblock %}
+
+{% block content %}
+  {# Spec section 4.1 puts this page at v0.7, the milestone that starts
+     recording that somebody was here (ADR 0017). The quiet surface, like
+     /how: prose at the measure, no accent, nothing that needs explaining
+     twice.
+
+     The rule this page is written to: everything below is either true today
+     or not claimed. The cookie's name and life are passed in from web.py's
+     constants rather than typed here, so the page cannot describe a cookie
+     the code does not set. #}
+  <div class="tool prose">
+    <h1>Privacy</h1>
+    <p class="meta">
+      What this site reads, what it keeps, and how to have it removed. It is
+      short because the site keeps very little.
+    </p>
+
+    <h2>What it reads about you</h2>
+    <p>
+      When you enter a handle, this site asks the public Codeforces API for
+      that account&rsquo;s submissions and rating changes &mdash; the same
+      data anybody can see on the profile page. It never sees a password, and
+      there is nothing to log in to. It cannot read anything private, and it
+      never submits, runs or judges code.
+    </p>
+
+    <h2>What it keeps</h2>
+    <p>
+      A copy of those public submissions, so that reloading a page does not
+      fetch them again. Anything older than {{ fresh_minutes }} minutes is
+      fetched fresh.
+    </p>
+    <p>
+      And one row for each page you open, holding four things: the handle you
+      looked up if there was one, which page it was, the time, and a random
+      identifier from a cookie this site sets.
+    </p>
+    <p>
+      That is the whole list. <strong>No IP address, no browser or device
+      details, no referrer, no accounts, no passwords.</strong> Nothing here
+      is shared with anybody, sold, or sent anywhere else, and no page on this
+      site loads anything from another company&rsquo;s server &mdash; no
+      analytics, no fonts from a CDN, no trackers of any kind.
+    </p>
+
+    <h2>The cookie</h2>
+    <p>
+      One cookie, called <code>{{ cookie_name }}</code>. It holds a random
+      string generated when you first arrive; it is not derived from anything
+      about you, and it means nothing anywhere else on the internet. It lasts
+      {{ cookie_days }} days and is used for exactly one thing: counting how
+      many different people have used this site and how many came back.
+    </p>
+    <p>
+      If you refuse it, everything works the same. You are then counted as a
+      new person on each visit, which makes one of the numbers below less
+      accurate and costs you nothing.
+    </p>
+
+    <h2>Why any of it is kept</h2>
+    <p>
+      This project claims its recommendations are measured rather than
+      guessed, and it holds itself to three tests before calling version 1.0
+      done. One of them is that at least 50 people other than the author have
+      used it and 20 have come back. That claim needs counting, and a visit
+      that was not written down cannot be counted later. The counting is of
+      people, not of what any one person did.
+    </p>
+
+    <h2>Having it removed</h2>
+    <p>
+      Ask, and the rows for a handle are deleted. Open an issue at
+      <a href="https://github.com/LEOMJY/NextCF/issues">the project&rsquo;s
+      repository</a>; naming the handle is enough, and there is nothing else
+      to identify. What lives on Codeforces stays on Codeforces &mdash; this
+      site has no way to change anything there.
+    </p>
+    <p class="footnote">
+      This is a personal project by one person, and it is honest rather than
+      lawyerly. If something here is unclear, ask in the same place and the
+      page gets clearer.
+    </p>
+  </div>
+{% endblock %}

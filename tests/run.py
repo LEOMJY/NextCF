@@ -17,8 +17,10 @@ see docs/decisions/0019-checks-into-the-repository.md.
 import importlib.util
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -83,6 +85,14 @@ def main():
     else:
         environment.pop("NEXTCF_TESTS_DATASET", None)
 
+    # A backstop, not a substitute for each check setting its own database.
+    # Since ADR 0017 merely rendering a page writes a visits row, so a check
+    # that forgets would write into the real nextcf.db and inflate the one
+    # number section 9 depends on. Here nothing can: the default points at a
+    # file that is deleted when the run ends.
+    scratch = Path(tempfile.mkdtemp(prefix="nextcf-tests-"))
+    environment["NEXTCF_DB"] = str(scratch / "run.db")
+
     started = time.monotonic()
     passed = failed = skipped = 0
     went_wrong = []
@@ -119,6 +129,8 @@ def main():
 
     for name, output in went_wrong:
         print(f"\n{'-' * 70}\n{name}\n{'-' * 70}\n{output.rstrip()}")
+
+    shutil.rmtree(scratch, ignore_errors=True)
 
     seconds = time.monotonic() - started
     tail = f", {skipped} skipped" if skipped else ""

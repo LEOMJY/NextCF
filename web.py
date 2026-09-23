@@ -9,15 +9,21 @@ progress page, which polls the jobs table until the work is done.
     GET  /results/<handle>   five recommendations, the topic breakdown, and
                              the submissions table
     GET  /progress/<job>     a sync in flight, reported honestly
+    GET  /how                what the model knows, and section 9's number
+    GET  /privacy            what is read, what is kept, how to have it gone
 
 The recommendations come from the topic model (ADR 0014) when
 topic_model.json is present, and from the rating-only baseline when it is not;
 the page says which. Both draw on the problemset this program fetches when it
 starts (ADR 0010).
 
+Every page except the progress page also records that somebody opened it, so
+that section 9's second criterion can be measured at all -- see
+record_visit() below and ADR 0017.
+
 Deliberately not here yet:
-    /how, which shows the section 9 number   next
     re-fetching the problemset nightly       v0.7, with the scheduler
+    syncs one at a time, behind a queue      v0.7, ADR 0018
 
 Usage:
     .venv\\Scripts\\python.exe web.py
@@ -26,6 +32,8 @@ Usage:
 
 import os
 import re
+import secrets
+import sqlite3
 import sys
 import threading
 
@@ -57,6 +65,34 @@ HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,24}$")
 # coming back after a contest does. It gets cheaper to shorten this once a
 # re-sync can stop early at submissions already stored -- v0.7 work.
 FRESH_FOR_SECONDS = 600
+
+# ------------------------------------------------------------------- visits
+#
+# ADR 0017. Section 9 needs 50 people who are not the author, 20 of them
+# twice, and on the free instance nothing written survives a spin-down -- so
+# the recording has to be in place before the first stranger arrives, and the
+# file has to move onto a paid disk before that too.
+
+# A random value, kept in a cookie this site sets itself, used for nothing but
+# counting. It is not a login and it identifies nobody: it says only "this
+# browser has been here before". A handle cannot answer that, because most
+# visitors read the landing page and leave without typing one.
+VISITOR_COOKIE = "nextcf_visitor"
+
+# Long enough to cover the measuring period in section 9 and no longer.
+VISITOR_COOKIE_DAYS = 180
+
+# What a cookie value has to look like before it is believed. Anything else is
+# treated as no cookie at all and replaced -- the value comes from the browser,
+# which means it comes from outside, which means it is never trusted.
+VISITOR_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
+
+# Which pages count as a visit, by endpoint name (the view function's name).
+#
+# `progress` is deliberately absent. That page reloads itself every two
+# seconds with a meta refresh, so one visitor waiting forty seconds would
+# write twenty rows and one person would look like a crowd.
+RECORDED_ENDPOINTS = {"index", "results", "how", "privacy"}
 
 # How many submissions the table shows. The database keeps every one of them --
 # Benq has 8,574 -- but a page carrying 8,574 rows is slow to build, heavy to
@@ -184,6 +220,77 @@ def close_db(exception):
     conn = g.pop("db", None)
     if conn is not None:
         conn.close()
+
+
+@app.after_request
+def record_visit(response):
+    """Count this page view, and give a new browser an id to be known by.
+
+    Flask calls this for every request, after the page has been built and
+    before it is sent. Doing it here rather than inside each view means one
+    place decides what a visit is, and a new page cannot forget to count.
+
+    Four conditions, each ruling out something that is not a person reading a
+    page: an endpoint not in RECORDED_ENDPOINTS (the progress page reloads
+    itself every two seconds), a POST (the form, which redirects to a page
+    that is counted), a redirect or an error (a stale results page redirects
+    to the sync, and that visit is counted when the page finally renders), and
+    a request whose database connection never opened.
+
+    It runs after the response exists, so a failure here cannot change what
+    the visitor sees -- and must not: a visit that cannot be recorded is worth
+    less than the page it happened on.
+    """
+    if request.endpoint not in RECORDED_ENDPOINTS:
+        return response
+    if request.method != "GET" or response.status_code != 200:
+        return response
+
+    # A value from the browser is a value from outside. If it is missing or
+    # malformed, this is a new browser as far as the count is concerned.
+    sent = request.cookies.get(VISITOR_COOKIE, "")
+    known = bool(VISITOR_ID_PATTERN.match(sent))
+
+    # token_urlsafe, not random: `secrets` is the module meant for values that
+    # must not be guessable. Somebody who guessed another visitor's id would
+    # gain nothing here -- there is nothing to steal -- but a predictable id
+    # would make two visitors collide, which is a wrong count.
+    visitor_id = sent if known else secrets.token_urlsafe(16)
+
+    # view_args holds the variable parts of the URL, so this is the handle on
+    # /results/<handle> and nothing at all on the pages without one. It is the
+    # spelling that was typed; the column is COLLATE NOCASE, so counting
+    # distinct handles does not care.
+    handle = (request.view_args or {}).get("handle")
+
+    try:
+        db.record_visit(get_db(), visitor_id, handle, request.path)
+    except sqlite3.Error as exc:
+        # Logged rather than raised, and logged rather than swallowed. The
+        # visitor gets their page; the failure is somewhere it can be found.
+        app.logger.warning("could not record a visit to %s: %s", request.path, exc)
+
+    if not known:
+        response.set_cookie(
+            VISITOR_COOKIE,
+            visitor_id,
+            max_age=VISITOR_COOKIE_DAYS * 24 * 60 * 60,
+            # Nothing in the browser reads this, so nothing in the browser
+            # should be able to: httponly keeps it out of JavaScript's reach.
+            httponly=True,
+            # Not sent when another site links to or embeds this one, which is
+            # the whole of what SameSite is for. Lax rather than Strict so
+            # that following a link from a Codeforces blog post still arrives
+            # with the cookie and counts as a return.
+            samesite="Lax",
+            # HTTPS only in production. Render terminates TLS at its proxy and
+            # forwards plain HTTP, so request.is_secure is False there and the
+            # forwarded header is what tells the truth. Locally it is http,
+            # and a Secure cookie would simply never be stored.
+            secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https",
+        )
+
+    return response
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -331,6 +438,26 @@ def how():
         gain_baseline=ev["average"] - ev["baseline"],
         gain_model=ev["average"] - ev["model"],
         unrated_start=model.UNRATED_START,
+    )
+
+
+@app.route("/privacy")
+def privacy():
+    """What this site reads, what it keeps, and how to have it removed.
+
+    Spec section 4.1 puts this page at v0.7 for a reason that is not legal
+    procedure: v0.7 is when the site starts writing down that somebody was
+    here, and a page that records visitors without saying so is the kind of
+    thing this project should not ship.
+
+    The page is told the cookie's name and life from the constants above, so
+    that it cannot drift out of step with what the code actually sets.
+    """
+    return render_template(
+        "privacy.html",
+        cookie_name=VISITOR_COOKIE,
+        cookie_days=VISITOR_COOKIE_DAYS,
+        fresh_minutes=FRESH_FOR_SECONDS // 60,
     )
 
 

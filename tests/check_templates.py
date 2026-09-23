@@ -11,8 +11,19 @@ web.py reaches the API.
 
 import os
 import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
+
+SCRATCH = Path(tempfile.mkdtemp(prefix="templates-"))
+
+# Must be set before db is imported, which web does: db.py reads it at import
+# time. This check only renders pages and needed no database of its own --
+# until rendering a page started RECORDING that it was rendered (ADR 0017).
+# Without this line, running the checks writes visit rows into the real
+# nextcf.db, quietly inflating the one number section 9 depends on.
+os.environ["NEXTCF_DB"] = str(SCRATCH / "test.db")
 
 # Paths in this file are relative to the repository root, and the modules
 # being checked live there, so go there first. The check then runs the same
@@ -29,7 +40,7 @@ failed = 0
 client = app.test_client()
 
 print("rendered pages")
-for path in ("/", "/how", "/results/!!!"):
+for path in ("/", "/how", "/privacy", "/results/!!!"):
     response = client.get(path)
     html = response.get_data(as_text=True)
     found = [marker for marker in LEAKS if marker in html]
@@ -54,14 +65,14 @@ else:
 # TO Codeforces are fine; a stylesheet, font or script FROM elsewhere is not,
 # because in some countries that one request stalls the whole page.
 external = []
-for path in ("/", "/how"):
+for path in ("/", "/how", "/privacy"):
     html = client.get(path).get_data(as_text=True)
     external += re.findall(r'<(?:link|script)[^>]+(?:href|src)="(https?://[^"]+)"', html)
 if external:
     print(f"  FAIL  pages load resources from other servers: {external}")
     failed += 1
 else:
-    print("  ok    / and /how load nothing from another server (links out are fine)")
+    print("  ok    /, /how and /privacy load nothing from another server (links out are fine)")
 
 # ------------------------------------------------------------- the font files
 # Every url() in an @font-face must be a real file, served as a font. A typo
@@ -88,5 +99,6 @@ if problems or not urls:
 else:
     print(f"  ok    {len(urls)} font files exist and are served as font/woff2")
 
-print(f"\n{6 - failed} passed, {failed} failed")
+print(f"\n{7 - failed} passed, {failed} failed")
+shutil.rmtree(SCRATCH, ignore_errors=True)
 sys.exit(1 if failed else 0)

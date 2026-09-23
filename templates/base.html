@@ -38,10 +38,12 @@
          of hardcoding "/". #}
       <a class="brand" href="{{ url_for('index') }}">NextCF</a>
       <span class="version">v0.6</span>
-      {# Spec section 4.1: the section 9 number one click from every page.
-         /privacy joins this at v0.7. #}
+      {# Spec section 4.1: the section 9 number one click from every page,
+         and /privacy beside it from v0.7 -- a site that writes down that you
+         were here should say so somewhere you can find without looking. #}
       <nav class="site-nav">
         <a href="{{ url_for('how') }}">How it works</a>
+        <a href="{{ url_for('privacy') }}">Privacy</a>
       </nav>
     </header>
 

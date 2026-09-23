@@ -1,13 +1,14 @@
 -- NextCF database schema.
 --
--- Ten tables and one view, per spec section 6. Run once at startup via
+-- Eleven tables and one view, per spec section 6. Run once at startup via
 -- db.py's init_db(); every statement is IF NOT EXISTS, so running it again is
 -- harmless -- and also means a CHANGE to an existing table here does nothing
 -- to a database that already has it.
 --
 -- Both database files use this one schema (ADR 0007). The last four tables
 -- and the view are filled only in dataset.db, by collect.py; on the server
--- they exist and stay empty.
+-- they exist and stay empty. `visits` is the mirror image: written only by
+-- the web app, empty in dataset.db.
 --
 -- Two settings that are NOT here, because they belong to the connection
 -- rather than to the schema, and live in db.py:
@@ -309,6 +310,55 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_active_per_target
     ON jobs(kind, target)
     WHERE state IN ('pending', 'running');
+
+
+-- Who came, and when -- spec section 9's second criterion, and the only thing
+-- on this server that cannot be fetched again once it is lost. That is the
+-- whole reason for ADR 0017: before the first stranger arrives, nextcf.db
+-- moves onto a disk that survives a restart.
+--
+-- Filled only in nextcf.db. collect.py never writes it, so in dataset.db this
+-- table exists and stays empty -- the mirror image of the four tables below.
+--
+-- TWO IDENTITIES, because section 9 counts two different things. The handle
+-- says what somebody did. The cookie id counts somebody who read the landing
+-- page and left, which the handle cannot. Either may be missing: a browser
+-- that keeps no cookie leaves visitor_id NULL, and a page that looks nothing
+-- up leaves handle NULL. Counted by cookie, a browser that refuses cookies
+-- looks like a new person every time, which OVER-counts people; counted by
+-- handle, everybody who only read the pitch is invisible, which UNDER-counts
+-- them. Neither is the truth on its own; together they bracket it.
+--
+-- What is NOT here is the point: no IP address, no user agent, no referrer.
+-- Nothing stored here identifies anybody off this site, which is what keeps
+-- /privacy short enough to be read.
+CREATE TABLE IF NOT EXISTS visits (
+    id          INTEGER PRIMARY KEY,
+
+    -- A random string from a first-party cookie, derived from nothing about
+    -- the visitor. NULL when the browser sent none and kept none.
+    visitor_id  TEXT,
+
+    -- The handle whose page this was, or NULL for a page that looks nothing
+    -- up. COLLATE NOCASE for the same reason as users.handle: "Tourist" and
+    -- "tourist" are one person.
+    --
+    -- Deliberately NOT a foreign key to users. A visit is a record that
+    -- something happened, and it stays true after that user's cached rows are
+    -- gone -- which on the free instance is several times a day.
+    handle      TEXT    COLLATE NOCASE,
+
+    -- Which page. This is what tells "used it" from "read about it", and it
+    -- is the only thing here that says anything at all about what was done.
+    path        TEXT    NOT NULL,
+
+    visited_at  TEXT    NOT NULL
+) STRICT;
+
+-- Both section 9 questions -- how many people, and which of them came back on
+-- another day -- group by identity and then look at time.
+CREATE INDEX IF NOT EXISTS idx_visits_visitor ON visits(visitor_id, visited_at);
+CREATE INDEX IF NOT EXISTS idx_visits_handle ON visits(handle, visited_at);
 
 
 -- ============================================================ the dataset

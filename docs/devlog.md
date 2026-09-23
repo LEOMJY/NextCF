@@ -4021,3 +4021,84 @@ counts the skip lines back out.
 
 Both tiers pass: 178 passed, 3 skipped in 54 seconds without `dataset.db`; 181
 passed in 119 seconds with it.
+
+---
+
+## 2026-09-22 — Counting visits, and a page that admits it
+
+The second half of ADR 0017, built: an eleventh table, a cookie, a recording
+hook, `/privacy`, and the two queries section 9 will be read out of.
+
+### Two identities, because one cannot do it
+
+A visit is four things -- the handle looked up if there was one, which page,
+when, and a random id from a cookie this site sets. Section 9 asks two
+questions of them, and they have to be counted twice because neither identity
+answers both.
+
+Counted by cookie, a browser that refuses cookies looks like a new person on
+every visit: too many people. Counted by handle, everybody who read the pitch
+and left is invisible, and two people looking up the same handle are one:
+too few. Neither is the truth. `db.visit_counts()` returns both, so a claim
+about section 9 has to say which one it used, and the distance between them is
+the honest error bar.
+
+### What is not counted, which took more care than what is
+
+The progress page reloads itself every two seconds (`templates/progress.html`).
+Counting page views there would turn one visitor waiting forty seconds into
+twenty people, and nothing afterwards could tell that the number was inflated.
+So the recording runs from one `after_request` hook with a list of four
+endpoints -- the landing page, results, `/how`, `/privacy` -- and four
+conditions: a GET, a 200, an endpoint on the list, a database that opened. A
+redirect is not a visit either: a stale results page redirects into a sync, and
+the visit is counted when the page finally renders, once.
+
+Also not stored: no IP address, no user agent, no referrer. The check asserts
+it by sending all three and looking for them in the row.
+
+### The cookie
+
+Random, first-party, `HttpOnly`, `SameSite=Lax`, 180 days, and `Secure` only
+when the request really arrived over HTTPS -- which behind Render's proxy means
+reading `X-Forwarded-Proto`, because TLS ends at the proxy and the app sees
+plain HTTP. A value that comes back malformed is replaced rather than trusted:
+it came from the browser, which means it came from outside.
+
+`/privacy` says all of this in a paragraph, and a check holds the page to the
+code: it fails if the page stops naming the cookie, stops giving its life in
+days, or stops promising no IP address -- the same trick that keeps `/how` and
+spec section 9 from drifting apart.
+
+### Twenty checks, then breaking the code on purpose
+
+All twenty passed first time, which is the moment to distrust them. Eight
+deliberate mutations, each in a fresh copy of the repository: count the
+progress page, drop the status check, trust the browser's cookie, turn off
+`HttpOnly`, store the user agent, group days by month, ignore the excluded
+visitors, and delete one promise from `/privacy`. All eight were caught, each
+by the check meant to catch it.
+
+The first attempt ran them in one copy without rebuilding it, and two mutants
+appeared to fail for the same reason -- the second was reading the first one's
+damage. A mutation test that shares a working tree can report a false pass, so
+each mutant now gets a fresh copy.
+
+### A defect the checks could not find, because they were the defect
+
+Running the real app afterwards showed six visit rows in `nextcf.db` that no
+browser had made. `check_templates.py` renders pages to look for leaked
+template comments, and it had never needed a database of its own -- until
+rendering a page started recording that it was rendered. So the suite was
+writing visits into the developer's real database, which on any machine that
+matters would be writing into the number section 9 exists to produce.
+
+Fixed twice over: that check gets its own temporary database, and `tests/run.py`
+now points `NEXTCF_DB` at a throwaway file for every check, so the next one
+that forgets cannot do the same. Verified by counting rows in the real file
+before and after a full run: 0.
+
+### Next
+
+The queue and the progress page (ADR 0018), then the scheduler, then logging
+and error handling.

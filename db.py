@@ -47,6 +47,22 @@ SCHEMA_PATH = HERE / "schema.sql"
 # a different path, and that becomes a setting on the host, not a code change.
 DB_PATH = Path(os.environ.get("NEXTCF_DB", HERE / "nextcf.db"))
 
+
+def _names_from(variable):
+    """A comma-separated setting from the environment, blanks dropped."""
+    return tuple(part.strip() for part in os.environ.get(variable, "").split(",") if part.strip())
+
+
+# Spec section 9 counts 50 people **who are not the author**. Who the author is
+# is a setting on the host rather than a fact about the software, the same way
+# DB_PATH is: the author's own handles, and the random visitor ids in the
+# author's browsers (read one out of the cookie, or out of a visits row).
+#
+#     NEXTCF_AUTHOR_HANDLES=some_handle,another
+#     NEXTCF_AUTHOR_VISITORS=Xq2f...,b7Lp...
+AUTHOR_HANDLES = _names_from("NEXTCF_AUTHOR_HANDLES")
+AUTHOR_VISITORS = _names_from("NEXTCF_AUTHOR_VISITORS")
+
 # The one timestamp shape, from spec section 6. Two functions produce
 # timestamps -- utc_now() for "now", iso_from_unix() for what the API sends --
 # and they have to agree exactly, so the format is written once.
@@ -677,6 +693,111 @@ def finish_job(conn, job_id, error=None):
         )
 
 
+# ------------------------------------------------------------------- visits
+#
+# Spec section 9's second criterion -- 50 people who are not the author have
+# used it, and 20 of them came back -- is the one number that cannot be worked
+# out later from anything else. Every other number in this project can be
+# recomputed from data Codeforces still has; a visit that was not written down
+# is simply gone. That is why these two functions exist before there is
+# anybody to count (ADR 0017).
+
+
+def record_visit(conn, visitor_id, handle, path):
+    """Write one row: somebody opened this page.
+
+    Commits on its own, like the job functions above and for the same reason.
+    A visit is not part of whatever else the request is doing, and it must
+    neither be rolled back with it nor commit it early.
+
+    `handle` is the handle whose page this is, or None for a page that looks
+    nothing up. `visitor_id` is the random cookie value, or None if the
+    browser kept none.
+    """
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO visits (visitor_id, handle, path, visited_at)
+                 VALUES (?, ?, ?, ?)
+            """,
+            (visitor_id, handle, path, utc_now()),
+        )
+
+
+def visit_counts(conn, exclude_handles=(), exclude_visitors=()):
+    """Section 9's second criterion, counted both ways it can be counted.
+
+    Returns a dict:
+
+        people            distinct cookie ids
+        returned          those seen on two or more different days
+        used              those who looked a handle up, not only read
+        handles           distinct handles looked up
+        handles_returned  handles looked up on two or more different days
+        visits            rows counted
+        without_cookie    rows from a browser that kept no cookie
+
+    THE TWO COUNTS BRACKET THE TRUTH, and neither is it. A browser that
+    refuses cookies gets a new id on every visit, so `people` counts that
+    person once per visit -- too many. `handles` misses everybody who read the
+    landing page and left, and merges two people who look up the same handle
+    -- too few. Report both, and say which one a claim about section 9 uses.
+
+    "A different day" is `substr(visited_at, 1, 10)`, which is only a
+    legitimate way to ask that because every timestamp in this database has
+    one fixed shape (spec section 6). UTC days, not the visitor's.
+
+    Exclusions are section 9's words: 50 people **who are not the author**.
+    Both lists come from the host's configuration rather than from the code,
+    because who the author is is not a fact about the software.
+    """
+    handles = tuple(exclude_handles)
+    visitors = tuple(exclude_visitors)
+
+    conditions = []
+    parameters = []
+    if handles:
+        # Placeholders are generated, the values are still bound: the only
+        # thing formatted into the SQL is the number of question marks.
+        marks = ", ".join("?" for _ in handles)
+        conditions.append(f"(handle IS NULL OR handle NOT IN ({marks}))")
+        parameters.extend(handles)
+    if visitors:
+        marks = ", ".join("?" for _ in visitors)
+        conditions.append(f"(visitor_id IS NULL OR visitor_id NOT IN ({marks}))")
+        parameters.extend(visitors)
+    where = " AND ".join(conditions) if conditions else "1 = 1"
+
+    # The CTE holds the rows that count; the placeholders appear once, inside
+    # it, so the parameters are bound once however many times it is read.
+    # count(DISTINCT x) ignores NULLs, which is what makes the cookie-less
+    # rows fall out of `people` on their own.
+    row = conn.execute(
+        f"""
+        WITH counted AS (SELECT * FROM visits WHERE {where})
+        SELECT
+          (SELECT count(DISTINCT visitor_id) FROM counted) AS people,
+          (SELECT count(*) FROM (SELECT visitor_id FROM counted
+                                  WHERE visitor_id IS NOT NULL
+                                  GROUP BY visitor_id
+                                 HAVING count(DISTINCT substr(visited_at, 1, 10)) > 1
+                                )) AS returned,
+          (SELECT count(DISTINCT visitor_id) FROM counted
+            WHERE handle IS NOT NULL) AS used,
+          (SELECT count(DISTINCT handle) FROM counted) AS handles,
+          (SELECT count(*) FROM (SELECT handle FROM counted
+                                  WHERE handle IS NOT NULL
+                                  GROUP BY handle
+                                 HAVING count(DISTINCT substr(visited_at, 1, 10)) > 1
+                                )) AS handles_returned,
+          (SELECT count(*) FROM counted) AS visits,
+          (SELECT count(*) FROM counted WHERE visitor_id IS NULL) AS without_cookie
+        """,
+        parameters,
+    ).fetchone()
+    return dict(row)
+
+
 # -------------------------------------------------------------------- the sync
 #
 # One function, because ADR 0004 is a promise about a transaction and the only
@@ -1106,6 +1227,18 @@ def main():
             # the names come from sqlite_master, not from anybody outside.
             count = conn.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
             print(f"  {name:<14} {count} rows")
+
+        # Section 9's second criterion, from this file. On the server this is
+        # the number the whole storage decision exists to protect (ADR 0017);
+        # here it mostly says whether the recording works at all.
+        counts = visit_counts(conn, AUTHOR_HANDLES, AUTHOR_VISITORS)
+        print("\nvisits, the author excluded (spec section 9):")
+        print(f"  people (by cookie)  {counts['people']}, of whom {counts['returned']} came back on another day")
+        print(f"  looked a handle up  {counts['used']}")
+        print(f"  handles (by name)   {counts['handles']}, of whom {counts['handles_returned']} on another day")
+        print(f"  page views          {counts['visits']}, {counts['without_cookie']} from browsers keeping no cookie")
+        if not AUTHOR_HANDLES and not AUTHOR_VISITORS:
+            print("  (nobody is excluded yet: set NEXTCF_AUTHOR_HANDLES and NEXTCF_AUTHOR_VISITORS)")
     finally:
         conn.close()
 

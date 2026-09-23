@@ -283,6 +283,13 @@ time {
 .site-nav {
   margin-left: auto;
   font-size: var(--text-small);
+
+  /* Two links since v0.7 (/how and /privacy). Side by side with nothing
+     between them they read as one phrase; one spacing step apart they read
+     as two links. Flex rather than a margin on the second one, so a third
+     needs no new rule. */
+  display: flex;
+  gap: var(--s2);
 }
 
 main {
