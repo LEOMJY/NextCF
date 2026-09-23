@@ -21,6 +21,19 @@
       <time datetime="{{ last_synced }}">{{ last_synced }}</time>.
     </p>
 
+    {% if syncing %}
+      {# ADR 0018: a visitor who has been here before sees what is stored at
+         once, and the fresh fetch runs behind this page. Saying so is the
+         whole difference between numbers that are old and numbers that are
+         wrong -- the page is only allowed to show yesterday's answer if it
+         admits which day it is from. #}
+      <p class="caveat">
+        Showing what was stored then. A fresh sync is
+        <a href="{{ url_for('progress', job_id=syncing) }}">running now</a>
+        &mdash; reload in a few seconds for it.
+      </p>
+    {% endif %}
+
     {# Recommendations first: this is the product, and everything below it is
        evidence for it.
 

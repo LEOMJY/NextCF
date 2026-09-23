@@ -56,8 +56,9 @@ app = Flask(__name__)
 # wrong it will be wrong by rejecting something valid, so keep it permissive.
 HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,24}$")
 
-# How long a stored history counts as fresh. Opening a results page older than
-# this starts a re-sync instead of showing it.
+# How long a stored history counts as fresh. Since ADR 0018, opening a results
+# page older than this shows what is stored AND re-syncs behind it, rather
+# than making the visitor watch a queue first.
 #
 # The trade: too short and every visit costs a fetch and a wait; too long and
 # somebody who just solved a problem is shown a page saying they did not. Ten
@@ -93,6 +94,24 @@ VISITOR_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 # seconds with a meta refresh, so one visitor waiting forty seconds would
 # write twenty rows and one person would look like a crowd.
 RECORDED_ENDPOINTS = {"index", "results", "how", "privacy"}
+
+# -------------------------------------------------------------- the queue
+#
+# ADR 0018. Syncs run one at a time in the order they arrived (sync.py), which
+# is what lets this page say how long the wait is instead of guessing.
+
+# Two requests a sync, each waiting its turn in api_client's limiter. Worked
+# out from those two numbers rather than typed as 4, so that the page's
+# arithmetic follows the day either of them changes.
+SECONDS_PER_SYNC = 2 * api_client.SECONDS_BETWEEN_REQUESTS
+
+# How often the progress page reloads itself. Often at the front of the queue,
+# rarely at the back: a visitor with eight syncs ahead of them has nothing new
+# to read for half a minute, and polling every two seconds would only make a
+# launch spike expensive -- every reload is a whole page rendered on half a
+# CPU. The countdown in between is done in the browser.
+MIN_REFRESH_SECONDS = 2
+MAX_REFRESH_SECONDS = 10
 
 # How many submissions the table shows. The database keeps every one of them --
 # Benq has 8,574 -- but a page carrying 8,574 rows is slow to build, heavy to
@@ -360,17 +379,23 @@ def results(handle):
 
     # last_synced is NULL until a sync finishes, so "never synced" and "a sync
     # that died halfway" are the same case here, which is the point of ADR
-    # 0004. Staleness is a plain text comparison because every timestamp has
-    # the same fixed shape -- see db.utc_ago.
-    if (
-        user is None
-        or user["last_synced"] is None
-        or user["last_synced"] < db.utc_ago(FRESH_FOR_SECONDS)
-    ):
-        # Nothing here waits on Codeforces. start_sync writes one row, hands
-        # the work to a thread, and returns immediately -- and if this handle
-        # is already syncing it returns that job rather than starting a second.
+    # 0004.
+    if user is None or user["last_synced"] is None:
+        # Nothing stored, so there is nothing to show but the queue. Nothing
+        # here waits on Codeforces: start_sync writes one row and returns, and
+        # if this handle is already syncing it returns that job rather than
+        # queueing a second.
         return redirect(url_for("progress", job_id=sync.start_sync(handle)))
+
+    # Stored but old: show it NOW, and re-sync behind it -- ADR 0018. The
+    # returning visitor is the one person who never has to watch a queue, and
+    # section 9's second criterion is entirely about returning visitors.
+    #
+    # Staleness is a plain text comparison because every timestamp has the
+    # same fixed shape -- see db.utc_ago.
+    syncing = None
+    if user["last_synced"] < db.utc_ago(FRESH_FOR_SECONDS):
+        syncing = sync.start_sync(handle)
 
     rows = db.get_submissions(conn, handle, limit=RESULTS_LIMIT)
 
@@ -386,6 +411,9 @@ def results(handle):
         topics=topic_rows(db.topic_breakdown(conn, handle)),
         totals=db.problem_totals(conn, handle),
         recs=recommendation_view(conn, user),
+        # The job id of the re-sync running behind this page, or None. The
+        # page says so rather than pretending these numbers are current.
+        syncing=syncing,
     )
 
 
@@ -396,7 +424,8 @@ def progress(job_id):
     <int:job_id> matches digits only, so /progress/nonsense is a 404 from the
     router and never reaches this function.
     """
-    job = db.get_job(get_db(), job_id)
+    conn = get_db()
+    job = db.get_job(conn, job_id)
 
     if job is None:
         return render_template(
@@ -419,7 +448,25 @@ def progress(job_id):
             message=job["error"] or "The sync stopped without saying why.",
         )
 
-    return render_template("progress.html", job=job)
+    # How many syncs have to finish before this one starts. Syncs run one at a
+    # time in the order they were asked for (ADR 0018), so this is a count,
+    # not an estimate -- and it is only quotable because of that: while every
+    # sync had its own thread and the limiter interleaved them, every visitor
+    # was last.
+    ahead = db.jobs_ahead(conn, job_id)
+
+    return render_template(
+        "progress.html",
+        job=job,
+        position=ahead + 1,
+        # The one estimate on the page, and it is arithmetic rather than a
+        # guess: every job is two requests, every request waits two seconds,
+        # and they happen one job at a time. It can only be LATE -- a retry
+        # inside api_client adds its waits -- so the page says "about", and
+        # every reload corrects it.
+        seconds=int((ahead + 1) * SECONDS_PER_SYNC),
+        refresh=min(MAX_REFRESH_SECONDS, max(MIN_REFRESH_SECONDS, ahead + 2)),
+    )
 
 
 @app.route("/how")
@@ -664,4 +711,9 @@ if __name__ == "__main__":
     # Fetching in both would spend two requests on one problemset.
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         start_problemset_fetch()
+        # The one thread that runs syncs (ADR 0018). Started here rather than
+        # at import for the same reason as the fetch above: every check
+        # imports this module, and a worker looking for jobs inside a check
+        # would reach for Codeforces in tests built to touch no network.
+        sync.start_worker()
     app.run(debug=True)

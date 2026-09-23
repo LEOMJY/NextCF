@@ -4102,3 +4102,75 @@ before and after a full run: 0.
 
 The queue and the progress page (ADR 0018), then the scheduler, then logging
 and error handling.
+
+---
+
+## 2026-09-22 — The queue, and a page that can count
+
+ADR 0018, built. Syncs now run one at a time in the order they were asked for:
+one worker thread, the `jobs` table as the queue, and `claim_job` -- an UPDATE
+with `WHERE state = 'pending'` -- as the thing that makes "one at a time" true
+even when sync.py is run by hand against the same file while the web app is up.
+
+What that buys is not a shorter wait for the last visitor; the rate limit
+decides that. It is that everybody in front of them stops waiting as long as
+the last one: first visitor four seconds instead of twenty-two, average
+thirty-one down to twenty-two. And it makes a position quotable at all, which
+is the whole of what the progress page gained:
+
+    2 syncs ahead of yours -- about 12 seconds.
+
+Both numbers are arithmetic, not guesses: two requests a job, two seconds a
+request, one job at a time. The page can only be LATE (a retry inside
+api_client waits two seconds, then four), so it says "about", and every reload
+corrects it. It reloads itself every two seconds at the front of the queue and
+every ten at the back, because somebody with eight syncs ahead has nothing new
+to read for half a minute -- and a launch spike of a hundred people polling
+every two seconds is a hundred page renders a minute on half a CPU. In between
+reloads a nine-line inline script counts the number down; with scripting off
+the number simply changes on each reload instead, and nothing else differs.
+
+**A returning visitor never waits.** If a history is already stored, that page
+is rendered at once -- labelled "showing what was stored then", with the fresh
+sync running behind it. That only works when the rows survive, which on the
+free instance they mostly do not; it becomes the common path the day ADR 0017's
+disk is attached.
+
+### The check that was blind, and the mutant that proved it
+
+Eighteen checks, all passing, then ten deliberate mutations in fresh copies of
+the repository. Nine were caught. The tenth -- the worker running every job in
+a thread of its own, which is exactly the thing ADR 0018 forbids -- **passed**.
+
+The fault was in the check's own fake. It counted how many syncs were running
+by incrementing a counter after claiming a job and decrementing it in an outer
+`finally` that also ran when the claim FAILED, so a mutant in which dozens of
+callers lost the claim drove the count below zero, and the assertion that it
+never exceeded one could not fire. A fake that lies is worse than no fake: it
+makes a check look like evidence. Fixed, the same mutant reports six syncs
+running at once.
+
+### Two things the work turned up
+
+**A job whose run throws is now closed by the worker.** `run_sync` writes its
+own failures into the jobs row, so anything that escapes it leaves the row
+saying "running" for ever -- one worker, so that is both a visitor counting
+down on a page that will never change and a queue that never moves again. The
+worker marks it failed and carries on. Found by a check that deliberately
+explodes a job, which was written to prove the worker survives and proved
+something else as well.
+
+**One existing check had to be rewritten rather than fixed.** "Data older than
+the freshness window starts a re-sync" asserted a redirect, which is the
+behaviour ADR 0018 deliberately replaced. A check encoding the old contract is
+not a failure to repair quietly; it is the decision arriving, and the check now
+states the new one.
+
+Verified against the running site rather than only in tests: five real handles
+queued at once, the page for the last of them said "2 syncs ahead of yours --
+about 12 seconds", and a results page whose sync was aged by two days came back
+instantly with the banner and a job queued behind it.
+
+### Next
+
+The nightly scheduler, then logging and error handling.

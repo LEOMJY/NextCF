@@ -144,7 +144,7 @@ def progress_page_invents_no_number():
     conn = db.connect()
     try:
         job_id = db.get_active_job(conn, "sync", "alpha")["id"]
-        db.start_job(conn, job_id)
+        db.claim_job(conn, job_id)
         db.set_job_progress(conn, job_id, 1234)
     finally:
         conn.close()
@@ -215,7 +215,10 @@ def acmsguru_problem_has_no_link():
 check("a problem with no contest id is shown as text, not a broken link", acmsguru_problem_has_no_link)
 
 
-def stale_data_triggers_a_resync():
+def stale_data_is_shown_and_resynced_behind():
+    """Changed by ADR 0018. Until 2026-09-22 a stale page redirected to a
+    queue and the visitor waited again; now they get what is stored at once,
+    the page says which sync it is from, and the fresh one runs behind it."""
     synced("epsilon", [api_sub(4)])
     conn = db.connect()
     try:
@@ -223,12 +226,20 @@ def stale_data_triggers_a_resync():
             conn.execute("UPDATE users SET last_synced = '2020-01-01T00:00:00Z' WHERE handle = 'epsilon'")
     finally:
         conn.close()
-    response = client.get("/results/epsilon")
-    assert response.status_code == 302, "stale data was served as if fresh"
-    assert "/progress/" in response.headers["Location"], response.headers["Location"]
+
+    response, html = get("/results/epsilon")
+    assert response.status_code == 200, f"a returning visitor was sent to a queue ({response.status_code})"
+    assert "running now" in html, "the page showed old numbers without saying so"
+
+    conn = db.connect()
+    try:
+        active = db.get_active_job(conn, "sync", "epsilon")
+    finally:
+        conn.close()
+    assert active is not None, "nothing was queued to refresh it"
 
 
-check("data older than the freshness window starts a re-sync", stale_data_triggers_a_resync)
+check("data older than the freshness window is shown, and re-synced behind", stale_data_is_shown_and_resynced_behind)
 
 
 def fresh_data_is_not_refetched():

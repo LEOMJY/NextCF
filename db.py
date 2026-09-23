@@ -664,10 +664,70 @@ def create_job(conn, kind, target):
     return cursor.lastrowid
 
 
-def start_job(conn, job_id):
-    """Mark a pending job as running."""
+def claim_job(conn, job_id):
+    """Take a pending job, if nobody else has it. True if this caller got it.
+
+    One statement, so the test and the claim cannot come apart. A read
+    followed by a write leaves a gap in which two runners both see 'pending',
+    both start, and the same user is fetched twice -- which on a rate-limited
+    API means everybody queued behind them waits twice as long.
+
+    Inside the web app that race is not reachable: ADR 0018 runs one worker
+    thread. What makes this a statement rather than a rule somebody has to
+    remember is sync.py run by hand, which is a second process on the same
+    file, and now loses the claim instead of duplicating the work.
+
+    Was start_job(), which set the state unconditionally and told the caller
+    nothing.
+    """
     with conn:
-        conn.execute("UPDATE jobs SET state = 'running' WHERE id = ?", (job_id,))
+        cursor = conn.execute(
+            "UPDATE jobs SET state = 'running' WHERE id = ? AND state = 'pending'",
+            (job_id,),
+        )
+    return cursor.rowcount == 1
+
+
+def next_pending_job(conn, kind="sync"):
+    """The oldest job still waiting, or None. ADR 0018's queue.
+
+    Oldest by id, because id IS the arrival order: SQLite hands out increasing
+    integer keys, so nothing has to be ordered by a timestamp that two rows
+    created in the same second could share.
+    """
+    return conn.execute(
+        """
+        SELECT id, kind, target, state, progress, started_at, finished_at, error
+          FROM jobs
+         WHERE kind = ? AND state = 'pending'
+         ORDER BY id
+         LIMIT 1
+        """,
+        (kind,),
+    ).fetchone()
+
+
+def jobs_ahead(conn, job_id):
+    """How many unfinished jobs were asked for before this one.
+
+    What the progress page turns into "you are 7th in the queue". Under ADR
+    0018 syncs run one at a time in id order, so this is exactly how many have
+    to finish first: 0 means this job is running now, or is next.
+
+    It is only a number anybody can quote BECAUSE they run one at a time.
+    While every sync ran in its own thread and the rate limiter interleaved
+    their requests, everybody finished at the end together and there was no
+    such thing as a position.
+    """
+    return conn.execute(
+        """
+        SELECT count(*)
+          FROM jobs
+         WHERE state IN ('pending', 'running')
+           AND id < ?
+        """,
+        (job_id,),
+    ).fetchone()[0]
 
 
 def set_job_progress(conn, job_id, progress):

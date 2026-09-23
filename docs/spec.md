@@ -75,7 +75,9 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
 ```
   api_client.py   Codeforces API — rate limiting, retries, backoff
   db.py           schema and queries
-  sync.py         fetch one user's history as a background job, all or nothing
+  sync.py         fetch one user's history as a background job, all or
+                  nothing; and the one worker that runs those jobs, one at
+                  a time in the order they arrived (ADR 0018)
   collect.py      bulk collection of ~4000 users, run manually
   model.py        solve-probability prediction: the rating-only baseline
                   (ADR 0012) and the topic model (ADR 0014), and the
@@ -122,14 +124,17 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
          |
          |  enter handle
          v
-      web.py  ──── starts job ────>  sync.py
-         |                              |
-         |  <── polls "done yet?" ──────┘
+      web.py  ─ queues a job ─>  jobs table  ─>  sync.py's one worker
+         |                                        one at a time,
+         |  <── polls "where am I?" ───────────── oldest first
          v
-    progress page
+    progress page: position in the queue, an estimate, a countdown
          |
          v
     results page  ←── model.py predicts, picks 5 near target
+                      a visitor whose history is already stored gets this
+                      page at once, labelled, while the fresh sync runs
+                      behind it (ADR 0018)
   ─────────────────────────────────────────────────────
                           |
   SCHEDULER — nightly, a thread inside the web app

@@ -3,15 +3,19 @@
 {% block title %}Syncing {{ job.target }} &mdash; NextCF{% endblock %}
 
 {% block head %}
-  {# The page reloads itself every two seconds. No JavaScript: a meta refresh
-     is the smallest thing that works, it survives a browser with scripting
-     turned off, and when the job finishes the next reload lands on the
-     redirect to the results page, so leaving needs no extra code.
+  {# The page reloads itself, and how often depends on where the visitor is in
+     the queue -- every two seconds at the front, every ten at the back, which
+     web.py works out. Somebody with eight syncs ahead of them has nothing new
+     to read for half a minute, and reloading anyway would only make a launch
+     spike expensive: every reload is a whole page rendered on half a CPU.
 
-     The cost is a whole page re-fetched every two seconds and a visible
-     flicker. Replacing it with a small fetch() against a JSON endpoint is the
-     upgrade, and it belongs with the design pass rather than here. #}
-  <meta http-equiv="refresh" content="2">
+     Still a meta refresh, and still no JavaScript needed: it works with
+     scripting turned off, and when the job finishes the next reload lands on
+     the redirect to the results page, so leaving needs no code at all.
+
+     The script at the bottom only smooths the number between reloads.
+     Everything it says, the page already says without it. #}
+  <meta http-equiv="refresh" content="{{ refresh }}">
 {% endblock %}
 
 {% block content %}
@@ -23,7 +27,23 @@
     <h1>Reading {{ job.target }}&rsquo;s submissions</h1>
 
     <p class="progress-cursor" aria-hidden="true"></p>
-    <p class="meta">fetching from Codeforces</p>
+
+    {# Two sentences, one of them a number that is arithmetic rather than a
+       guess: syncs run one at a time in the order they were asked for (ADR
+       0018), every sync is two requests, and every request waits two seconds.
+       Before that they all ran at once and finished together, so there was no
+       position to quote and no honest estimate to give. #}
+    {% if position > 1 %}
+      <p class="meta">
+        {{ position - 1 }} sync{{ 's' if position > 2 }} ahead of yours &mdash;
+        about <span id="countdown" data-seconds="{{ seconds }}">{{ seconds }}</span> seconds.
+      </p>
+    {% else %}
+      <p class="meta">
+        Fetching from Codeforces &mdash;
+        about <span id="countdown" data-seconds="{{ seconds }}">{{ seconds }}</span> seconds.
+      </p>
+    {% endif %}
 
     {# No count, no percentage and no progress bar, deliberately. A sync is one
        request for the whole history, so there is no true moment between
@@ -31,10 +51,10 @@
        a long job WITHOUT LYING ABOUT IT. A simulated bar would be a lie that
        usually gets caught -- stuck at 99%. #}
     <p class="caveat">
-      A few seconds on its own. Longer if other people are syncing at the same
-      moment: Codeforces allows one request every two seconds, and everyone
-      takes turns. This page updates itself; the table appears when it is
-      finished.
+      Codeforces allows one request every two seconds, so everybody takes
+      turns and each turn is finished before the next one starts. This page
+      updates itself; the table appears when it is your turn and the fetch is
+      done.
     </p>
 
     <p class="meta">
@@ -42,4 +62,29 @@
       reload or to share.
     </p>
   </div>
+
+  <script>
+    // Counts the estimate down between reloads. The server's number is exact
+    // at the moment the page was built; this only stops it sitting still for
+    // ten seconds while a visitor at the back of the queue waits.
+    //
+    // Inline and tiny on purpose: this is not the React bundle (ADR 0008),
+    // which is for pieces that change each other. Nothing here depends on
+    // the script running -- with scripting off, the number changes on each
+    // reload instead of each second.
+    (function () {
+      var span = document.getElementById("countdown");
+      if (!span) return;
+      var left = parseInt(span.dataset.seconds, 10);
+      if (isNaN(left)) return;
+      setInterval(function () {
+        left -= 1;
+        // Never count past zero into a lie. A sync can run late -- a failed
+        // request is retried after two seconds, then four -- and a countdown
+        // frozen at "0 seconds" says something false, where "a few" stays
+        // true however long it takes.
+        span.textContent = left > 0 ? left : "a few";
+      }, 1000);
+    })();
+  </script>
 {% endblock %}

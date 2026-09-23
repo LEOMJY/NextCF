@@ -232,7 +232,7 @@ def job_state_after_a_program_starts(program):
     conn = db.connect(path)
     try:
         job_id = db.create_job(conn, "sync", "tourist")
-        db.start_job(conn, job_id)
+        db.claim_job(conn, job_id)
     finally:
         conn.close()
 
@@ -540,7 +540,7 @@ def job_lifecycle():
         else:
             raise AssertionError("a second job for the same handle was created")
 
-        db.start_job(conn, job_id)
+        db.claim_job(conn, job_id)
         db.set_job_progress(conn, job_id, 300)
         assert db.get_job(conn, job_id)["state"] == "running"
         assert db.get_job(conn, job_id)["progress"] == 300
@@ -566,7 +566,7 @@ def job_record_survives_a_failed_sync():
     conn = db.connect(path)
     try:
         job_id = db.create_job(conn, "sync", "tourist")
-        db.start_job(conn, job_id)
+        db.claim_job(conn, job_id)
         try:
             db.save_sync(conn, "tourist", None, [api_sub(1, contest_id=None)])
         except ValueError as exc:
