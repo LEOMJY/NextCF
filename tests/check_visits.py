@@ -20,6 +20,10 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import threading
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 SCRATCH = Path(tempfile.mkdtemp(prefix="visits-"))
@@ -242,10 +246,56 @@ def the_cookie_is_locked_down():
 
 def the_cookie_is_secure_behind_the_proxy():
     """Render terminates TLS and forwards plain HTTP, so the header is what
-    tells the truth about the visitor's connection."""
+    tells the truth about the visitor's connection.
+
+    This one goes through Flask's test client, which is not the server the
+    site runs on -- see the next check, which is the one that would have
+    caught the live site being wrong.
+    """
     clear()
     header = cookie_header(fresh_client().get("/", headers={"X-Forwarded-Proto": "https"}))
     assert "Secure" in header, header
+
+
+def the_cookie_is_secure_through_the_real_server():
+    """The same claim, made against waitress with serve.py's configuration.
+
+    On 2026-09-23 the live site was setting the cookie with no Secure flag
+    while the check above passed. Waitress DELETES X-Forwarded-* headers
+    unless it is told a proxy is in front of it, so the app saw plain http and
+    was right to leave Secure off -- and the test client, which never goes
+    through waitress, could not see any of that.
+
+    A check that can only pass is not evidence. This one starts the real
+    server with the real options and asks it a real question.
+    """
+    import waitress  # noqa: E402 -- only this check needs it
+
+    import serve  # noqa: E402 -- imports web; runs no server
+
+    port = 8749
+    thread = threading.Thread(
+        target=waitress.serve,
+        args=(web.app,),
+        kwargs=dict(host="127.0.0.1", port=port, _quiet=True, **serve.WAITRESS_OPTIONS),
+        daemon=True,
+    )
+    thread.start()
+
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{port}/", headers={"X-Forwarded-Proto": "https"}
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                header = response.headers.get("Set-Cookie", "")
+            break
+        except urllib.error.URLError:
+            assert time.monotonic() < deadline, "the server never came up"
+            time.sleep(0.1)
+
+    assert "Secure" in header, f"the server behind a proxy set a cookie without Secure: {header}"
 
 
 # --------------------------------------------------------- what is not stored
@@ -406,6 +456,7 @@ check("a 404 is not counted", an_error_page_is_not_counted)
 print("\nthe cookie")
 check("HttpOnly, SameSite=Lax, 180 days, not Secure over http", the_cookie_is_locked_down)
 check("Secure when the proxy says https", the_cookie_is_secure_behind_the_proxy)
+check("Secure through the real server, with serve.py's options", the_cookie_is_secure_through_the_real_server)
 
 print("\nwhat is never stored")
 check("the table holds only what /privacy promises", the_table_holds_only_what_privacy_promises)
