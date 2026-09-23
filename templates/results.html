@@ -21,31 +21,21 @@
       <time datetime="{{ last_synced }}">{{ last_synced }}</time>.
     </p>
 
-    {# ADR 0018, amended: a visitor who has been here before sees what is
-       stored at once, and decides for themselves whether to spend two
-       requests from a queue everybody shares on a fresh copy. They are the
-       only one who knows whether they have solved anything since.
-
-       Three states, because there are three true things to say. A sync is
-       already running for this handle; or these numbers are old and there is
-       a button; or they are current and the button is there anyway, quietly,
-       for somebody who has just this minute solved something. #}
-    {% if active_job %}
-      <p class="caveat">
-        These numbers are from the sync above. A fresh one is
-        <a href="{{ url_for('progress', job_id=active_job) }}">running now</a>.
+    {# ADR 0018, amended: a visitor who has been here before never waits for a
+       queue -- the stored page is served at once and the fresh fetch happens
+       behind it. What the first version of that got wrong was saying so
+       once, at the top, and then leaving the visitor to guess. This line
+       says what is happening, where it is in the queue and how long that is,
+       and keeps saying it until the answer changes. #}
+    {% if syncing %}
+      <p class="syncing" id="sync-status"
+         data-status="{{ url_for('sync_status', job_id=syncing.job_id) }}">
+        {% include "_sync_line.html" %}
       </p>
-    {% else %}
-      {% if stale %}
-        <p class="caveat">These numbers are from the sync above.</p>
-      {% endif %}
-      {# A form, not a link: a GET that starts work gets followed by browsers
-         prefetching, crawlers and link checkers, and each would take a turn
-         in the queue that a waiting visitor is in. #}
-      <form class="resync" method="post" action="{{ url_for('resync', handle=handle) }}">
-        <button type="submit">Update from Codeforces</button>
-        <span class="meta">takes a few seconds, longer if others are waiting</span>
-      </form>
+    {% elif stale %}
+      {# Nothing is running and the numbers are old: rare, and it would be
+         worse to say nothing. #}
+      <p class="caveat">These numbers are from the sync above.</p>
     {% endif %}
 
     {# Recommendations first: this is the product, and everything below it is
@@ -314,4 +304,73 @@
 
     <p class="meta"><a href="{{ url_for('index') }}">Try another handle</a></p>
   </div>
+
+  {% if syncing %}
+    <script>
+      // Keeps the re-syncing line current while somebody reads the page.
+      //
+      // It asks web.sync_status for the LINE, not for numbers, and swaps it
+      // in: the sentence lives in one template (_sync_line.html) rather than
+      // once in Jinja and once here, which is how a page comes to say two
+      // different things. The fragment carries its own next interval, so
+      // this knows nothing about the queue's arithmetic either.
+      //
+      // Progressive enhancement. With scripting off the line is still there,
+      // with the position and the estimate the page was built with; it just
+      // stops changing, and every other word on the page is still true.
+      (function () {
+        var line = document.getElementById("sync-status");
+        if (!line) return;
+        var ticking = null;
+
+        function body() {
+          return line.querySelector(".syncing-body");
+        }
+
+        function countdown() {
+          clearInterval(ticking);
+          var seconds = line.querySelector(".syncing-seconds");
+          if (!seconds) return;
+          var left = parseInt(body().dataset.seconds, 10);
+          if (isNaN(left)) return;
+          ticking = setInterval(function () {
+            left -= 1;
+            // Never count past zero into a lie: a retry inside the API client
+            // waits two seconds, then four, and "0 seconds" for half a minute
+            // is false where "a few" stays true.
+            seconds.textContent = left > 0 ? left : "a few";
+          }, 1000);
+        }
+
+        function schedule() {
+          var next = parseInt(body().dataset.poll, 10);
+          // Zero when the sync is finished, one way or the other. Stop.
+          if (next > 0) setTimeout(ask, next * 1000);
+        }
+
+        function ask() {
+          fetch(line.dataset.status, { headers: { "Accept": "text/html" } })
+            .then(function (response) {
+              return response.ok ? response.text() : null;
+            })
+            .then(function (html) {
+              // null means the job has been cleaned away. Leave the words
+              // that are there rather than replacing them with a guess.
+              if (html === null) { clearInterval(ticking); return; }
+              line.innerHTML = html;
+              countdown();
+              schedule();
+            })
+            .catch(function () {
+              // Offline, or the server went away. The page in front of the
+              // visitor is still true; it simply stops being updated.
+              clearInterval(ticking);
+            });
+        }
+
+        countdown();
+        schedule();
+      })();
+    </script>
+  {% endif %}
 {% endblock %}

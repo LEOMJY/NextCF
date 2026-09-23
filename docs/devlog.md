@@ -4220,3 +4220,73 @@ were each caught by the check meant for them.
 The quiet surface keeps its one rule: the button is bordered, not filled. The
 accent means "this is where you act" (ADR 0006), and where to act on this page
 is a recommendation, not a refresh.
+
+---
+
+## 2026-09-22 (later still) — The re-sync, third shape: automatic and visible
+
+Three shapes in one day, and the middle one was wrong in a way worth writing
+down.
+
+The first version re-synced behind a returning visitor's page and said so in
+one sentence at the top. The complaint against it was that the visitor cannot
+tell what is happening -- how long, whether it has finished, whether to
+reload. The button answered that by taking the thing away: no automatic sync,
+press this if you want one. That does answer the complaint, and it answers it
+by removing what the complaint was about rather than by showing it.
+
+**Third shape: automatic again, and shown while it happens.**
+
+    ● Re-syncing, 2 syncs ahead of yours — about 12 seconds.
+      The numbers below are from the sync above.
+
+Measured in a browser, on a page whose handle was two days stale with two
+other syncs queued in front of it:
+
+| when | the line said |
+|---|---|
+| 1s | Re-syncing, 1 sync ahead of yours — about 8 seconds |
+| 4s | Re-syncing, 1 sync ahead of yours — about 6 seconds |
+| 6s | Re-syncing — about 3 seconds |
+| 9s | Fresh numbers are ready — show them |
+
+Two status requests in the whole minute, because the interval follows the
+queue -- two seconds at the front, ten at the back -- and the asking stops the
+moment the answer stops changing.
+
+### One sentence, one template
+
+The endpoint answers with the LINE, not with numbers. The obvious design --
+return JSON, have the script build the sentence -- puts that sentence in two
+places, one in Jinja and one in JavaScript, and the day somebody edits one of
+them the page starts saying two different things depending on whether you
+waited. So `_sync_line.html` is rendered by the page at first load and by
+`/progress/<job>/status` afterwards, and the script only swaps it in. The
+fragment carries its own state and its own next interval in data attributes,
+so the script knows nothing about the queue's arithmetic either.
+
+Without JavaScript the line is still there, with the numbers the page was
+built with. It stops changing; nothing on the page becomes untrue.
+
+### A mutant that was right to survive
+
+Seven mutations, six caught. The survivor set `job_id = None` where the page
+looks for a sync already running -- and every check still passed, because
+`start_sync` refuses to queue a second job for a handle anyway, so nothing
+duplicated.
+
+It was not an equivalent mutant, though. It broke a case no check covered: a
+page whose numbers are FRESH while somebody else's sync of that handle is
+running showed no line at all. That is the one moment when a visitor most
+needs to be told the numbers are about to move under them. A check for it now
+exists, and it kills the mutant.
+
+### What this costs, and the lever if it is wrong
+
+Every returning visitor who opens a page spends two requests in front of
+somebody waiting for a first sync. The freshness window holds that to one
+refresh per visitor per ten minutes, which is why it is accepted -- but the
+day a blog post sends a crowd is the day to check it. The lever is written
+into ADR 0018: lengthen the window, or start automatically only while the
+queue is short. And one thing the button did and this does not: force a
+refresh inside the window, for somebody who solved a problem two minutes ago.

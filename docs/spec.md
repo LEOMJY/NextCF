@@ -133,8 +133,10 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
          v
     results page  ←── model.py predicts, picks 5 near target
                       a visitor whose history is already stored gets this
-                      page at once, labelled, and a button that queues a
-                      fresh sync if they want one (ADR 0018)
+                      page at once, and a line saying a fresh sync is
+                      running, where it is in the queue and how long that
+                      is -- kept current from /progress/<job>/status,
+                      which answers with the line itself (ADR 0018)
   ─────────────────────────────────────────────────────
                           |
   SCHEDULER — nightly, a thread inside the web app
@@ -181,6 +183,7 @@ because the landing page has a different job from the tool — see §7.1.
 |---|---|---|
 | `/` | The pitch, **with the handle input in the hero itself** | v0.1 |
 | `/progress/<job>` | Show a long job making progress without lying about it | v0.2 |
+| `/progress/<job>/status` | The same job as one line, for a results page to keep current — ADR 0018 | v0.7 |
 | `/results/<handle>` | Five problems, the probability on each, the topic breakdown | v0.1 crude, v0.4 real |
 | `/how` | How the model works, and the §9 number | v0.6 |
 | `/privacy` | What data is read, what is stored, how to have it removed | v0.7 |
@@ -1101,9 +1104,9 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   seconds untouched, cuts the average from 31 to 22 and the first visitor from
   22 to 4, and it is what makes a position quotable at all: under interleaving
   everybody is tenth. A returning visitor whose rows are still stored sees
-  them at once, labelled, and a button that queues a fresh sync if they
-  want one — option (c), which depends on the disk above. The page starts
-  nothing by itself: only the visitor knows whether they have solved
-  anything since, and two requests spent on a page nobody asked to refresh
-  come out of the queue somebody else is waiting in. ADR 0018 and its
-  amendment.
+  them at once while a fresh sync runs behind the page — option (c), which
+  depends on the disk above. What that page shows is a line under the
+  timestamp: re-syncing, how many syncs are ahead of it, and about how
+  long, counting down and asking `/progress/<job>/status` for the line
+  again until it says the fresh numbers are ready. ADR 0018 and its two
+  amendments, both from the day it was written.

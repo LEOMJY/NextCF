@@ -234,64 +234,138 @@ def active_job_for(handle):
         conn.close()
 
 
-def stale_results_are_shown_at_once_and_nothing_is_queued():
-    """ADR 0018 as amended: the visitor decides whether to spend two requests
-    from a queue everybody shares. Looking at a page is not asking for that."""
+def stale_results_are_shown_at_once_and_resynced_behind():
+    """ADR 0018 as amended: the returning visitor never waits for a queue, and
+    the page never quietly shows old numbers -- it carries a line saying a
+    sync is running, where it is, and how long that is."""
     clear_jobs()
     stored("returning", "2026-01-01T00:00:00Z")
     response = client.get("/results/returning")
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200, f"a returning visitor was sent to a queue ({response.status_code})"
-    assert "These numbers are from the sync above" in html, "old numbers were shown as if current"
-    assert "Update from Codeforces" in html, "there is no way to ask for a fresh copy"
-    assert active_job_for("returning") is None, "reading a page queued a sync nobody asked for"
+    assert "Re-syncing" in html, "the page did not say a sync was running"
+    assert "The numbers below are from the sync above" in html, "old numbers shown as if current"
+
+    job = active_job_for("returning")
+    assert job is not None, "nothing was queued to refresh it"
+    assert f"/progress/{job['id']}/status" in html, "the line points at no job"
 
 
-def fresh_results_offer_the_button_quietly():
+def the_line_carries_the_queue_without_javascript():
+    """Everything the script would show is in the HTML at first render."""
+    clear_jobs()
+    stored("behind", "2026-01-01T00:00:00Z")
+    queue("someone_else", "another")          # two syncs already waiting
+    html = client.get("/results/behind").get_data(as_text=True)
+    without_script = re.sub(r"(?s)<script.*?</script>", "", html)
+
+    assert "2 syncs ahead of yours" in without_script, without_script[:600]
+    seconds = int(3 * web.SECONDS_PER_SYNC)
+    assert f">{seconds}</span>" in without_script, f"expected {seconds} seconds in the page"
+
+
+def fresh_results_start_nothing():
     clear_jobs()
     stored("current", db.utc_now())
     html = client.get("/results/current").get_data(as_text=True)
 
-    assert "These numbers are from the sync above" not in html, "fresh numbers were called old"
-    # Still offered: somebody who solved a problem two minutes ago is inside
-    # the freshness window and is exactly who wants this button.
-    assert "Update from Codeforces" in html, "a fresh page offers no way to update"
+    assert "Re-syncing" not in html, "a fresh page started a sync"
+    assert "from the sync above" not in html, "fresh numbers were called old"
     assert active_job_for("current") is None, "a fresh page queued a sync"
 
 
-def the_button_queues_a_sync_and_shows_the_queue():
+def a_running_sync_is_shown_even_when_the_numbers_are_fresh():
+    """Another visitor may be syncing this handle, or this visitor may have
+    just come back from the progress page. Either way the line is how they
+    learn that the numbers in front of them are about to change."""
     clear_jobs()
-    stored("asks", "2026-01-01T00:00:00Z")
-    response = client.post("/results/asks/sync")
+    stored("fresh_but_busy", db.utc_now())
+    (existing,) = queue("fresh_but_busy")
+    html = client.get("/results/fresh_but_busy").get_data(as_text=True)
 
-    assert response.status_code == 302, response.status_code
-    assert "/progress/" in response.headers["Location"], response.headers["Location"]
-
-    job = active_job_for("asks")
-    assert job is not None, "the button queued nothing"
-    assert str(job["id"]) in response.headers["Location"], "sent to somebody else's job"
+    assert "Re-syncing" in html, "a sync in flight was invisible on a fresh page"
+    assert f"/progress/{existing}/status" in html, "the page watched some other job"
 
 
-def only_a_post_can_start_a_sync():
-    """A GET that starts work is followed by prefetchers, crawlers and link
-    checkers, and each would take a turn in the queue."""
-    clear_jobs()
-    stored("get_only", "2026-01-01T00:00:00Z")
-    response = client.get("/results/get_only/sync")
-
-    assert response.status_code == 405, response.status_code
-    assert active_job_for("get_only") is None, "a GET started a sync"
-
-
-def a_sync_already_running_is_a_link_not_a_second_button():
+def a_sync_already_running_is_watched_not_duplicated():
     clear_jobs()
     stored("watching", "2026-01-01T00:00:00Z")
-    queue("watching")
+    (existing,) = queue("watching")
     html = client.get("/results/watching").get_data(as_text=True)
 
-    assert "running now" in html, "the page did not mention the sync in flight"
-    assert "Update from Codeforces" not in html, "offered to queue a second sync for one handle"
+    assert f"/progress/{existing}/status" in html, "the page watched some other job"
+    conn = db.connect()
+    try:
+        jobs = conn.execute("SELECT count(*) FROM jobs WHERE target = 'watching'").fetchone()[0]
+    finally:
+        conn.close()
+    assert jobs == 1, f"{jobs} jobs queued for one handle"
+
+
+# ------------------------------------------------------- the line, kept current
+def the_status_endpoint_answers_with_the_same_line():
+    """One wording, in one template. Two copies -- one in Jinja, one in
+    JavaScript -- is how a page comes to say two different things."""
+    clear_jobs()
+    stored("live", "2026-01-01T00:00:00Z")
+    page = client.get("/results/live").get_data(as_text=True)
+    job = active_job_for("live")
+
+    fragment = client.get(f"/progress/{job['id']}/status").get_data(as_text=True)
+    assert 'data-state="pending"' in fragment, fragment
+    assert 'data-poll="2"' in fragment, fragment
+
+    # Every word the endpoint sends is already in the page it updates.
+    words = " ".join(re.sub(r"(?s)<[^>]+>", " ", fragment).split())
+    assert words, "the endpoint sent nothing"
+    assert words in " ".join(re.sub(r"(?s)<[^>]+>", " ", page).split()), \
+        f"the endpoint says something the page does not: {words}"
+
+
+def a_finished_sync_stops_the_asking():
+    clear_jobs()
+    stored("finishes", "2026-01-01T00:00:00Z")
+    client.get("/results/finishes")
+    job = active_job_for("finishes")
+
+    conn = db.connect()
+    try:
+        db.claim_job(conn, job["id"])
+        db.finish_job(conn, job["id"])
+    finally:
+        conn.close()
+
+    fragment = client.get(f"/progress/{job['id']}/status").get_data(as_text=True)
+    assert "Fresh numbers are ready" in fragment, fragment
+    assert 'data-poll="0"' in fragment, "the page would keep asking for ever"
+    assert "/results/finishes" in fragment, "no way to see the fresh numbers"
+
+
+def a_failed_sync_is_said_plainly():
+    clear_jobs()
+    stored("fails", "2026-01-01T00:00:00Z")
+    client.get("/results/fails")
+    job = active_job_for("fails")
+
+    conn = db.connect()
+    try:
+        db.claim_job(conn, job["id"])
+        db.finish_job(conn, job["id"], error="Codeforces did not answer.")
+    finally:
+        conn.close()
+
+    fragment = client.get(f"/progress/{job['id']}/status").get_data(as_text=True)
+    assert "did not finish" in fragment, fragment
+    assert 'data-poll="0"' in fragment, "the page would keep asking for ever"
+
+
+def a_job_that_no_longer_exists_is_404():
+    """Then the script stops and leaves the words already on the page, rather
+    than replacing them with a guess."""
+    clear_jobs()
+    response = client.get("/progress/999999/status")
+    assert response.status_code == 404, response.status_code
 
 
 def a_visitor_with_nothing_stored_waits():
@@ -426,13 +500,19 @@ check("the page polls less often further back", the_page_polls_less_often_furthe
 check("the estimate follows the rate limit", the_estimate_follows_the_rate_limit)
 
 print("\nwhat a returning visitor sees")
-check("stale results at once, and nothing queued", stale_results_are_shown_at_once_and_nothing_is_queued)
-check("fresh results offer the button quietly", fresh_results_offer_the_button_quietly)
-check("the button queues a sync and shows the queue", the_button_queues_a_sync_and_shows_the_queue)
-check("only a POST can start a sync", only_a_post_can_start_a_sync)
-check("a sync already running is a link, not a button", a_sync_already_running_is_a_link_not_a_second_button)
+check("stale results at once, re-synced behind", stale_results_are_shown_at_once_and_resynced_behind)
+check("the line carries the queue without JavaScript", the_line_carries_the_queue_without_javascript)
+check("fresh results start nothing", fresh_results_start_nothing)
+check("a running sync shows even on a fresh page", a_running_sync_is_shown_even_when_the_numbers_are_fresh)
+check("a sync already running is watched, not duplicated", a_sync_already_running_is_watched_not_duplicated)
 check("nothing stored means waiting", a_visitor_with_nothing_stored_waits)
 check("two visitors, one handle, one job", two_visitors_asking_for_one_handle_share_a_job)
+
+print("\nthe line, kept current")
+check("the endpoint answers with the same line", the_status_endpoint_answers_with_the_same_line)
+check("a finished sync stops the asking", a_finished_sync_stops_the_asking)
+check("a failed sync is said plainly", a_failed_sync_is_said_plainly)
+check("a job that no longer exists is 404", a_job_that_no_longer_exists_is_404)
 
 print("\nthe worker")
 check("oldest first, one at a time", the_worker_runs_them_oldest_first_and_one_at_a_time)

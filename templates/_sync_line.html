@@ -1,0 +1,32 @@
+{# The line a results page carries while that handle is being fetched again.
+
+   It is a fragment rather than part of results.html because two things need
+   it: the page, at first render, and web.sync_status, which answers the
+   browser every few seconds with this same line so the page can replace it.
+   Written once, so the page and its own updates cannot end up saying two
+   different things.
+
+   It carries its state and its next interval in data attributes. The script
+   in results.html therefore knows nothing about the queue's arithmetic: it
+   swaps this in and reads when to ask again. #}
+<span class="syncing-body"
+      data-state="{{ state }}"
+      data-poll="{{ syncing.poll_in if syncing else 0 }}"
+      data-seconds="{{ syncing.seconds if syncing else 0 }}">
+  {% if state == "done" %}
+    Fresh numbers are ready &mdash; <a href="{{ here }}">show them</a>.
+  {% elif state == "failed" %}
+    {# Not an alarm. The page below it is still true, just older than it was
+       meant to be, and the visitor did not ask for this sync in the first
+       place. #}
+    That refresh did not finish. The numbers below are the last that arrived.
+  {% else %}
+    {# The blinking dot is the same piece of motion as the progress page's
+       cursor, in muted rather than accent: something is happening is not the
+       same claim as this is where you act (ADR 0006). #}
+    <span class="syncing-dot" aria-hidden="true"></span>
+    Re-syncing{% if syncing.position > 1 %}, {{ syncing.position - 1 }} sync{{ 's' if syncing.position > 2 }} ahead of yours{% endif %} &mdash;
+    about <span class="syncing-seconds">{{ syncing.seconds }}</span> seconds.
+    The numbers below are from the sync above.
+  {% endif %}
+</span>

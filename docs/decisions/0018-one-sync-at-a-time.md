@@ -1,8 +1,9 @@
 # 0018 — One sync at a time, and a progress page that can count
 
 **Date:** 2026-09-22
-**Status:** accepted; decisions 3 and 4 amended the same day, once the
-page they describe existed to look at -- see "Amendment" at the end
+**Status:** accepted; decision 3 amended twice the same day, once the page
+it describes existed to look at. **The second amendment supersedes the
+first** -- read them in order at the end.
 
 ## Context
 
@@ -85,10 +86,11 @@ stored.
   exists without being taken. It becomes the common path the day the site is
   paid for.
 - **Stale results need a visible timestamp** and a page that says plainly that
-  the numbers are from then. *(As amended below, it says that and offers a
-  button, rather than announcing a fetch it started by itself.)* Making the
-  state look deliberate is §7.1's unhandled-states work at v0.8; the sentence
-  itself has to exist at v0.7, or the page lies.
+  the numbers are from then. *(As finally amended below: it says that in a
+  line that also gives the position, the estimate and the end of the sync, and
+  keeps saying it.)* Making the state look deliberate is §7.1's
+  unhandled-states work at v0.8; the sentence itself has to exist at v0.7, or
+  the page lies.
 - **One worker means one stuck job holds the queue.** A single request is
   already bounded — three attempts at a 10-second timeout with waits between,
   about 36 seconds at worst — so nothing hangs forever, but the job as a whole
@@ -98,6 +100,11 @@ stored.
   number a waiting visitor actually wants.
 
 ## Amendment — 2026-09-22: the visitor presses the button
+
+*Superseded the same day by the amendment below. Kept because the argument
+in it is still the argument, and because a decision record that quietly
+drops the version it changed its mind about is worth less than one that
+does not.*
 
 Decision 3 said a returning visitor's stored page is served at once "while a
 fresh sync runs behind them". Built and looked at, that is wrong in a way the
@@ -138,3 +145,51 @@ tell them to wait for no reason.
 button, where before it refreshed itself. Accepted: the click sits where the
 knowledge is, and the page no longer spends anybody else's place in the queue
 to answer a question that was not asked.
+
+## Amendment — 2026-09-22, later: automatic again, and visible
+
+The button was the wrong answer to a right complaint. The complaint was that
+the visitor could not tell what was happening: the page said a sync was
+running, once, at the top, and then never mentioned it again -- no idea how
+long, no idea whether it had finished, nothing to do but reload and guess.
+Making them press a button answers that by removing the thing rather than
+showing it.
+
+**So the sync is automatic again, and the page shows it while it happens.**
+Under the timestamp the numbers belong to:
+
+    ● Re-syncing, 2 syncs ahead of yours — about 12 seconds.
+      The numbers below are from the sync above.
+
+It counts down, and it keeps itself current: the browser asks
+`/progress/<job>/status` for the line again on the interval the line itself
+carries -- two seconds at the front of the queue, ten at the back. When the
+sync finishes the line becomes "Fresh numbers are ready — show them", and the
+asking stops. When it fails it says so plainly, and the asking stops. A
+visitor who reads the page for a minute is told three times over what is true.
+
+**The line is one template, `_sync_line.html`, rendered by both the page and
+the endpoint.** The endpoint answers with the line, not with numbers, so there
+is no second copy of the sentence in JavaScript to drift out of step with the
+first. The fragment carries its own state and its own next interval, so the
+script knows nothing about the queue's arithmetic either.
+
+**Without JavaScript the line is still there**, with the position and the
+estimate the page was built with. It stops changing, which is the only thing
+that is lost, and every word on the page remains true.
+
+**What this keeps from the button, and what it gives back.** The queue
+argument in the amendment above stands: a returning visitor who merely opens a
+page spends two requests in front of somebody waiting for a first sync. It is
+accepted deliberately now, because the freshness window already limits it to
+one refresh per visitor per ten minutes, and because the alternative charged
+every returning visitor a click and a wait for something they will almost
+always want. **The lever, if launch day proves it wrong:** lengthen the
+freshness window, or start automatically only while the queue is short and
+offer the button beyond that. Recorded here so it is a trigger rather than a
+surprise.
+
+**What is gone with the button:** a visitor inside the freshness window has no
+way to force a refresh. Two minutes after solving something they see the old
+numbers with no control to press. Re-adding the button for that case is a
+half-hour of work and the ADR is unchanged by it; nobody has asked yet.

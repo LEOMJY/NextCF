@@ -37,7 +37,7 @@ import sqlite3
 import sys
 import threading
 
-from flask import Flask, g, redirect, render_template, request, url_for
+from flask import Flask, g, jsonify, redirect, render_template, request, url_for
 
 import api_client
 import db
@@ -312,6 +312,29 @@ def record_visit(response):
     return response
 
 
+def queue_view(conn, job_id):
+    """Where a job is in the queue, how long that is, and when to ask again.
+
+    One function because three places show the same numbers and must not
+    drift: the progress page, the line on a results page whose history is
+    being refreshed, and the status endpoint that keeps that line current.
+
+    The seconds are arithmetic, not a guess -- syncs run one at a time (ADR
+    0018), every sync is two requests, every request waits two seconds. They
+    can only run LATE, because api_client retries a failed request, so
+    everything that shows this number says "about" and asks again.
+    """
+    ahead = db.jobs_ahead(conn, job_id)
+    return {
+        "job_id": job_id,
+        "position": ahead + 1,
+        "seconds": int((ahead + 1) * SECONDS_PER_SYNC),
+        # Quickly at the front of the queue, rarely at the back: with eight
+        # syncs ahead there is nothing new to say for half a minute.
+        "poll_in": min(MAX_REFRESH_SECONDS, max(MIN_REFRESH_SECONDS, ahead + 2)),
+    }
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     """The landing page: the pitch, and the handle input inside it.
@@ -387,25 +410,23 @@ def results(handle):
         # queueing a second.
         return redirect(url_for("progress", job_id=sync.start_sync(handle)))
 
-    # Stored: show it NOW, and start nothing -- ADR 0018, amended. An earlier
-    # version began a fresh sync behind this page automatically. Two things
-    # were wrong with that. The visitor was never told it was happening, and
-    # it spent two API requests on work nobody asked for -- which, on the day
-    # a blog post sends a crowd, is every returning visitor lengthening the
-    # queue for everybody who is actually waiting.
-    #
-    # So the page offers a button instead. Only the visitor knows whether they
-    # have solved anything since, which makes it their decision and not this
-    # function's.
+    # Stored: show it NOW, and refresh it behind the page -- ADR 0018, as
+    # amended twice on the day it was written. The visitor never waits for a
+    # queue, and the page never quietly shows old numbers: it carries a line
+    # saying a sync is running, where it is in the queue and how long that is,
+    # and the browser keeps that line current from the status endpoint below.
     #
     # Staleness is a plain text comparison because every timestamp has the
     # same fixed shape -- see db.utc_ago.
     stale = user["last_synced"] < db.utc_ago(FRESH_FOR_SECONDS)
 
     # Somebody may already be syncing this handle -- this visitor a minute
-    # ago, or another visitor entirely. Then the honest offer is not a button
-    # that would queue a second one, but a link to the work already running.
+    # ago, or another visitor entirely. Then this page watches that job rather
+    # than queueing a second one for the same work.
     active = db.get_active_job(conn, "sync", handle)
+    job_id = active["id"] if active is not None else None
+    if job_id is None and stale:
+        job_id = sync.start_sync(handle)
 
     rows = db.get_submissions(conn, handle, limit=RESULTS_LIMIT)
 
@@ -424,34 +445,42 @@ def results(handle):
         # Older than the freshness window: the page says so rather than
         # letting the numbers pass for current.
         stale=stale,
-        # The id of a sync already running for this handle, or None.
-        active_job=active["id"] if active is not None else None,
+        # Everything the live line needs, or None when nothing is running.
+        # The line's wording lives in templates/_sync_line.html, which the
+        # status endpoint below renders too, so the page and the updates it
+        # receives cannot drift into two different sentences.
+        syncing=queue_view(conn, job_id) if job_id is not None else None,
+        state=active["state"] if active is not None else "pending",
+        here=url_for("results", handle=handle),
     )
 
 
-@app.route("/results/<handle>/sync", methods=["POST"])
-def resync(handle):
-    """Fetch this handle again, because the visitor asked for it. ADR 0018.
+@app.route("/progress/<int:job_id>/status")
+def sync_status(job_id):
+    """The live line on a results page, asked for again every few seconds.
 
-    POST, not a link. A GET that starts work is followed by anything that
-    walks the page -- a browser prefetching what it thinks you will click, a
-    crawler, a link checker -- and each of those would spend two requests from
-    a queue everybody shares. A form button cannot be followed by accident.
+    It answers with the line itself -- the same fragment the page was built
+    with -- rather than with numbers the browser would have to turn into a
+    sentence. Two copies of that sentence, one in Jinja and one in
+    JavaScript, is exactly how a page ends up saying two different things.
 
-    It redirects to the progress page rather than rendering anything, so the
-    visitor lands on an address they can reload without asking for the work
-    twice, and sees exactly what a first-time visitor sees: their place in the
-    queue. start_sync returns the job already running for this handle if there
-    is one, so two people asking at once watch one sync.
+    The fragment carries its own state and its own next interval in data
+    attributes, so the script does not need to know the queue's arithmetic
+    either: it swaps the line in and reads when to ask again.
     """
-    if not HANDLE_PATTERN.match(handle):
-        return render_template(
-            "error.html",
-            handle=handle,
-            message="That does not look like a Codeforces handle.",
-        ), 404
+    conn = get_db()
+    job = db.get_job(conn, job_id)
+    if job is None:
+        # A job that has been cleaned away. 404 rather than an empty line: the
+        # script stops asking, and the page keeps the words it already has.
+        return jsonify({"state": "missing"}), 404
 
-    return redirect(url_for("progress", job_id=sync.start_sync(handle)))
+    return render_template(
+        "_sync_line.html",
+        state=job["state"],
+        syncing=queue_view(conn, job_id) if job["state"] in ("pending", "running") else None,
+        here=url_for("results", handle=job["target"]),
+    )
 
 
 @app.route("/progress/<int:job_id>")
@@ -485,24 +514,18 @@ def progress(job_id):
             message=job["error"] or "The sync stopped without saying why.",
         )
 
-    # How many syncs have to finish before this one starts. Syncs run one at a
-    # time in the order they were asked for (ADR 0018), so this is a count,
-    # not an estimate -- and it is only quotable because of that: while every
-    # sync had its own thread and the limiter interleaved them, every visitor
-    # was last.
-    ahead = db.jobs_ahead(conn, job_id)
+    # Where this visitor is in the queue, which is a count rather than an
+    # estimate -- and it is only quotable because syncs run one at a time
+    # (ADR 0018). While every sync had its own thread and the limiter
+    # interleaved them, every visitor was last.
+    view = queue_view(conn, job_id)
 
     return render_template(
         "progress.html",
         job=job,
-        position=ahead + 1,
-        # The one estimate on the page, and it is arithmetic rather than a
-        # guess: every job is two requests, every request waits two seconds,
-        # and they happen one job at a time. It can only be LATE -- a retry
-        # inside api_client adds its waits -- so the page says "about", and
-        # every reload corrects it.
-        seconds=int((ahead + 1) * SECONDS_PER_SYNC),
-        refresh=min(MAX_REFRESH_SECONDS, max(MIN_REFRESH_SECONDS, ahead + 2)),
+        position=view["position"],
+        seconds=view["seconds"],
+        refresh=view["poll_in"],
     )
 
 

@@ -424,36 +424,31 @@ main {
   margin-bottom: var(--s3);
 }
 
-/* The one button on the quiet surface: fetch this handle again (ADR 0018).
-   Bordered rather than filled, because the accent means "this is good, or
-   this is where you act" (ADR 0006) and the thing to act on here is a
-   recommendation, not a refresh. A filled green button would be the loudest
-   thing on the page and would be pointing at the wrong place. */
-.resync {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  flex-wrap: wrap;
+/* A results page whose history is being fetched again says so here, under the
+   timestamp the numbers belong to, where the eye already is (ADR 0018). Muted
+   rather than accent: "something is happening" is not "this is where you
+   act", and the accent means only the second thing (ADR 0006). */
+.syncing {
+  max-width: var(--measure);
   margin-bottom: var(--s3);
+  color: var(--muted);
+  font-size: var(--text-small);
 }
 
-.resync button {
-  background: none;
+.syncing a {
   color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  font: 400 var(--text-small) / 1 var(--mono);
-  padding: var(--s1) var(--s2);
-  cursor: pointer;
 }
 
-.resync button:hover {
-  border-color: var(--muted);
-  background: var(--panel);
-}
-
-.resync .meta {
-  margin: 0;
+/* The same blink as the progress page's cursor, small and grey. It is the
+   only way a page that is otherwise still can show that it is not finished. */
+.syncing-dot {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: blink 1.1s step-end infinite;
 }
 
 /* A table wider than the screen scrolls inside its own box rather than
@@ -708,7 +703,8 @@ tbody tr:hover td {
 /* Some people get motion sickness from movement on a screen, and browsers let
    them say so. The cursor stays; it simply stops blinking. */
 @media (prefers-reduced-motion: reduce) {
-  .progress-cursor::after {
+  .progress-cursor::after,
+  .syncing-dot {
     animation: none;
   }
 }

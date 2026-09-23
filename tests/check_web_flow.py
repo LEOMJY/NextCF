@@ -215,12 +215,12 @@ def acmsguru_problem_has_no_link():
 check("a problem with no contest id is shown as text, not a broken link", acmsguru_problem_has_no_link)
 
 
-def stale_data_is_shown_with_a_button_and_nothing_else_happens():
+def stale_data_is_shown_and_resynced_behind_a_live_line():
     """Changed by ADR 0018 and its amendment, both on 2026-09-22. Until then a
-    stale page redirected to a queue and the visitor waited again. Then it
-    served the stored page and re-synced behind it, which nobody was told
-    about and which spent two requests nobody had asked for. Now the page is
-    served, says which sync it is from, and offers a button."""
+    stale page redirected to a queue and the visitor waited again. Now the
+    stored page is served at once and the fresh fetch runs behind it, with a
+    line saying so -- which sync the numbers are from, where the new one is in
+    the queue, and how long that is."""
     synced("epsilon", [api_sub(4)])
     conn = db.connect()
     try:
@@ -231,18 +231,18 @@ def stale_data_is_shown_with_a_button_and_nothing_else_happens():
 
     response, html = get("/results/epsilon")
     assert response.status_code == 200, f"a returning visitor was sent to a queue ({response.status_code})"
-    assert "These numbers are from the sync above" in html, "old numbers were shown as if current"
-    assert "Update from Codeforces" in html, "no way to ask for a fresh copy"
+    assert "Re-syncing" in html, "the page did not say a sync was running"
+    assert "The numbers below are from the sync above" in html, "old numbers shown as if current"
 
     conn = db.connect()
     try:
         active = db.get_active_job(conn, "sync", "epsilon")
     finally:
         conn.close()
-    assert active is None, "reading a page queued a sync nobody asked for"
+    assert active is not None, "nothing was queued to refresh it"
 
 
-check("stale data is shown with a button, and queues nothing by itself", stale_data_is_shown_with_a_button_and_nothing_else_happens)
+check("stale data is shown at once, with a line saying it is being refreshed", stale_data_is_shown_and_resynced_behind_a_live_line)
 
 
 def fresh_data_is_not_refetched():
