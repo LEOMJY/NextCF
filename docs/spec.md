@@ -87,6 +87,7 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
                   (ADR 0013)
   web.py          routes and pages
   scheduler.py    nightly re-sync of users already known
+  tests/          the checks, and a runner for them (ADR 0019)
 ```
 
 ```
@@ -234,10 +235,11 @@ not slipped in while coding.
 
 ## 6. Data
 
-Ten tables and one view. Everything else is computed on demand, not stored,
-so there is only one copy of the truth. Both database files use the same
-schema (ADR 0007); the last four tables are filled only in `dataset.db`, by
-`collect.py`, and stay empty on the server.
+Eleven tables and one view. Everything else is computed on demand, not
+stored, so there is only one copy of the truth. Both database files use the
+same schema (ADR 0007); the last four tables are filled only in `dataset.db`,
+by `collect.py`, and stay empty on the server. `visits` is the mirror image —
+filled only on the server, and empty in `dataset.db`.
 
 ```
 users
@@ -286,6 +288,15 @@ jobs
   started_at     text     — ISO-8601 UTC
   finished_at    text     — ISO-8601 UTC; NULL while the job is unfinished
   error          text     — why it failed, if it did
+
+visits                                                  nextcf.db only
+  id             integer
+  visitor_id     text     — a random id from a first-party cookie; NULL if
+                            the browser kept none
+  handle         text     — the handle looked up, or NULL for a visit that
+                            looked nothing up
+  path           text     — which page was opened
+  visited_at     text     — ISO-8601 UTC
 
 rating_changes                                          dataset.db only
   handle         text     — whose rating
@@ -348,6 +359,16 @@ submissions folded to canonical problems, 13 milliseconds for a 1,800-submission
 history, so there is nothing to keep in step and nothing to invalidate. The
 alias map in `problem_aliases` is the single exception this document allows, for
 the reasons above.
+
+**A visit is two identities and a time, and nothing else.** §9 has to count
+people who are not the author and people who came back, so a row carries the
+handle that was looked up and a random id from a first-party cookie: one says
+what they did, the other counts somebody who read the landing page and left.
+No IP address, no user agent and no referrer is stored, which is what keeps
+`/privacy` short enough that somebody will read it. "Came back" is derived,
+not stored — two visits by one identity on two different days. The rows
+survive only because the file does; see §7 and
+`docs/decisions/0017-visit-records-and-a-paid-instance.md`.
 
 **Dates and times are ISO-8601 UTC text**, e.g. `2026-09-07T21:20:00Z`. SQLite
 has no date or time type, so the only choice is text or an integer count of
@@ -419,7 +440,7 @@ history, so the count jumps from nothing to everything, and the page follows
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
 | Scheduling | A timed loop in a thread inside the web app | Nightly re-sync. Not the host's cron: a cron service on Render cannot read another service's disk, and a second program would break the job-cleanup rule — ADR 0007 |
 | Web server | Waitress | Flask's built-in server is development-only. Pure Python, so the deployed setup also runs on Windows and can be tested before pushing |
-| Hosting | Render | Connects to GitHub, redeploys on push. Free tier, at the cost of sleeping when idle — see `docs/decisions/0003-hosting.md` |
+| Hosting | Render: the free instance until launch, then a Starter instance with a 1 GB persistent disk — ADR 0017 | Connects to GitHub, redeploys on push. The free tier sleeps when idle and keeps no file it writes; the paid instance is what makes visit records, the nightly re-sync and a cold start of nothing possible — see `docs/decisions/0003-hosting.md` |
 
 Explicitly rejected:
 
@@ -460,14 +481,27 @@ What that costs depends on what is in the file:
 | Who visited, and when | Exists only on the server | §9's "20 have returned" cannot be measured |
 
 So `nextcf.db` on the server is a cache that is allowed to vanish, and the
-training data never goes there. The third row needs storage that survives — a
-paid disk, or a hosted database — and it is due at v0.7, before any stranger
-visits, because a visit that was not recorded cannot be recovered later. See
-§12 and `docs/decisions/0007-dataset-file-and-job-cleanup.md`.
+training data never goes there. The third row needs storage that survives,
+before any stranger visits, because a visit that was not recorded cannot be
+recovered later. See `docs/decisions/0007-dataset-file-and-job-cleanup.md`.
+
+**Answered 2026-09-22 — ADR 0017.** Before the first stranger arrives the
+service becomes a **Starter instance with a 1 GB persistent disk**, $7 a month
+plus $0.25 a gigabyte, and `nextcf.db` moves onto that disk. The file stays
+SQLite, so there is no second database, no second SQL dialect and no network
+hop on the path that records a visit; the only thing that changes on the day
+it is paid for is a path in the configuration. Until that day development
+continues on the free instance and nothing is lost, because every visit
+recorded before it is the author's own, which §9 excludes. The free hosted
+databases were priced against this and lost on what they leave behind rather
+than on price: the instance would still sleep, so the nightly re-sync would
+have no process to run in at night, and a returning visitor's rows would still
+be wiped several times a day. The same payment ends the cold start ADR 0003
+deferred until before launch.
 
 History: moved from v0.1 to v0.2 because v0.1 stored nothing, then carried past
-v0.2 unanswered although the devlog twice said it was due before v0.3. Answered
-at v0.3.
+v0.2 unanswered although the devlog twice said it was due before v0.3. The
+cache half was answered at v0.3, the half that has to survive at v0.7.
 
 Known risk: the local install is Python 3.14, and the `py` launcher currently
 defaults to the free-threaded build (`3.14t`) rather than the standard one.
@@ -787,6 +821,12 @@ priorities — §7.1 says that if the budget overruns, design stops, not §9 —
 the React island (ADR 0008) now arrives with the chart's interactive version
 rather than before it.
 
+*Settled 2026-09-22, before any v0.7 code was written.* The three shapes that
+milestone could have taken are decided: visit records live in `nextcf.db` on a
+paid disk, bought at launch (ADR 0017); syncs run one at a time behind a queue
+the progress page can count (ADR 0018); and the tests are the checks that
+already exist, moved into the repository (ADR 0019).
+
 ## 11. v1.5 and v2.0 candidates
 
 Recorded so they can be refused now and reconsidered later with real usage
@@ -913,68 +953,6 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   **1000**, chosen on the attempts people made before their first rated
   contest, and moved from there by their own practice. 1400 — what Codeforces
   itself starts a new account from — made the model too hopeful about them.
-- **Where do visit records live?** §9 needs to know who came back, and on the
-  free instance nothing written survives a spin-down (§7). A paid disk keeps
-  SQLite and costs money every month; a hosted database costs nothing on some
-  free tiers but brings a second SQL dialect and a network hop. Counting visits
-  is not built at all yet either. The same choice decides whether a returning
-  visitor's stored history still exists to be shown or topped up — see the
-  queue question below. Decide at v0.7, before anyone who is not the author
-  uses the site.
-- **What does the tenth visitor in a queue see?** The Codeforces API
-  documentation says requests are allowed "at most 1 time per two seconds"; an
-  API key only unlocks private data, not a higher limit. Every request from the
-  web app waits its turn (`api_client.RateLimiter`), so visitors syncing at the
-  same time share that pace. Measured 2026-09-13, while syncs still paged 1000
-  at a time: two long histories synced together, 8,585 and 11,147 submissions,
-  alternated 23 requests and took 44 seconds between them. §9's launch is a blog
-  post, which sends people at once.
-  The pace cannot be raised, and spreading requests over several addresses to
-  get around it would break Codeforces' rules. A visitor waits for the requests
-  queued ahead of them, two seconds each, so what can change is how many there
-  are and in what order:
-  (d) **One request per history — done 2026-09-13.** `user.status` with no
-  count returns the whole history in one response, so every sync is exactly
-  two requests (`user.info`, then everything), however long the history. The
-  same two long histories now finish in 8.9 seconds instead of 44. Ten
-  visitors arriving together is 20 requests, 40 seconds for the last. The
-  progress page lost its count in exchange, because one request has no true
-  moment between "none" and "all"; see §6.
-  (a) **Order.** The limiter interleaves everybody's requests, so everybody
-  finishes near the end. Finishing one visitor's job before starting the next
-  leaves the last visitor's wait unchanged and cuts the average: ten visitors
-  with two requests each finish after 22 seconds on average instead of 31, and
-  the first after 4 instead of 22. That arithmetic holds because (d) makes
-  every job the same size. Were jobs of different sizes again, finishing one at
-  a time would let a long job at the front hold up everyone behind it —
-  simulated with one ten-request job ahead of nine two-request jobs, the average
-  rises from 34 seconds interleaved to 38.
-  (c) **Show a stored history straight away**, and re-sync behind it. Only
-  works if the server still has the visitor's rows. On the free instance a
-  spin-down after 15 idle minutes wipes them (§7), so a visitor returning the
-  next day is almost always synced from scratch. Depends on the storage decision
-  in "Where do visit records live?"; (a) and (d) do not.
-  *Dropped:* fetching only a returning visitor's newest submissions. Under (d)
-  it saves no request — still `user.info` plus one call — only a few seconds of
-  download, and it carries a silent bug: stopping at the first submission
-  already stored skips one that was stored while still being judged, so its
-  verdict never arrives, and an accepted solution hacked after a contest keeps
-  saying OK. A full fetch gets both right for free.
-  Whichever is chosen, the progress page has to keep saying something true while
-  a job waits for its turn. Decide at v0.7, with error handling.
-  *Changed 2026-09-18:* every sync is now **three** requests — `user.info`, the
-  whole history, and the rating history, which the model needs to judge each
-  past attempt at the rating its author had then (ADR 0014). Ten visitors
-  arriving together is 30 requests, a minute for the last, against the 40
-  seconds (d) arrived at. Accuracy was chosen over the 20 seconds. The
-  arithmetic in (a) still holds, because every job is still the same size.
-  *Changed back the same day:* **two** requests again, with nothing given up.
-  `user.info` was fetched for two things — the handle as Codeforces spells it,
-  and the current rating — and both were already in the other two answers:
-  every rating change carries the spelled handle, and the newest one's
-  `newRating` is the current rating. A visitor with no contests is spelled from
-  a submission they made alone. Ten visitors: 20 requests, 40 seconds for the
-  last.
 - **Does a utility-class framework ever become worth it?** Settled for now as
   no — the styling system is the tokens in `static/style.css`, and React brings
   none of its own (ADR 0008, amended 2026-09-15). The reason is proportion
@@ -1093,6 +1071,30 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   visitor's own part is never stored; it is fitted from their history on each
   visit. Answered for this model, not for any model -- one too large for a
   repository would reopen it. ADR 0014.
+- **Where do visit records live?** *(asked 09-13, answered 09-22, at v0.7 as
+  scheduled.)* In `nextcf.db`, which stays one SQLite file and gains a
+  `visits` table; before the first stranger arrives the service becomes a
+  Starter instance with a 1 GB persistent disk and the file moves onto it,
+  $7.25 a month. A visit carries the handle looked up and a random id from a
+  first-party cookie, and nothing else about the visitor. The free hosted
+  databases were priced on 2026-09-22: two are ruled out by their own terms —
+  Render's free Postgres expires 30 days after it is created, a free Supabase
+  project pauses after a week without activity — and the rest lose because the
+  web app would still sleep, which leaves the nightly re-sync with no process
+  to run in and a returning visitor's rows wiped several times a day. ADR
+  0017.
+- **What does the tenth visitor in a queue see?** *(asked 09-13, answered
+  09-22, at v0.7 as scheduled.)* A position, an estimate and a countdown that
+  moves, while syncs run **one at a time** in the order they arrived — option
+  (a), which had never been chosen because interleaving is simply what one
+  thread per sync and one shared limiter produce. It was right while syncs
+  paged a thousand submissions at a time and jobs differed in size; since
+  09-13 every job is two requests. One at a time leaves the last visitor's 40
+  seconds untouched, cuts the average from 31 to 22 and the first visitor from
+  22 to 4, and it is what makes a position quotable at all: under interleaving
+  everybody is tenth. A returning visitor whose rows are still stored sees
+  them at once, labelled, while the re-sync runs behind — option (c), which
+  depends on the disk above. ADR 0018.
 - **What happens to gym submissions?** *(asked 09-15, answered 09-18, at v0.5
   as scheduled.)* Excluded from section 9, and said so: gym problems have no
   rating, so the baseline cannot score them, and they are never recommended.

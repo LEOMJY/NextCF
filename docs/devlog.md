@@ -3876,3 +3876,105 @@ chances are less certain.
 
 Shown on the page: "You have no rating yet, so these chances start from
 1000 …", checked with a real history re-saved under a handle with no rating.
+---
+
+## 2026-09-22 — v0.7 opens by settling three questions
+
+v0.7's row in §10 — nightly re-sync, logging, error handling, tests,
+`/privacy`, visit counting — could not be started honestly without answering
+two things §12 had been carrying since v0.3. Both were answered before any code
+was written, and the second one turned out to be a decision nobody had ever
+made.
+
+### Where visit records live
+
+Free tiers move, so they were priced rather than remembered:
+
+| | free | paid | the catch |
+|---|---|---|---|
+| Render web service | sleeps after 15 idle minutes, ~1 min to wake; 750 instance hours a month | Starter $7/month | a free instance cannot have a disk |
+| Render persistent disk | — | $0.25 per GB per month | ends zero-downtime deploys |
+| Render Postgres | 1 GB | $6/month + $0.30 per GB | the free one **expires 30 days after creation** |
+| Neon | 0.5 GB, 100 compute-hours a month | usage-based | scales to zero after 5 idle minutes, cannot be disabled |
+| Supabase | 500 MB | $25/month | **pauses after a week without activity** |
+| Turso | 5 GB, 500M rows read a month | $4.99/month | metered on rows scanned |
+
+Two died on their own documentation. Render's free Postgres expires inside a
+month, and a free Supabase project pauses after a week of quiet — which is the
+state this site is in most days before launch, so it would be paused on the
+morning the blog post goes out.
+
+The choice was the one that needs no storage code at all: `nextcf.db` stays one
+SQLite file and gains a `visits` table, and before the first stranger arrives
+the service becomes a $7 Starter instance with a $0.25 disk. Development
+continues free until then, and nothing changes in the code on the day it is
+paid for — only a path in the configuration.
+
+What sank the free hybrid was not its price but what it leaves behind. The web
+app would still sleep, so the nightly re-sync scheduled in this same milestone
+would have no process to run in at night, and a returning visitor's rows would
+still be wiped several times a day, which kills showing them anything
+immediately. $7.25 buys three things at once: the records, an instance that is
+awake at night, and the end of the one-minute cold start ADR 0003 deferred
+until before launch. ADR 0017.
+
+A visit is the handle looked up, a random id from a first-party cookie, a page
+and a time. No IP address, no user agent, no referrer — which is most of what
+makes `/privacy` writable in a paragraph.
+
+### The tenth visitor, and an answer that was never a decision
+
+The queue question had a fact underneath it that nobody had noticed:
+**interleaving was never chosen.** Every sync runs in its own thread and
+`api_client.RateLimiter` hands the next two-second slot to whoever asks, so
+requests from different visitors alternate. That is a consequence of two other
+decisions, not a decision.
+
+It was also right, until 2026-09-13. While a sync paged the history a thousand
+submissions at a time, jobs differed in size — a dozen requests for a long
+history, two for a short one — and interleaving stopped one long history from
+blocking everybody behind it. ADR 0004's amendment made a sync one request for
+the whole history, and every job has been the same size since. The protection
+has had nothing to protect for nine days, while its cost stayed: everybody
+waits as long as the last person.
+
+One at a time, in arrival order: the last visitor still waits 40 seconds, the
+average falls from 31 to 22, and the first visitor from 22 to 4. It also makes
+the progress page able to say something true that it could not say before — a
+position. Under interleaving everybody is tenth. So the page gets a position,
+an estimate in seconds, and a countdown that moves between polls, and it is
+honest because the pace is arithmetic: two requests a job, two seconds a
+request, one job at a time.
+
+Simulated on 2026-09-13 and worth remembering as the trigger to revisit: one
+ten-request job ahead of nine two-request ones costs 38 seconds average one at
+a time against 34 interleaved. The decision holds only while every job is the
+same size. ADR 0018.
+
+A returning visitor whose rows are still there sees them at once, labelled with
+when they were synced, while a fresh sync runs behind. Under a rush, anybody
+with stored rows is served from them and everybody else waits with the
+estimate; no cap on the queue, because a cap turns away exactly the strangers
+§9 counts at the one moment they arrive.
+
+### The tests were never in the repository
+
+181 pass/fail checks in 14 scripts, plus two read-only API diagnostics, have
+been sitting in a directory git ignores since v0.2. From the repository's point
+of view this project has no tests, while §10 schedules them at v0.7 and the
+definition of done requires them.
+
+They move into `tests/` under the names they already have, because every
+document says "a check fails if …". No framework: a runner script and three
+tiers — what needs nothing outside the repository runs every time, what needs
+the 680 MB `dataset.db` runs on this machine before a commit that touches the
+model, and the two diagnostics that touch the network never run inside a test
+run. Every file gets read before it is committed, because the repository is
+public. ADR 0019.
+
+### Next
+
+Code, in this order: the tests move first, so everything after them is tested
+inside the repository; then visit counting and `/privacy`; then the queue, the
+worker and the progress page; then the scheduler; then logging and error
+handling.
