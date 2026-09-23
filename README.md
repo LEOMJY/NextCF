@@ -24,8 +24,11 @@ you something, and chosen from a model that is measured, not guessed.
 
 Hosted on a free instance, which sleeps when idle — the first visit after a
 quiet spell takes about half a minute to wake (measured at 31s after three weeks
-of no traffic). Why that tradeoff was taken, and when it gets revisited, is in
-[`docs/decisions/0003-hosting.md`](docs/decisions/0003-hosting.md).
+of no traffic). Why that tradeoff was taken is in
+[`docs/decisions/0003-hosting.md`](docs/decisions/0003-hosting.md); it is
+revisited before launch, when the instance is paid for and given a disk, so
+that what the site records survives a restart
+([ADR 0017](docs/decisions/0017-visit-records-and-a-paid-instance.md)).
 
 Full plan in [`docs/spec.md`](docs/spec.md); what has actually been tried and
 broken is in [`docs/devlog.md`](docs/devlog.md).
@@ -111,6 +114,7 @@ schema.sql           the tables and the view — see docs/spec.md §6
 serve.py             production entry point — see docs/decisions/0003-hosting.md
 requirements.txt     direct dependencies
 .python-version      pins the Python version for the host
+tests/               the checks, and the runner for them — see docs/decisions/0019-checks-into-the-repository.md
 docs/spec.md         what is being built, and what is deliberately excluded
 docs/devlog.md       dated entries: what was tried, what broke, what was learned
 docs/decisions/      one short file per significant technical decision (ADRs)
@@ -151,6 +155,31 @@ then about forty minutes of fitting:
 ```bash
 .venv\Scripts\python.exe model.py fit-topic
 ```
+
+## Tests
+
+181 checks in 14 scripts. Each one tests a claim by making the failure happen:
+a constraint is proved by violating it, a data leak by changing a later result
+and demanding that the earlier prediction does not move by a single bit.
+
+```bash
+.venv\Scripts\python.exe tests/run.py
+```
+
+That is everything that needs nothing outside this repository — about a minute.
+Three of the checks have a second half that reads `dataset.db`, the 680 MB
+collection that lives only on the author's machine, and they skip it unless it
+is asked for:
+
+```bash
+.venv\Scripts\python.exe tests/run.py --dataset
+```
+
+`tests/check_mirrors.py` and `tests/check_problem_ids.py` are diagnostics
+rather than tests: they call the Codeforces API and print a report instead of
+passing or failing, and no test run touches the network. How the suite is
+shaped, and why it is not a framework, is in
+[ADR 0019](docs/decisions/0019-checks-into-the-repository.md).
 
 ## Stack
 

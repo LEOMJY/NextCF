@@ -3978,3 +3978,46 @@ Code, in this order: the tests move first, so everything after them is tested
 inside the repository; then visit counting and `/privacy`; then the queue, the
 worker and the progress page; then the scheduler; then logging and error
 handling.
+
+---
+
+## 2026-09-22 — The checks move in
+
+ADR 0019 decided it; doing it turned up four things that had been true only
+because nobody outside could see them.
+
+**Three checks found the repository by counting directories upward** —
+`parents[2]`, correct two levels down and wrong one level down. Moving them
+without noticing would have broken imports in exactly the silent way the move
+was supposed to be safe from.
+
+**Every scratch database was created inside the checks' own folder.** Invisible
+in a directory git ignores; in the repository it means temporary files in the
+working tree. Three empty scratch directories were sitting there from the
+morning's crashed run, which is the argument made concrete. They use the system
+temporary directory now.
+
+**Every docstring opened with "throwaway check"**, true while they lived
+outside and false the moment they became the suite.
+
+**"Run from the repo root" was an instruction the reader had to obey**, and
+three files enforced nothing. Each file now goes there itself, so a check run
+from any directory behaves identically -- checked by running one from
+`C:\Users`.
+
+Two decisions inside the runner are worth recording.
+
+**It refuses to start under an interpreter without the project's
+dependencies.** Found by making the mistake: run under the system Python
+instead of the project's environment and four checks die on an import, while
+two report 21 passed 1 failed and 8 passed 3 failed -- numbers indistinguishable
+from real defects, in code that is fine. Half an hour was nearly spent on the
+wrong thing.
+
+**A skipped check is not a passed check.** Each file's counter calls a skipped
+test passed, because the function returns without asserting anything. With the
+dataset tier off that reported "181 passed" for 178 real results. The runner
+counts the skip lines back out.
+
+Both tiers pass: 178 passed, 3 skipped in 54 seconds without `dataset.db`; 181
+passed in 119 seconds with it.
