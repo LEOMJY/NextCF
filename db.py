@@ -707,6 +707,45 @@ def next_pending_job(conn, kind="sync"):
     ).fetchone()
 
 
+def count_unfinished_jobs(conn, kind="sync"):
+    """How many jobs are waiting or running. What the scheduler asks before
+    adding work of its own: a visitor waiting for their first page comes
+    before keeping somebody else's history warm (ADR 0020)."""
+    return conn.execute(
+        "SELECT count(*) FROM jobs WHERE kind = ? AND state IN ('pending', 'running')",
+        (kind,),
+    ).fetchone()[0]
+
+
+def next_user_to_refresh(conn, seen_since, synced_before):
+    """The handle most in need of a nightly refresh, or None. ADR 0020.
+
+    "Seen" means somebody opened a page for that handle, from the visits
+    table -- the people who come back are the ones worth keeping fresh, and
+    they are exactly who section 9 counts. "In need" means their stored
+    history is older than the caller's cutoff, oldest first.
+
+    Deliberately asks the database rather than remembering a schedule. This
+    process restarts several times a day on the free instance, so a plan kept
+    in memory would either be repeated on every restart or lost with it;
+    rows that are already on disk cannot forget.
+    """
+    row = conn.execute(
+        """
+        SELECT u.handle
+          FROM users u
+         WHERE u.last_synced IS NOT NULL
+           AND u.last_synced < ?
+           AND u.handle IN (SELECT handle FROM visits
+                             WHERE handle IS NOT NULL AND visited_at >= ?)
+         ORDER BY u.last_synced
+         LIMIT 1
+        """,
+        (synced_before, seen_since),
+    ).fetchone()
+    return row["handle"] if row is not None else None
+
+
 def jobs_ahead(conn, job_id):
     """How many unfinished jobs were asked for before this one.
 

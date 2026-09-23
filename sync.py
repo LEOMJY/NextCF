@@ -190,8 +190,8 @@ def start_worker():
     """Start the one thread that runs syncs. Safe to call twice.
 
     Called by the entry points -- serve.py, and `python web.py` -- and never
-    at import, for the same reason as start_problemset_fetch: every check
-    imports web, and a worker looking for work inside a check would fetch from
+    at import, for the same reason scheduler.start() is: every check imports
+    web, and a thread looking for work inside a check would fetch from
     Codeforces in tests built to touch no network.
     """
     global _worker

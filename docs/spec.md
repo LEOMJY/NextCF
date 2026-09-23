@@ -88,7 +88,9 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   evaluate.py     the harness — date split, fold-in scoring, §9's number
                   (ADR 0013)
   web.py          routes and pages
-  scheduler.py    nightly re-sync of users already known
+  scheduler.py    upkeep: the problemset every six hours, and one recent
+                  visitor's history at a time when nothing is queued
+                  (ADR 0020)
   tests/          the checks, and a runner for them (ADR 0019)
 ```
 
@@ -141,9 +143,13 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
                       date in fact rather than by the clock (ADR 0018)
   ─────────────────────────────────────────────────────
                           |
-  SCHEDULER — nightly, a thread inside the web app
+  UPKEEP — a thread inside the web app, every 30 seconds
   ─────────────────────────────────────────────────────
-    scheduler.py → re-sync users seen in the last 30 days
+    scheduler.py asks what is due, never keeps a schedule:
+      the problemset, if it is over six hours old or empty
+      one handle seen in the last 30 days whose history is
+      over 20 hours old -- and only while nothing is queued,
+      because a visitor waiting comes first (ADR 0020)
   ─────────────────────────────────────────────────────
 ```
 
@@ -449,7 +455,7 @@ history, so the count jumps from nothing to everything, and the page follows
 | Styling | Own CSS built on design tokens. No framework, no build step | Promoted from "classless framework" — see §7.1. A framework gives a floor but also a recognisable look, and "does not read as templated" is now an explicit goal. Three pages of hand-written CSS is roughly 200 lines and is fully ours |
 | Charts | A server-rendered HTML table, with the bar drawn as a CSS gradient behind each row; taken over by a React component where the chart is interactive | No chart library, which is the part that matters. An earlier version of this row said SVG and said a template could not produce the breakdown; both were wrong, and a table reads on a screen reader, reflows at 320px, and is the markup ADR 0008 describes a component mounting onto — ADR 0001, amended 2026-09-15. SVG returns for geometry that is not rectangles, such as the calibration plot in §9 |
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
-| Scheduling | A timed loop in a thread inside the web app | Nightly re-sync. Not the host's cron: a cron service on Render cannot read another service's disk, and a second program would break the job-cleanup rule — ADR 0007 |
+| Scheduling | A timed loop in a thread inside the web app | Keeps the problemset current and re-syncs people who come back — ADR 0020. Not the host's cron: a cron service on Render cannot read another service's disk, and a second program would break the job-cleanup rule — ADR 0007 |
 | Web server | Waitress | Flask's built-in server is development-only. Pure Python, so the deployed setup also runs on Windows and can be tested before pushing |
 | Hosting | Render: the free instance until launch, then a Starter instance with a 1 GB persistent disk — ADR 0017 | Connects to GitHub, redeploys on push. The free tier sleeps when idle and keeps no file it writes; the paid instance is what makes visit records, the nightly re-sync and a cold start of nothing possible — see `docs/decisions/0003-hosting.md` |
 

@@ -4327,3 +4327,84 @@ Measured in a browser: an old page started its own sync and showed the line
 with no button; nine seconds later the same page reloaded fresh with the
 button and no line; pressing it brought back the line, counting down, and then
 "Fresh numbers are ready".
+
+---
+
+## 2026-09-23 — The upkeep thread, and the half of it that got smaller
+
+`scheduler.py` has been named in §4 since 08-11 as "nightly re-sync of users
+already known". Writing it meant asking what it is actually for, and the two
+halves came out unequal.
+
+**The problemset half grew.** Codeforces runs contests every week, and a
+problem that is not in the pool can never be recommended. The app fetches the
+pool once, at startup -- which on the free instance happens several times a
+day, so today it is kept fresh by accident. On the paid instance of ADR 0017
+the process stays up, and a site running for a fortnight would be recommending
+from a fortnight-old pool. The same fetch has never had a retry either: it
+logs a failure and gives up, leaving the recommender with no candidates until
+the next restart.
+
+**The visitor half shrank**, because of work done this week. It was written
+down when a stale page meant a queue and a wait; since ADR 0018 a returning
+visitor gets their page at once and the refresh happens behind it in about
+four seconds. A nightly re-sync now saves four seconds rather than a wait. It
+stays -- a page that is already fresh beats one that becomes fresh while you
+read it, and it is the mechanism §9's calibration will need once the site
+records what it recommended -- but it is no longer the reason the thread
+exists.
+
+### No schedule anywhere in it
+
+The obvious shape is "run at 03:00", and it is wrong for a process that
+restarts several times a day and sleeps at night. A plan kept in memory is
+repeated on every restart or lost with it; a plan kept in the database needs a
+row, a clock and an argument about time zones.
+
+So the thread asks a question instead: *whose history is older than twenty
+hours, among handles seen in `visits` in the last thirty days?* Oldest first,
+one at a time. After any number of restarts the answer is still right, because
+it is computed from rows that are already there -- the visits (ADR 0017) and
+each user's `last_synced`. Twenty hours rather than twenty-four so somebody
+who visits at the same time each day is always due.
+
+### Visitors first, and the thing that makes this safe
+
+Nothing is queued while any sync is waiting or running. A background refresh
+in front of somebody watching a progress page is four seconds they did not ask
+for, and the rule also means this can never build a queue of its own: at most
+one of its jobs is ever in flight, and under load it does nothing at all. The
+problemset is exempt -- one request, in nobody's way.
+
+Fifteen checks, six mutations, all caught: drop the visitors-first guard,
+refresh people who never visited, take the newest history instead of the
+oldest, move the clock on a failed fetch, stop treating an empty pool as
+urgent, and forget to start the thread in serve.py. 243 checks pass.
+
+### Two owners, two requests
+
+Running `serve.py` to see it work printed the same line twice:
+
+    problemset: 11409 problems, 0 aliases
+    problemset: 11409 problems, 0 aliases
+
+The entry points started a problemset fetch of their own, as they had since
+v0.4, and the scheduler's first tick found an empty pool a second later --
+because the first fetch was still in flight -- and fetched it again. Two
+owners of "the problemset is current" cannot agree on whether it has been
+done.
+
+So the startup fetch is now the scheduler's first tick and nothing else's:
+`web.start_problemset_fetch` is gone, the entry points start two threads
+instead of three, and serve.py prints that line once. Cheap to fix, and it
+would never have shown up in a check -- both fetches succeed, and the site is
+correct either way. It only shows when you run the real program and read what
+it says.
+
+### What it does today: almost nothing
+
+On the free instance the process sleeps at night and `visits` is wiped on
+every spin-down, so "seen in the last thirty days" is usually empty. The half
+that works today is the retry of a failed problemset fetch. The rest starts
+working the day the site is paid for -- which is the same sentence as ADR
+0017's, and the third feature this week whose value is waiting on that disk.

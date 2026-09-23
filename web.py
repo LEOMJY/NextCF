@@ -35,7 +35,6 @@ import re
 import secrets
 import sqlite3
 import sys
-import threading
 
 from flask import Flask, g, jsonify, redirect, render_template, request, url_for
 
@@ -191,28 +190,17 @@ def load_problemset():
         problems = api_client.fetch_problemset()["problems"]
         stored, aliases = db.save_problemset(conn, problems)
         print(f"problemset: {stored} problems, {aliases} aliases", file=sys.stderr)
+        return True
     except Exception as exc:
         # The same reasoning as sync.run_sync: an exception escaping a thread
         # dies in silence, and here nobody would even see a stuck job. The log
         # is the only place this can be told.
         print(f"problemset fetch failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        # Said rather than raised, and answered rather than swallowed: the
+        # scheduler asks for this and tries again on its next tick (ADR 0020).
+        return False
     finally:
         conn.close()
-
-
-def start_problemset_fetch():
-    """Start load_problemset() in the background. Called by the entry points.
-
-    Deliberately NOT called at import. Every check imports this module, and
-    they are built to run with no network; a fetch started by the import
-    itself would put a real Codeforces request inside every one of them. So
-    the two programs that actually serve -- serve.py, and `python web.py`
-    below -- start it, and importing web stays free of the network.
-
-    daemon=True: a daemon thread does not keep the process alive, so stopping
-    the server never waits on a download.
-    """
-    threading.Thread(target=load_problemset, name="problemset", daemon=True).start()
 
 
 def get_db():
@@ -802,10 +790,14 @@ if __name__ == "__main__":
     # saved files, and a child that serves, which it marks with this variable.
     # Fetching in both would spend two requests on one problemset.
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        start_problemset_fetch()
-        # The one thread that runs syncs (ADR 0018). Started here rather than
-        # at import for the same reason as the fetch above: every check
-        # imports this module, and a worker looking for jobs inside a check
-        # would reach for Codeforces in tests built to touch no network.
+        import scheduler  # noqa: E402 -- it imports this module, so not at the top
+
+        # The one thread that runs syncs (ADR 0018), and the one that keeps
+        # the problemset current -- including fetching it for the first time,
+        # a few seconds from now (ADR 0020). Started here rather than at
+        # import: every check imports this module, and a thread reaching for
+        # Codeforces inside a check would put a real request in tests built
+        # to make none.
         sync.start_worker()
+        scheduler.start()
     app.run(debug=True)

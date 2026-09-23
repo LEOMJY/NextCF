@@ -20,8 +20,9 @@ from waitress import serve
 # start the development server -- that call is guarded by
 # `if __name__ == "__main__"`, which is false when the file is imported. So
 # debug mode, and its interactive console, cannot reach the internet.
+import scheduler
 import sync
-from web import app, start_problemset_fetch
+from web import app
 
 # An environment variable is a named value living outside the program, set by
 # whoever starts it. The host picks a port at launch and announces it this way,
@@ -58,13 +59,18 @@ HOST = "0.0.0.0"
 
 if __name__ == "__main__":
     # Before serve(), which blocks for as long as the server runs. Both are
-    # background threads, so the server starts answering at once while the
-    # problemset arrives behind it -- ADR 0010.
-    start_problemset_fetch()
-
+    # background threads, so the server answers at once while the problemset
+    # arrives behind them -- ADR 0010.
+    #
     # The one thread that runs syncs, one at a time, in the order they were
     # asked for -- ADR 0018. Without it a visitor's sync is queued and never
     # runs, and the progress page counts down forever.
     sync.start_worker()
+
+    # And the thread that keeps the problemset current and re-syncs people
+    # who come back -- ADR 0020. Without it an instance that stays up for
+    # weeks recommends from the problem pool it had on the morning it
+    # started, and a failed startup fetch is never retried.
+    scheduler.start()
     print(f"serving on http://{HOST}:{PORT}")
     serve(app, host=HOST, port=PORT, **WAITRESS_OPTIONS)
