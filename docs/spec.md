@@ -939,20 +939,6 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
 
 ## 12. Open questions
 
-- **Cold start.** What is shown to somebody with 3 submissions? Probably fall
-  back to the rating-only baseline. Decide at v0.6.
-  *Half answered by the model, 2026-09-18.* Somebody with three rated attempts
-  is folded in like anybody else, and the regularisation does the right thing
-  on its own: with little evidence their personal terms stay near zero, so
-  they are predicted as an average user at their rating, level and experience,
-  on problems whose difficulty the crowd has measured. No special case needed.
-  The half still open is a visitor with **no rating** at all, who has neither
-  the gap nor the level the model is built on; the page tells them so and
-  recommends nothing.
-  *Answered 2026-09-19 (ADR 0016):* they are served from a starting rating of
-  **1000**, chosen on the attempts people made before their first rated
-  contest, and moved from there by their own practice. 1400 — what Codeforces
-  itself starts a new account from — made the model too hopeful about them.
 - **Does a utility-class framework ever become worth it?** Settled for now as
   no — the styling system is the tokens in `static/style.css`, and React brings
   none of its own (ADR 0008, amended 2026-09-15). The reason is proportion
@@ -1071,6 +1057,23 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   visitor's own part is never stored; it is fitted from their history on each
   visit. Answered for this model, not for any model -- one too large for a
   repository would reopen it. ADR 0014.
+- **What happens to gym submissions?** *(asked 09-15, answered 09-18, at v0.5
+  as scheduled.)* Excluded from section 9, and said so: gym problems have no
+  rating, so the baseline cannot score them, and they are never recommended.
+  Whether they say something about a user is a question for a later model.
+  ADR 0013.
+- **Cold start: what is shown to somebody with three submissions?** *(asked
+  08-11, due at v0.6, answered there in two halves, 09-18 and 09-19.)* Nothing
+  special. Somebody with a few rated attempts is folded in like anybody else,
+  and the regularisation does the right thing on its own: with little evidence
+  their own terms stay near zero, so they are predicted as an average user at
+  their rating, level and experience, on problems whose difficulty the crowd
+  has measured. The other half of the question — a visitor who has never been
+  in a rated contest, and so has neither the gap nor the level the model is
+  built on — is served from a starting rating of **1000**, chosen on the
+  attempts people made before their first rated contest and moved from there by
+  their own practice. 1400, what Codeforces itself computes a new account from,
+  made the model too hopeful about them. ADR 0014, ADR 0016.
 - **Where do visit records live?** *(asked 09-13, answered 09-22, at v0.7 as
   scheduled.)* In `nextcf.db`, which stays one SQLite file and gains a
   `visits` table; before the first stranger arrives the service becomes a
@@ -1095,8 +1098,3 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   everybody is tenth. A returning visitor whose rows are still stored sees
   them at once, labelled, while the re-sync runs behind — option (c), which
   depends on the disk above. ADR 0018.
-- **What happens to gym submissions?** *(asked 09-15, answered 09-18, at v0.5
-  as scheduled.)* Excluded from section 9, and said so: gym problems have no
-  rating, so the baseline cannot score them, and they are never recommended.
-  Whether they say something about a user is a question for a later model.
-  ADR 0013.
