@@ -83,6 +83,17 @@ def queue(*handles):
         conn.close()
 
 
+def waiting():
+    """Which handles are queued or running, oldest first."""
+    conn = db.connect()
+    try:
+        return [row["target"] for row in conn.execute(
+            "SELECT target FROM jobs WHERE state IN ('pending', 'running') ORDER BY id"
+        )]
+    finally:
+        conn.close()
+
+
 def job_state(job_id):
     conn = db.connect()
     try:
@@ -406,6 +417,70 @@ def a_job_that_no_longer_exists_is_404():
     assert response.status_code == 404, response.status_code
 
 
+def a_failed_job(handle, error="Codeforces rejected the request: no such user", finished_at=None):
+    """A job that was tried and refused, as sync.py would leave it."""
+    conn = db.connect()
+    try:
+        job_id = db.create_job(conn, "sync", handle)
+        db.claim_job(conn, job_id)
+        db.finish_job(conn, job_id, error=error)
+        if finished_at is not None:
+            with conn:
+                conn.execute("UPDATE jobs SET finished_at = ? WHERE id = ?", (finished_at, job_id))
+        return job_id
+    finally:
+        conn.close()
+
+
+def a_handle_that_just_failed_is_answered_at_once():
+    """One mistyped character used to cost two API requests and four seconds
+    of everybody's queue, on every reload, for ever."""
+    clear_jobs()
+    a_failed_job("nosuchuser42qq")
+
+    response = client.get("/results/nosuchuser42qq")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200, response.status_code
+    assert "That did not work" in html, html[:300]
+    assert "no such user" in html, "the reason was not shown"
+    assert waiting() == [], f"asked Codeforces again anyway: {waiting()}"
+
+
+def the_remembered_failure_offers_a_way_past_it():
+    """Right about a handle that does not exist, wrong about a minute when
+    Codeforces was down -- so the page carries a button that ignores it."""
+    clear_jobs()
+    a_failed_job("nosuchuser42qq")
+    html = client.get("/results/nosuchuser42qq").get_data(as_text=True)
+    assert "Try nosuchuser42qq again" in html, "no way past the remembered failure"
+
+    response = client.post("/results/nosuchuser42qq/sync")
+    assert response.status_code == 302, response.status_code
+    assert waiting() == ["nosuchuser42qq"], waiting()
+
+
+def an_older_failure_is_tried_again():
+    clear_jobs()
+    a_failed_job("gone_yesterday", finished_at=db.utc_ago(web.FAILURE_REMEMBERED_SECONDS + 60))
+
+    response = client.get("/results/gone_yesterday")
+    assert response.status_code == 302, "an old failure was still being believed"
+    assert waiting() == ["gone_yesterday"], waiting()
+
+
+def a_sync_in_flight_beats_a_remembered_failure():
+    """After pressing the button: there is both a failure on the record and a
+    job running. The page must follow the job, not the memory."""
+    clear_jobs()
+    a_failed_job("retried")
+    sync.start_sync("retried")
+
+    response = client.get("/results/retried")
+    assert response.status_code == 302, "showed the old failure while a sync was running"
+    assert "/progress/" in response.headers["Location"], response.headers["Location"]
+
+
 def a_visitor_with_nothing_stored_waits():
     clear_jobs()
     response = client.get("/results/nobody_here_yet")
@@ -549,6 +624,12 @@ check("only a POST can start a sync", only_a_post_can_start_a_sync)
 check("a junk handle cannot be queued", a_junk_handle_cannot_be_queued_by_the_button)
 check("a sync already running is watched, not duplicated", a_sync_already_running_is_watched_not_duplicated)
 check("nothing stored means waiting", a_visitor_with_nothing_stored_waits)
+
+print("\na handle that failed")
+check("answered at once, with no second request", a_handle_that_just_failed_is_answered_at_once)
+check("and a way past it", the_remembered_failure_offers_a_way_past_it)
+check("an older failure is tried again", an_older_failure_is_tried_again)
+check("a sync in flight beats the memory", a_sync_in_flight_beats_a_remembered_failure)
 check("two visitors, one handle, one job", two_visitors_asking_for_one_handle_share_a_job)
 
 print("\nthe line, kept current")

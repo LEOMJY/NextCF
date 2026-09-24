@@ -4408,3 +4408,61 @@ every spin-down, so "seen in the last thirty days" is usually empty. The half
 that works today is the retry of a failed problemset fetch. The rest starts
 working the day the site is paid for -- which is the same sentence as ADR
 0017's, and the third feature this week whose value is waiting on that disk.
+
+---
+
+## 2026-09-24 — A UX audit, and the three things it was right about
+
+Walked the site as a stranger would, on a phone and on a desktop, and scored
+it against Nielsen's ten heuristics: 29 out of 40. The three worst findings
+were all logic rather than looks, and all three are fixed.
+
+### The results page was still shaped like v0.1
+
+Its third act was a hundred rows of the visitor's own submissions -- the whole
+product, back when the product was "enter a handle, see your submissions".
+Measured on a phone: **twelve and a half screens**, nine of them that table.
+
+Cut to ten. Not zero, because the table does one job the rest of the page
+cannot: it is the only evidence that this site read *their* history, for
+somebody who has just handed over a handle and wants to see their last solve
+in there. Ten rows prove it; a hundred bury it, and bury the five
+recommendations above them. The page is now 5.7 screens.
+
+### One mistyped character cost two API requests, every time, for ever
+
+Measured: ask for a handle that does not exist, wait four seconds, get the
+error. **Reload, and it asks Codeforces again.** A shared link with a typo in
+it, or anything that retries, spends the queue everybody else is waiting in.
+
+The fix needed no new table, because the answer was already on disk: a failed
+job, with its reason, in `jobs`. A handle refused in the last ten minutes is
+answered from that row at once. A handle does not start existing in ten
+minutes -- but Codeforces does have bad minutes, so the page carries a button
+that ignores the memory and asks again. Reloads now take no requests at all.
+
+Ordering matters more than it looks here: a sync in flight beats the memory,
+or pressing "try again" would show the old failure while the new sync ran.
+
+### We knew the browser and still asked it to type its own name
+
+ADR 0017's cookie recognises a returning visitor, and the landing page still
+showed an empty box. Now the last handle that worked is kept in
+`localStorage` and filled in -- selected, so the first keystroke replaces it
+-- with a line underneath that says where it came from and a button that
+forgets it.
+
+Deliberately not the visitor cookie: that cookie is counted, `/privacy` says
+it is used for nothing else, and that sentence should stay true. A
+convenience that never leaves the device keeps it true, and `/privacy` now
+says that as well.
+
+### Also found, not yet fixed
+
+Timestamps are machine format everywhere a human reads them
+(`last synced 2026-09-23T04:30:17Z`). The live line has no `aria-live`, so a
+screen reader never hears that the refresh finished, and the progress page's
+two-second reload re-announces the whole page. The topic table is 39 rows with
+no action attached. And the difficulty is fixed at 50% with no way for a
+visitor to say "too hard" -- which is the next thing, and the one that needs
+a decision rather than a fix.

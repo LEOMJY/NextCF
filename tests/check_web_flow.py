@@ -245,6 +245,29 @@ def stale_data_is_shown_and_resynced_behind_a_live_line():
 check("stale data is shown at once, with a line saying it is being refreshed", stale_data_is_shown_and_resynced_behind_a_live_line)
 
 
+def the_browser_is_asked_to_remember_the_handle():
+    """A returning visitor should not have to type their own name again. It
+    is kept on the device, not here: the visitor cookie is counted (ADR 0017)
+    and /privacy promises it is used for nothing else."""
+    synced("zeta", [api_sub(9)])
+    _, results = get("/results/zeta")
+    assert 'localStorage.setItem("nextcf_handle"' in results, "the page remembers nothing"
+    assert '"zeta"' in results, "it remembered somebody else"
+
+    _, landing = get("/")
+    assert 'localStorage.getItem("nextcf_handle")' in landing, "the form never reads it back"
+    assert "Use another handle" in landing, "no way to change what was remembered"
+
+    _, privacy = get("/privacy")
+    # A phrase that does not straddle a line break in the template: the page
+    # is wrapped at the measure, and matching across a newline is a check that
+    # fails when somebody reflows a paragraph.
+    assert "never sent here" in privacy, "/privacy does not mention the thing the browser keeps"
+
+
+check("the browser is asked to remember the handle, and /privacy says so", the_browser_is_asked_to_remember_the_handle)
+
+
 def fresh_data_is_not_refetched():
     synced("zeta", [api_sub(5)])
     response = client.get("/results/zeta")

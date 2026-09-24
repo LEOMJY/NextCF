@@ -119,6 +119,13 @@ the definition of done.
   badly is decision 4 without the cookie.
 - **§9's counts exclude the author**, by handle and by a short list of visitor
   ids kept in configuration rather than in the database.
+- **The browser keeps one more thing, and it is not this cookie.** From
+  2026-09-24 the last handle that worked is stored in `localStorage`, so a
+  returning visitor does not retype their own name. Deliberately not the
+  visitor cookie and deliberately not a column here: this decision says the
+  cookie is counted and used for nothing else, and that sentence is on
+  `/privacy`. A convenience that lives on the device keeps it true, and the
+  page says that too.
 - **`/privacy` now has a definite subject**: a public handle, a random id, the
   times of visits, nothing else, on this project's own disk, removable on
   request.

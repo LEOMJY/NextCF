@@ -66,6 +66,14 @@ HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,24}$")
 # re-sync can stop early at submissions already stored -- v0.7 work.
 FRESH_FOR_SECONDS = 600
 
+# How long a failed sync is believed before it is attempted again. Measured on
+# 2026-09-24 and it was the worst friction on the site: a mistyped handle cost
+# four seconds and two API requests, and reloading the page cost them again,
+# for ever. A handle that does not exist will not start existing in the next
+# ten minutes; a handle that failed because Codeforces was down might, which is
+# why the page that says so carries a button that ignores this.
+FAILURE_REMEMBERED_SECONDS = 600
+
 # ------------------------------------------------------------------- visits
 #
 # ADR 0017. Section 9 needs 50 people who are not the author, 20 of them
@@ -117,10 +125,14 @@ MAX_REFRESH_SECONDS = 10
 # send and impossible to read. The count of what is NOT shown goes on the page
 # too, because silently truncating a list is its own kind of lying.
 #
-# The recommendations arrived at v0.4 and went ABOVE this table rather than
-# replacing it, as this comment used to predict. The log is still how a
-# visitor checks that the numbers above it are about them.
-RESULTS_LIMIT = 100
+# Cut from 100 to 10 on 2026-09-24, after reading the page on a phone: it ran
+# to twelve and a half screens, of which nine were this table. The table's job
+# is not to be a copy of the visitor's Codeforces profile -- they have one of
+# those. It is the only evidence on the page that this site really read THEIR
+# history, for somebody who has just handed over a handle and wants to see
+# that their last solve is in there. Ten rows prove that; a hundred bury it,
+# and bury the five recommendations that are the actual product.
+RESULTS_LIMIT = 10
 
 # Spec section 9's number, for /how: `evaluate.py final` on 2026-09-18, the
 # second look at the 2026 test set (ADR 0013's amendment), for the model that
@@ -392,10 +404,33 @@ def results(handle):
     # that died halfway" are the same case here, which is the point of ADR
     # 0004.
     if user is None or user["last_synced"] is None:
-        # Nothing stored, so there is nothing to show but the queue. Nothing
-        # here waits on Codeforces: start_sync writes one row and returns, and
-        # if this handle is already syncing it returns that job rather than
-        # queueing a second.
+        # Already being fetched -- by this visitor a moment ago, or by
+        # somebody else asking for the same handle. Watch that one.
+        active = db.get_active_job(conn, "sync", handle)
+        if active is not None:
+            return redirect(url_for("progress", job_id=active["id"]))
+
+        # Asked for recently and refused. A handle that does not exist will
+        # not start existing in the next ten minutes, and the answer is
+        # already on disk: give it back now instead of spending two requests
+        # and four seconds of everybody's queue to be told the same thing.
+        # The page carries a button for the case where that is wrong.
+        failed = db.recent_failed_job(
+            conn, "sync", handle, db.utc_ago(FAILURE_REMEMBERED_SECONDS)
+        )
+        if failed is not None:
+            # 200, not an error status, for the same reason as the progress
+            # page: this request worked perfectly, and the honest answer to it
+            # is a page explaining that the sync did not.
+            return render_template(
+                "error.html",
+                handle=handle,
+                message=failed["error"],
+                retry=True,
+            )
+
+        # Nothing stored and nothing known against it. Nothing here waits on
+        # Codeforces: start_sync writes one row and returns.
         return redirect(url_for("progress", job_id=sync.start_sync(handle)))
 
     # Stored: show it NOW, and refresh it behind the page -- ADR 0018, as
@@ -532,6 +567,9 @@ def progress(job_id):
             "error.html",
             handle=job["target"],
             message=job["error"] or "The sync stopped without saying why.",
+            # A sync that failed is worth one more try on demand: the reason
+            # may have been Codeforces rather than the handle.
+            retry=True,
         )
 
     # Where this visitor is in the queue, which is a count rather than an

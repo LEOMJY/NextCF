@@ -27,3 +27,54 @@
     value="{{ handle or '' }}">
   <button type="submit">Show my next problems</button>
 </form>
+
+{# Filled in by the script below when this browser has looked somebody up
+   before. Hidden by default, so a browser with no memory -- or no JavaScript
+   -- sees exactly what it saw before this existed. #}
+<p class="remembered meta" id="remembered" hidden>
+  Filled in from this device.
+  <button type="button" id="forget-handle">Use another handle</button>
+</p>
+
+<script>
+  // Remembers the last handle that worked, so a visitor who comes back does
+  // not retype their own name. Deliberately localStorage and not the visitor
+  // cookie: that cookie is counted (ADR 0017) and /privacy says it is used
+  // for nothing else, so the handle stays on the device and never reaches
+  // the server by this route.
+  //
+  // Every read and write is wrapped, because localStorage throws rather than
+  // returning nothing in a private window or with site data blocked, and a
+  // page must not break over a convenience.
+  (function () {
+    var input = document.getElementById("handle");
+    var note = document.getElementById("remembered");
+    var forget = document.getElementById("forget-handle");
+    if (!input || !note || !forget) return;
+
+    var saved = null;
+    try {
+      saved = localStorage.getItem("nextcf_handle");
+    } catch (e) {
+      return;
+    }
+    // Never overwrite what is already there: on the error page the field
+    // holds the handle that just failed, one keystroke from being fixed.
+    if (!saved || input.value) return;
+
+    input.value = saved;
+    // Selected rather than just filled, so the first keystroke replaces it
+    // instead of appending to somebody else's name.
+    input.select();
+    note.hidden = false;
+
+    forget.addEventListener("click", function () {
+      try {
+        localStorage.removeItem("nextcf_handle");
+      } catch (e) {}
+      input.value = "";
+      note.hidden = true;
+      input.focus();
+    });
+  })();
+</script>

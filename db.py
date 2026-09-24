@@ -707,6 +707,27 @@ def next_pending_job(conn, kind="sync"):
     ).fetchone()
 
 
+def recent_failed_job(conn, kind, target, since):
+    """The last failed job for this target, if it failed after `since`.
+
+    What stops one mistyped character costing two API requests and a
+    four-second wait on every reload, out of a queue everybody shares: the
+    answer is already on disk, so it is given back instead of fetched again.
+    Newest first, because a handle can fail, be created, and succeed.
+    """
+    return conn.execute(
+        """
+        SELECT id, kind, target, state, progress, started_at, finished_at, error
+          FROM jobs
+         WHERE kind = ? AND target = ? AND state = 'failed'
+           AND finished_at >= ?
+         ORDER BY id DESC
+         LIMIT 1
+        """,
+        (kind, target, since),
+    ).fetchone()
+
+
 def count_unfinished_jobs(conn, kind="sync"):
     """How many jobs are waiting or running. What the scheduler asks before
     adding work of its own: a visitor waiting for their first page comes

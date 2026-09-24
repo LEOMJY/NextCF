@@ -424,6 +424,23 @@ main {
   margin-bottom: var(--s3);
 }
 
+/* The line under the handle field when the browser filled it in from its own
+   memory. Muted: it is a convenience being reported, not something to do. */
+.remembered {
+  margin-top: var(--s1);
+}
+
+.remembered button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
 /* A results page whose history is being fetched again says so here, under the
    timestamp the numbers belong to, where the eye already is (ADR 0018). Muted
    rather than accent: "something is happening" is not "this is where you

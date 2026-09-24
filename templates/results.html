@@ -318,6 +318,16 @@
     <p class="meta"><a href="{{ url_for('index') }}">Try another handle</a></p>
   </div>
 
+  <script>
+    // This handle worked, so the landing page can offer it back next time
+    // instead of asking somebody to type their own name again. On the device
+    // only -- see the note in _handle_form.html. tojson makes a safe string
+    // literal out of it rather than pasting it into quotes and hoping.
+    try {
+      localStorage.setItem("nextcf_handle", {{ handle | tojson }});
+    } catch (e) {}
+  </script>
+
   {% if syncing %}
     <script>
       // Keeps the re-syncing line current while somebody reads the page.

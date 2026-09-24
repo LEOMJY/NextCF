@@ -18,6 +18,19 @@
       <p role="alert"><code>{{ message }}</code></p>
     </div>
 
+    {# A sync that failed is remembered for ten minutes, so reloading this page
+       costs nothing and says the same thing (web.FAILURE_REMEMBERED_SECONDS).
+       That is right when the handle does not exist and wrong when Codeforces
+       was having a bad minute, so the visitor gets a button that ignores the
+       memory. Same form and POST as the results page's -- one way to ask for
+       a sync, not two. #}
+    {% if retry and handle %}
+      <form class="resync" method="post" action="{{ url_for('resync', handle=handle) }}">
+        <button type="submit">Try {{ handle }} again</button>
+        <span class="meta">in case it was Codeforces having a bad minute</span>
+      </form>
+    {% endif %}
+
     {# The form comes back with the bad value still in it, so a typo is one
        keystroke from fixed rather than retyped from scratch. #}
     {% include "_handle_form.html" %}
