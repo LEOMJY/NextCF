@@ -193,6 +193,8 @@ because the landing page has a different job from the tool — see §7.1.
 | `/progress/<job>` | Show a long job making progress without lying about it | v0.2 |
 | `/progress/<job>/status` | The same job as one line, for a results page to keep current — ADR 0018 | v0.7 |
 | `POST /results/<handle>/sync` | Fetch this handle again because the visitor asked, then back to their page — ADR 0018 | v0.7 |
+| `POST /results/<handle>/feedback` | "Too hard" or "too easy" on one problem: hide it, move the target one step — ADR 0021 | v0.7 |
+| `POST /results/<handle>/restore` | Put back every problem this visitor has hidden — ADR 0021 | v0.7 |
 | `/results/<handle>` | Five problems, the probability on each, the topic breakdown | v0.1 crude, v0.4 real |
 | `/how` | How the model works, and the §9 number | v0.6 |
 | `/privacy` | What data is read, what is stored, how to have it removed | v0.7 |
@@ -252,7 +254,7 @@ not slipped in while coding.
 
 ## 6. Data
 
-Eleven tables and one view. Everything else is computed on demand, not
+Twelve tables and one view. Everything else is computed on demand, not
 stored, so there is only one copy of the truth. Both database files use the
 same schema (ADR 0007); the last four tables are filled only in `dataset.db`,
 by `collect.py`, and stay empty on the server. `visits` is the mirror image —
@@ -262,7 +264,11 @@ filled only on the server, and empty in `dataset.db`.
 users
   handle         text     — Codeforces handle, unique, primary key
   cf_rating      integer  — their Codeforces rating, may be absent
-  target_prob    real     — difficulty target, default 0.70
+  target_prob    real     — difficulty target; the column's default is
+                            0.70 and the product's is 0.50, so it is read
+                            only once the visitor has moved it (ADR 0021)
+  target_chosen_at text   — when they last moved it; NULL means never,
+                            which is what separates the two defaults
   first_seen     text     — ISO-8601 UTC
   last_synced    text     — ISO-8601 UTC; NULL until a sync completes
 
@@ -305,6 +311,14 @@ jobs
   started_at     text     — ISO-8601 UTC
   finished_at    text     — ISO-8601 UTC; NULL while the job is unfinished
   error          text     — why it failed, if it did
+
+dismissals                                              nextcf.db only
+  handle         text     — who pushed it away
+  problem_id     text     — which problem, canonical id (ADR 0010)
+  reason         text     — "too_hard" or "too_easy"; nothing else
+  dismissed_at   text     — ISO-8601 UTC
+                            one row per (handle, problem): the later
+                            answer replaces the earlier one
 
 visits                                                  nextcf.db only
   id             integer
@@ -643,6 +657,12 @@ Three things, each because the product needs it rather than because it decorates
    seconds is a product surface, and it is the moment of peak user attention.
 3. **Solve probability on each recommendation** (v0.4). "70%" is the entire
    pitch; it earns visual weight.
+
+The target-probability control named above shipped on 2026-09-24, and not
+as a control: two words under each problem, "too hard" and "too easy",
+which hide that problem and move the visitor's target one step (ADR 0021).
+A slider would have been more precise and less pressable; the complaint a
+visitor actually has is not a number.
 
 ### Out of scope on the tool surface
 

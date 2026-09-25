@@ -424,6 +424,36 @@ main {
   margin-bottom: var(--s3);
 }
 
+/* "too hard" and "too easy", under each recommendation (ADR 0021). Two words
+   in the muted colour: they are available, not being asked for. The thing
+   being asked for on this page is the problem above them. */
+.verdict-form {
+  display: flex;
+  gap: var(--s2);
+  margin-top: var(--s1);
+}
+
+.verdict-form button,
+.restore button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  font: 400 var(--text-small) / 1.2 var(--mono);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.verdict-form button:hover,
+.restore button:hover {
+  color: var(--ink);
+}
+
+.restore {
+  margin-top: var(--s2);
+}
+
 /* The line under the handle field when the browser filled it in from its own
    memory. Muted: it is a convenience being reported, not something to do. */
 .remembered {

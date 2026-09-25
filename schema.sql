@@ -1,6 +1,6 @@
 -- NextCF database schema.
 --
--- Eleven tables and one view, per spec section 6. Run once at startup via
+-- Twelve tables and one view, per spec section 6. Run once at startup via
 -- db.py's init_db(); every statement is IF NOT EXISTS, so running it again is
 -- harmless -- and also means a CHANGE to an existing table here does nothing
 -- to a database that already has it.
@@ -42,13 +42,23 @@ CREATE TABLE IF NOT EXISTS users (
     -- known", which is not the same as 0.
     cf_rating    INTEGER,
 
-    -- Difficulty target from spec section 1. NOT READ since 2026-09-18: the
-    -- product default moved to 0.50 and lives in model.DEFAULT_TARGET (ADR
-    -- 0012), because nobody can choose a target yet, and changing this
-    -- default on an existing database means rebuilding this table, which
-    -- submissions refers to. It comes back into use with the target control
-    -- ADR 0008 plans, and that is the change that migrates it.
+    -- Difficulty target from spec section 1, and READ AGAIN since
+    -- 2026-09-24: the "too hard" and "too easy" buttons on each
+    -- recommendation move it one step (ADR 0021).
+    --
+    -- The DEFAULT is still the 0.70 this column was created with, and it is
+    -- not the product default -- that is model.DEFAULT_TARGET, 0.50 (ADR
+    -- 0012). Changing a column default on an existing table means rebuilding
+    -- it, and submissions and dismissals refer to this one. The column below
+    -- is what makes the stale default harmless: until somebody presses a
+    -- button, nothing here is read at all.
     target_prob  REAL    NOT NULL DEFAULT 0.70,
+
+    -- When this visitor last moved their own target, or NULL if never. The
+    -- point is the NULL: it separates "chose 0.70" from "never chose
+    -- anything and is still carrying the default this table was born with".
+    -- Without it the two are the same number and the code has to guess.
+    target_chosen_at TEXT,
 
     -- ISO-8601 UTC text, e.g. "2026-09-09T14:03:00Z". SQLite has no date
     -- type; spec section 6 has the reasoning for text over integer seconds.
@@ -310,6 +320,33 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_active_per_target
     ON jobs(kind, target)
     WHERE state IN ('pending', 'running');
+
+
+-- Problems a visitor has said no to, and why -- ADR 0021. "Too hard" and
+-- "too easy" are the only two answers, because they are the two the site can
+-- act on: each one hides that problem and moves this user's difficulty target
+-- one step.
+--
+-- Stored rather than kept for the page, for the obvious reason: a problem the
+-- visitor has just pushed away must not come back on the next reload. It is
+-- also the first record this project keeps of a visitor JUDGING a
+-- recommendation, which is what section 9's calibration and the v1.5 pet
+-- system will both need.
+--
+-- Canonical ids (ADR 0010): the pool is problemset members, so a dismissal is
+-- about the problem, not about which division's copy of it was shown.
+CREATE TABLE IF NOT EXISTS dismissals (
+    handle       TEXT NOT NULL COLLATE NOCASE
+                      REFERENCES users(handle) ON DELETE CASCADE,
+    problem_id   TEXT NOT NULL REFERENCES problems(id),
+    reason       TEXT NOT NULL CHECK (reason IN ('too_hard', 'too_easy')),
+    dismissed_at TEXT NOT NULL,
+
+    -- One row per (person, problem): pressing the other button later replaces
+    -- the first answer rather than keeping both, because only the latest one
+    -- is what they think.
+    PRIMARY KEY (handle, problem_id)
+) STRICT;
 
 
 -- Who came, and when -- spec section 9's second criterion, and the only thing

@@ -468,6 +468,9 @@ def results(handle):
         # Older than the freshness window: the page says so rather than
         # letting the numbers pass for current.
         stale=stale,
+        # How many problems this visitor has pushed away, so the page can
+        # offer to put them back (ADR 0021).
+        dismissed=db.count_dismissals(conn, handle),
         # Everything the live line needs, or None when nothing is running.
         # The line's wording lives in templates/_sync_line.html, which the
         # status endpoint below renders too, so the page and the updates it
@@ -507,6 +510,64 @@ def resync(handle):
         ), 404
 
     sync.start_sync(handle)
+    return redirect(url_for("results", handle=handle))
+
+
+@app.route("/results/<handle>/feedback", methods=["POST"])
+def feedback(handle):
+    """"Too hard" or "too easy" on one recommendation -- ADR 0021.
+
+    Two things happen, because the visitor is saying two things at once: that
+    problem goes away, and their difficulty target moves one step. Then back
+    to their page, which now shows five problems picked at the new target with
+    the dismissed one gone.
+
+    POST and a redirect, like every other button here: a GET that changes
+    something is followed by anything that walks the page, and a redirect is
+    what makes a reload safe.
+    """
+    if not HANDLE_PATTERN.match(handle):
+        return render_template("error.html", handle=handle,
+                               message="That does not look like a Codeforces handle."), 404
+
+    verdict = request.form.get("verdict", "")
+    problem_id = request.form.get("problem", "")
+    if verdict not in ("too_hard", "too_easy") or not problem_id:
+        # Anything can POST here, so the value is checked rather than trusted.
+        return render_template("error.html", handle=handle,
+                               message="That is not something you can say about a problem."), 400
+
+    conn = get_db()
+    user = db.get_user(conn, handle)
+    if user is None or user["last_synced"] is None:
+        return redirect(url_for("results", handle=handle))
+
+    target = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
+    try:
+        db.dismiss(conn, handle, problem_id, verdict)
+    except sqlite3.IntegrityError:
+        # The foreign key refused it: no such problem. A hand-made POST, or a
+        # problemset that has moved under us.
+        return render_template("error.html", handle=handle,
+                               message="That problem is not one this site knows about."), 404
+
+    db.set_target(conn, handle, model.nudge_target(target, verdict))
+    return redirect(url_for("results", handle=handle))
+
+
+@app.route("/results/<handle>/restore", methods=["POST"])
+def restore(handle):
+    """Put back every problem this visitor has pushed away.
+
+    The undo for the buttons above. It does not touch the difficulty target:
+    hiding a problem and moving the target are two things, and somebody who
+    wants the target back presses the other button.
+    """
+    if not HANDLE_PATTERN.match(handle):
+        return render_template("error.html", handle=handle,
+                               message="That does not look like a Codeforces handle."), 404
+
+    db.clear_dismissals(get_db(), handle)
     return redirect(url_for("results", handle=handle))
 
 
@@ -687,9 +748,11 @@ def recommendation_view(conn, user):
     if db.problemset_size(conn) == 0:
         return {"state": "not_ready"}
 
-    # model.DEFAULT_TARGET, not user["target_prob"] -- see the comment on the
-    # constant for why the column is not read yet.
-    target = model.DEFAULT_TARGET
+    # The visitor's own target if they have ever pressed "too hard" or "too
+    # easy", and the product default if they have not (ADR 0021).
+    # target_chosen_at is what separates the two: target_prob's own default is
+    # 0.70, which is a number somebody could also choose.
+    target = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
     pool = db.recommendation_pool(conn, user["handle"])
 
     # The topic model when topic_model.json exists, the rating-only baseline
@@ -745,6 +808,9 @@ def recommendation_view(conn, user):
         "event": baseline["event"],
         "problems": [
             {
+                # The id goes to the page because the two buttons beside each
+                # row have to name the problem they are about (ADR 0021).
+                "id": pick["id"],
                 "name": pick["name"],
                 "rating": pick["rating"],
                 # Whole percentages. The curve is fitted to three decimal

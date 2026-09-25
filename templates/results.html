@@ -140,7 +140,23 @@
           <tbody>
             {% for problem in recs.problems %}
               <tr>
-                <td><a href="{{ problem.url }}">{{ problem.name }}</a></td>
+                <td>
+                  <a href="{{ problem.url }}">{{ problem.name }}</a>
+                  {# ADR 0021. Two words under the name rather than a fourth
+                     column: at 375px a column of buttons squeezes the name,
+                     which is the thing being chosen between.
+
+                     A form and a POST, like every other button here. The
+                     verdict rides on the button itself -- two submits, one
+                     name, two values -- so this needs no JavaScript and works
+                     the same with scripting off. #}
+                  <form class="verdict-form" method="post"
+                        action="{{ url_for('feedback', handle=handle) }}">
+                    <input type="hidden" name="problem" value="{{ problem.id }}">
+                    <button type="submit" name="verdict" value="too_hard">too hard</button>
+                    <button type="submit" name="verdict" value="too_easy">too easy</button>
+                  </form>
+                </td>
                 <td class="num rating">{{ problem.rating }}</td>
                 {# The accent's defined meaning is "this is good, or this is
                    where you act" -- ADR 0006. These five rows are the only
@@ -150,6 +166,19 @@
             {% endfor %}
           </tbody>
         </table>
+
+        {# The undo for those buttons. Shown only when there is something to
+           undo, and it says how many -- "put them back" with no number is a
+           question the visitor cannot answer. It leaves the difficulty target
+           alone: hiding a problem and moving the target are two things, and
+           the way back from the target is the other button. #}
+        {% if dismissed %}
+          <form class="restore" method="post" action="{{ url_for('restore', handle=handle) }}">
+            <button type="submit">
+              Put back the {{ dismissed }} problem{{ 's' if dismissed > 1 }} I hid
+            </button>
+          </form>
+        {% endif %}
 
       {% elif recs.state == "unrated" %}
         <p class="meta">

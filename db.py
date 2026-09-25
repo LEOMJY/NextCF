@@ -209,6 +209,14 @@ def _migrate(conn):
     # new column and its default and does not touch a single row, so this
     # returns instantly on a 680 MB file. NOT NULL is allowed here precisely
     # because there is a non-null DEFAULT for the existing rows to take.
+    # ADR 0021. Same reasoning as the column below it: metadata only, and
+    # NULL is the whole point -- it separates a visitor who chose 0.70 from one
+    # who never chose anything, which a float alone cannot do.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "target_chosen_at" not in columns:
+        with conn:
+            conn.execute("ALTER TABLE users ADD COLUMN target_chosen_at TEXT")
+
     columns = {row[1] for row in conn.execute("PRAGMA table_info(problems)")}
     if "in_problemset" not in columns:
         with conn:
@@ -311,7 +319,7 @@ def get_user(conn, handle):
     # the table later cannot silently change the shape of what callers get.
     return conn.execute(
         """
-        SELECT handle, cf_rating, target_prob, first_seen, last_synced
+        SELECT handle, cf_rating, target_prob, target_chosen_at, first_seen, last_synced
           FROM users
          WHERE handle = ?
         """,
@@ -598,8 +606,12 @@ def recommendation_pool(conn, handle):
                    LEFT JOIN problem_aliases a ON a.alias_id = s.problem_id
                   WHERE s.handle = ?
                     AND s.verdict = 'OK')
+           -- And the ones they have pushed away themselves (ADR 0021). A
+           -- problem somebody called too hard coming back on the next reload
+           -- would read as not having listened.
+           AND p.id NOT IN (SELECT problem_id FROM dismissals WHERE handle = ?)
         """,
-        (handle,),
+        (handle, handle),
     ).fetchall()
 
 
@@ -810,6 +822,51 @@ def finish_job(conn, job_id, error=None):
         conn.execute(
             "UPDATE jobs SET state = ?, finished_at = ?, error = ? WHERE id = ?",
             ("failed" if error else "done", utc_now(), error, job_id),
+        )
+
+
+def dismiss(conn, handle, problem_id, reason):
+    """Record that this visitor pushed a problem away, and why. ADR 0021.
+
+    One row per (person, problem): pressing the other button later replaces
+    the answer rather than keeping both, because only the latest one is what
+    they think. INSERT OR REPLACE is exactly that, said in SQL.
+    """
+    with conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO dismissals (handle, problem_id, reason, dismissed_at)
+                 VALUES (?, ?, ?, ?)
+            """,
+            (handle, problem_id, reason, utc_now()),
+        )
+
+
+def count_dismissals(conn, handle):
+    """How many problems this visitor has pushed away. What the page offers to
+    undo, and the number that makes the offer worth making."""
+    return conn.execute(
+        "SELECT count(*) FROM dismissals WHERE handle = ?", (handle,)
+    ).fetchone()[0]
+
+
+def clear_dismissals(conn, handle):
+    """Put them all back, and say how many that was."""
+    with conn:
+        cursor = conn.execute("DELETE FROM dismissals WHERE handle = ?", (handle,))
+    return cursor.rowcount
+
+
+def set_target(conn, handle, target):
+    """Move this visitor's difficulty target, and record that it was chosen.
+
+    The timestamp is not decoration: it is what tells a chosen 0.70 from the
+    0.70 this column was created with, which is the same number (ADR 0021).
+    """
+    with conn:
+        conn.execute(
+            "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",
+            (target, utc_now(), handle),
         )
 
 

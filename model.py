@@ -81,11 +81,40 @@ EVENTS = ("first_try", "eventually")
 #     questions a candidate has an even chance at. Every recommendation acted
 #     on is also data, and this is the setting where that data is worth most.
 #
-# users.target_prob still holds 0.70 and is NOT read: nobody can choose a
-# target until the control ADR 0008 plans exists, and changing the column's
-# default would mean rebuilding the users table, which the submissions table
-# refers to. When the control ships, reading the column comes back.
+# Where everybody starts. users.target_prob is read from the moment a visitor
+# presses one of the buttons in ADR 0021 and not before -- users.target_chosen_at
+# is what tells those two apart, because the column's own default is 0.70 and
+# always was.
 DEFAULT_TARGET = 0.50
+
+# One press of "too hard" or "too easy" moves the target this far along.
+#
+# Five points of probability is not a round number chosen for looking tidy: on
+# the fitted baseline (ADR 0012, a = 0.2550, b = 0.1215 per 100 rating points)
+# 50% sits 210 rating points ABOVE the visitor and 55% sits 45 above, so one
+# press is worth about 165 rating points. Small enough that two presses are not
+# absurd, large enough that the five problems visibly change -- which they must,
+# or the button looks broken.
+TARGET_STEP = 0.05
+
+# The ends of the ladder. 0.65 rather than 0.70 at the easy end is deliberate:
+# 0.70 is the value users.target_prob was born with, and leaving it unreachable
+# keeps "this number was never chosen by anybody" something the data can still
+# say on its own.
+TARGET_EASIEST = 0.65
+TARGET_HARDEST = 0.30
+
+
+def nudge_target(target, verdict):
+    """Move one step along the ladder, and stay on it.
+
+    "too_hard" asks for easier problems, which is a HIGHER probability of
+    solving them -- the number goes up. That inversion is the one thing in
+    this feature somebody will get backwards, which is why it is one function
+    with a name and a check of its own rather than a sign in a route.
+    """
+    step = TARGET_STEP if verdict == "too_hard" else -TARGET_STEP
+    return round(min(TARGET_EASIEST, max(TARGET_HARDEST, target + step)), 2)
 
 # Ratings are divided by this before they reach the curve, so that `b` reads
 # as "change in log-odds per 100 rating points" rather than per single point.

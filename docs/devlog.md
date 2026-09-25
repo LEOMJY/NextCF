@@ -4466,3 +4466,59 @@ two-second reload re-announces the whole page. The topic table is 39 rows with
 no action attached. And the difficulty is fixed at 50% with no way for a
 visitor to say "too hard" -- which is the next thing, and the one that needs
 a decision rather than a fix.
+
+---
+
+## 2026-09-24 — Two words under every problem
+
+The UX walk-through earlier today scored user control 2 out of 4 for one
+reason: a visitor who finds all five problems too hard has nowhere to say so.
+§7.1 has planned a target-probability control since v0.4, and
+`users.target_prob` has sat in the schema since v0.2 with a comment saying
+nobody can choose a target yet.
+
+It is not a slider. Under each recommendation there are two words, **too
+hard** and **too easy**, and pressing one says two things at once: that
+problem goes away, and the difficulty target moves one step.
+
+Both halves are needed, and the argument for each is the other one's failure
+mode. Only moving the target, and the problem somebody just pushed away can
+still sit inside the window at the new target and come back on the next page
+-- which is the single outcome that makes a button feel ignored. Only hiding
+the problem, and pressing it three times says "these are all too hard" while
+the site answers "fine, not those three".
+
+### The step is five points because that is what visible costs
+
+On the fitted baseline (ADR 0012, a = 0.2550, b = 0.1215 per 100 rating
+points) 50% sits 210 rating points above the visitor and 55% sits 45 above.
+So one press is worth about **165 rating points**: small enough that two
+presses are not absurd, large enough that the list visibly changes. Measured
+in the browser on tourist's page: "Aiming at 50%" with five problems at
+48-52% became "Aiming at 55%" with five different problems at 53-57%.
+
+The ladder stops at 0.65 rather than 0.70, which looks arbitrary and is not.
+0.70 is the value `users.target_prob` was created with, and leaving it
+unreachable keeps "nobody has ever chosen this number" something the data can
+still say. The other half of that is a new column, `target_chosen_at`: the
+column's default is 0.70, the product's default is 0.50, and a visitor could
+also choose 0.70 -- without a timestamp beside it those three are one number.
+
+### The inversion
+
+"Too hard" asks for easier problems, which is a HIGHER probability of solving
+them. That is the one thing in this feature somebody will get backwards, and
+it is invisible in code and obvious to every visitor exactly once. So it is a
+named function, `model.nudge_target`, with a check whose first line is the
+direction -- and the mutation that flips the sign is caught by it.
+
+### What this is, besides a button
+
+`dismissals` is the first record this project keeps of a visitor JUDGING a
+recommendation. §9's calibration needs exactly that kind of row, and so would
+the v1.5 pet system. What is still missing is the other half: the site does
+not record what it *offered*, so it cannot yet say "you solved two of the five
+we suggested" or answer the calibration question for problems it chose. That
+is the next piece, and it belongs beside this table.
+
+Fifteen checks, seven mutations, all caught. 263 pass, in 62 seconds.
