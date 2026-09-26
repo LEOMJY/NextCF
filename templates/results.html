@@ -129,6 +129,37 @@
           </p>
         {% endif %}
 
+        {# When the buttons can no longer change the list, say so before the
+           visitor finds out by pressing. Found on review: an 800-rated
+           visitor's third "too hard" gave back the same five with no word
+           why, because nothing on Codeforces is rated below 800. The wall
+           that explains the list comes first; the end of the ladder is
+           mentioned only when the list itself is fine -- see
+           web.target_limits. #}
+        {% if recs.reach == "easiest" %}
+          <p class="footnote">
+            Nothing left on Codeforces is as easy as {{ recs.target }}% for you:
+            these are the easiest problems there are, so &ldquo;too hard&rdquo;
+            can hide one but cannot find anything easier.
+          </p>
+        {% elif recs.reach == "hardest" %}
+          <p class="footnote">
+            Nothing left on Codeforces is as hard as {{ recs.target }}% for you:
+            these are the hardest problems there are, so &ldquo;too easy&rdquo;
+            can hide one but cannot find anything harder.
+          </p>
+        {% elif recs.at_end == "easiest" %}
+          <p class="footnote">
+            {{ recs.target }}% is as easy as the target goes. &ldquo;Too
+            hard&rdquo; still hides a problem, and no longer moves the target.
+          </p>
+        {% elif recs.at_end == "hardest" %}
+          <p class="footnote">
+            {{ recs.target }}% is as hard as the target goes. &ldquo;Too
+            easy&rdquo; still hides a problem, and no longer moves the target.
+          </p>
+        {% endif %}
+
         <table class="rec-table">
           <thead>
             <tr>
@@ -212,6 +243,15 @@
             Put back the {{ dismissed }} problem{{ 's' if dismissed > 1 }} I hid
           </button>
         </form>
+        {# At the cap each new press pushes the oldest hidden problem back
+           into the list (db.DISMISSALS_KEPT). Said here, where the count is,
+           so a problem reappearing is not a surprise. #}
+        {% if dismissed >= dismissals_kept %}
+          <p class="footnote">
+            Only the latest {{ dismissals_kept }} stay hidden: hiding another
+            brings back the one you hid longest ago.
+          </p>
+        {% endif %}
       {% endif %}
     </section>
 

@@ -325,7 +325,8 @@ dismissals                                              nextcf.db only
   reason         text     — "too_hard" or "too_easy"; nothing else
   dismissed_at   text     — ISO-8601 UTC
                             one row per (handle, problem): the later
-                            answer replaces the earlier one
+                            answer replaces the earlier one; at most 50
+                            per handle, the oldest pushed out (ADR 0021)
 
 visits                                                  nextcf.db only
   id             integer

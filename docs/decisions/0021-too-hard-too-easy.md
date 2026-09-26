@@ -114,3 +114,47 @@ without reading anything.
   five it showed, it cannot say "you solved two of the five" and cannot answer
   §9's calibration question for problems it chose. That is the next piece, and
   the natural place for it is beside this table.
+
+## Amendment — 2026-09-26: fifty kept, and the walls said aloud
+
+Two findings from the review of 2026-09-24.
+
+**The table had no limit.** "Anybody can change anybody's target" is
+accepted above, because solving it means accounts. What was not accepted,
+because nobody had noticed it, was the size. A handle could hold one
+dismissal for every problem in the problemset, about 11,000 rows, and
+anybody could press for any handle. A script that synced handles and pressed
+for each could fill the disk.
+
+**Each handle now keeps its newest 50.** A new dismissal past that pushes
+out the oldest one, in the same transaction, so the table never holds more
+than 50 rows for anybody. Pressing a problem again counts as its newest
+dismissal. The author chose this over the alternative, which was to refuse
+the press at the cap and ask the visitor to put some back. Pushing the
+oldest out never turns a visitor away. Its cost is that a problem hidden 50
+presses ago can come back, and the page says so once a visitor reaches the
+cap. 50 is far past what a person presses, since the ladder has only eight
+steps.
+
+That choice also answers part of an open question. "Is a dismissal
+permanent?" was waiting for the author, with three candidates: 90 days, until
+the target moves past the problem, or permanent with a more visible undo.
+The answer is now **until 50 newer ones push it out**. That is a limit on
+count, not on time. Whether time should also end a dismissal is still open.
+
+**The floor was silent.** ADR 0012 recorded that nothing is rated below 800,
+so a newcomer's easiest problems still sit below a high target. Nothing on
+the page said so. An 800-rated visitor pressing "too hard" a third time got
+the same five problems back, which looks like a broken button. The page now
+names whichever wall it has hit:
+
+- *no problem left reaches the target*: every pick misses it by more than
+  the model's band, below it (the floor) or above it (a strong visitor out
+  of hard problems). "Too hard" can hide one but cannot find anything
+  easier.
+- *the target is at the end of the ladder*, 65% or 30%. The press still
+  hides the problem and no longer moves the target.
+
+The first takes priority, because it is the one that explains why the list
+did not change. "Misses" means outside `model.BAND`, so a list the model
+would call on target is never called a wall.

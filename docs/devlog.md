@@ -4689,3 +4689,50 @@ that stops early, was dropped on 09-13. All of it now describes what exists.
 Next is v0.8: the design pass, and every unhandled state made deliberate.
 Before launch, separately: the paid disk, then the author-exclusion settings
 on Render, then checking that the database file really is on the disk.
+
+---
+
+## 2026-09-26 (night) — Fifty kept, and a floor that finally says so
+
+The last two review findings on the too hard / too easy buttons (ADR 0021,
+amended).
+
+### Anybody could hide everything for anybody
+
+With no accounts, that is by design (§5). What was not designed was the
+size. A handle could hold one dismissal per problem, about 11,000, and a
+script could press for as many handles as it cared to sync. Two answers were
+on the table: refuse the press at a cap and ask the visitor to put some back,
+or let the new one push out the oldest. The author chose pushing out, at 50
+per handle. It never turns a visitor away, and a problem hidden 50 presses
+ago may come back, which the page says once a visitor reaches the cap.
+
+That choice also answered half of an open question, whether a dismissal
+lasts forever: not past 50 newer ones. Whether it should also expire with
+time is still open.
+
+The delete runs in the same transaction as the insert, ordered by time and
+then by rowid. The rowid part is not decoration. A mutation that dropped it
+was caught, because the check presses 51 times inside one second and time
+alone cannot tell those presses apart.
+
+### The floor
+
+An 800-rated visitor asking for easier problems hits the bottom of
+Codeforces: nothing is rated below 800. ADR 0012 wrote that down on 09-17,
+but the page never said it. The third "too hard" returned the same five
+problems, which reads as a broken button.
+
+The page now names the wall it has hit. Either no problem left reaches the
+target (the floor, or its mirror image for a very strong visitor), or the
+target is at the end of its ladder. The first is shown first, because it is
+the one that explains an unchanged list.
+
+One mutation survived the first round of checks. Measuring "misses the
+target" without the model's band would call five problems a point under
+50% a floor, and none of the real pages in the checks ever landed all on one
+side. A check now asks `target_limits` about that case directly, and the
+mutation is caught.
+
+8 new checks; nine mutations in fresh copies, all caught in the end. 300
+pass, in 62 seconds.

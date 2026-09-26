@@ -595,6 +595,12 @@ def recommendation_pool(conn, handle):
     should be suggested SOONER or LATER is a question for a model that knows
     about time, which is v2.0 (spec section 11, knowledge tracing).
 
+    Problems the visitor pushed away with "too hard" or "too easy" are out,
+    which is different: that is the visitor saying "not this one", not the
+    history saying it was hard (ADR 0021). They stay out for as long as the
+    dismissal is kept -- until fifty newer ones push it out
+    (DISMISSALS_KEPT), or the visitor puts them back.
+
     Only rated problems, because the baseline's whole input is the rating; a
     problem without one cannot be given a probability, and showing it with a
     made-up one would be worse than leaving it out.
@@ -852,7 +858,18 @@ def finish_job(conn, job_id, error=None, failure=None):
         )
 
 
-def record_feedback(conn, handle, problem_id, reason, target):
+# How many dismissals one handle keeps. Past this, each new one pushes out the
+# oldest (ADR 0021's amendment of 2026-09-26). The table used to have no
+# limit but the size of the problemset -- about 11,000 rows a handle, and
+# anybody can press for any handle -- so a script could fill the disk one
+# synced handle at a time. Fifty is far past what a person presses: the
+# difficulty ladder has only eight steps. And a problem pushed out this way
+# was hidden fifty presses ago, which is the answer the author gave to "should
+# a dismissal last for ever": not past fifty newer ones.
+DISMISSALS_KEPT = 50
+
+
+def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KEPT):
     """"Too hard" or "too easy": hide the problem AND move the target, together.
 
     One transaction for both. Until 2026-09-26 they were two functions, each
@@ -866,6 +883,10 @@ def record_feedback(conn, handle, problem_id, reason, target):
     both, since only the latest one is what they think. The timestamp on the
     target is what tells a chosen 0.70 from the column's default 0.70 (ADR
     0021).
+
+    Then only the newest `keep` dismissals for this handle survive, in the
+    same transaction, so the table can never hold more than `keep` rows for
+    anybody -- not even for a moment another connection could see.
     """
     now = utc_now()
     with conn:
@@ -875,6 +896,21 @@ def record_feedback(conn, handle, problem_id, reason, target):
                  VALUES (?, ?, ?, ?)
             """,
             (handle, problem_id, reason, now),
+        )
+        # Newest by time, then by rowid for presses in the same second.
+        # INSERT OR REPLACE deletes and re-inserts, so pressing a problem
+        # again gives it a new rowid and makes it the newest -- which is right:
+        # it is the latest thing the visitor said.
+        conn.execute(
+            """
+            DELETE FROM dismissals
+             WHERE handle = ?
+               AND rowid NOT IN (SELECT rowid FROM dismissals
+                                  WHERE handle = ?
+                                  ORDER BY dismissed_at DESC, rowid DESC
+                                  LIMIT ?)
+            """,
+            (handle, handle, keep),
         )
         conn.execute(
             "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",

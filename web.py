@@ -642,6 +642,7 @@ def results(handle):
         # How many problems this visitor has pushed away, so the page can
         # offer to put them back (ADR 0021).
         dismissed=db.count_dismissals(conn, handle),
+        dismissals_kept=db.DISMISSALS_KEPT,
         # Everything the live line needs, or None when nothing is running.
         # The line's wording lives in templates/_sync_line.html, which the
         # status endpoint below renders too, so the page and the updates it
@@ -973,6 +974,11 @@ def recommendation_view(conn, user):
         "shown": user["cf_rating"],
         "computed": rating,
         "target": round(target * 100),
+        # Whether the target can be reached at all, and whether the ladder has
+        # run out -- see target_limits. Found on review: an 800-rated visitor
+        # pressing "too hard" a third time got the same five problems and no
+        # word why.
+        **target_limits(picks, target),
         # The rating the curve puts at exactly the target, for the sentence
         # that explains the list. Clamped to the problemset's real range:
         # an 1100-rated user at 70% comes out at 613, and there are no
@@ -1004,6 +1010,42 @@ def recommendation_view(conn, user):
             for pick in picks
         ],
     }
+
+
+def target_limits(picks, target):
+    """Say when "too hard" or "too easy" can no longer change the list.
+
+    Two different walls, and the page names whichever one is hit:
+
+        reach   The target is fine but no problem left gets near it. The
+                problemset has nothing rated below 800 (ADR 0012's floor), so
+                for a newcomer even the easiest problems left sit below a
+                high target; at the other end a very strong visitor runs out
+                of hard ones. The five shown are then the nearest there are,
+                and pressing again hides one without finding anything nearer.
+                "easiest" or "hardest", from which side every pick misses.
+        at_end  The target itself is at the end of the ladder
+                (model.TARGET_EASIEST / TARGET_HARDEST), so the next press in
+                that direction moves nothing. "easiest" or "hardest".
+
+    A pick "misses" when it is further from the target than model.BAND, the
+    width inside which the model cannot tell problems apart anyway -- so a
+    list the model would call on target is never called off it.
+    """
+    probabilities = [pick["probability"] for pick in picks]
+    reach = None
+    if all(p < target - model.BAND for p in probabilities):
+        reach = "easiest"
+    elif all(p > target + model.BAND for p in probabilities):
+        reach = "hardest"
+
+    at_end = None
+    if target >= model.TARGET_EASIEST:
+        at_end = "easiest"
+    elif target <= model.TARGET_HARDEST:
+        at_end = "hardest"
+
+    return {"reach": reach, "at_end": at_end}
 
 
 def topic_rows(rows):

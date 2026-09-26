@@ -289,7 +289,10 @@ def hide_everything():
         ids = [row[0] for row in conn.execute(
             "SELECT id FROM problems WHERE in_problemset = 1")]
         for problem_id in ids:
-            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55)
+            # keep= past the cap: a real pool holds 11,000 problems and the
+            # cap is 50, so only a nearly exhausted pool can be emptied by
+            # hiding -- this builds that pool out of sixty.
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55, keep=len(ids))
     finally:
         conn.close()
     return len(ids)
@@ -345,6 +348,125 @@ def a_problem_that_does_not_exist_is_refused():
     response = press("9999ZZ", "too_hard")
     assert response.status_code == 404, response.status_code
     assert the_user()["target_chosen_at"] is None, "a junk problem moved the target"
+
+
+# ------------------------------------------------------------------ the cap
+def all_problem_ids():
+    conn = db.connect()
+    try:
+        return [row[0] for row in conn.execute(
+            "SELECT id FROM problems WHERE in_problemset = 1 ORDER BY id")]
+    finally:
+        conn.close()
+
+
+def hidden_ids():
+    conn = db.connect()
+    try:
+        return {row[0] for row in conn.execute(
+            "SELECT problem_id FROM dismissals WHERE handle = ?", (HANDLE,))}
+    finally:
+        conn.close()
+
+
+def a_handle_keeps_only_the_latest_fifty():
+    """Found on review: no limit but the size of the problemset, for any
+    handle, from anybody. Past the cap the oldest goes -- the author's
+    choice over refusing the press (ADR 0021, amended)."""
+    a_visitor()
+    ids = all_problem_ids()[:db.DISMISSALS_KEPT + 1]
+    conn = db.connect()
+    try:
+        for problem_id in ids:
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55)
+    finally:
+        conn.close()
+    hidden = hidden_ids()
+    assert len(hidden) == db.DISMISSALS_KEPT, f"{len(hidden)} kept"
+    assert ids[0] not in hidden, "the oldest was not the one pushed out"
+    assert ids[-1] in hidden, "the newest was not kept"
+
+
+def pressing_an_old_one_again_makes_it_the_newest():
+    """It is the latest thing the visitor said about it."""
+    a_visitor()
+    ids = all_problem_ids()[:db.DISMISSALS_KEPT + 1]
+    conn = db.connect()
+    try:
+        for problem_id in ids[:db.DISMISSALS_KEPT]:
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55)
+        db.record_feedback(conn, HANDLE, ids[0], "too_easy", 0.50)        # the oldest, again
+        db.record_feedback(conn, HANDLE, ids[-1], "too_hard", 0.55)       # one past the cap
+    finally:
+        conn.close()
+    hidden = hidden_ids()
+    assert ids[0] in hidden, "re-pressing did not make it the newest"
+    assert ids[1] not in hidden, "the next oldest should have gone instead"
+
+
+def the_page_says_when_the_oldest_will_come_back():
+    a_visitor()
+    conn = db.connect()
+    try:
+        for problem_id in all_problem_ids()[:db.DISMISSALS_KEPT - 1]:
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55)
+        below = client.get(f"/results/{HANDLE}").get_data(as_text=True)
+        db.record_feedback(conn, HANDLE, all_problem_ids()[db.DISMISSALS_KEPT], "too_hard", 0.55)
+        at = client.get(f"/results/{HANDLE}").get_data(as_text=True)
+    finally:
+        conn.close()
+    assert "stay hidden" not in below, "warned before the cap"
+    assert f"Only the latest {db.DISMISSALS_KEPT} stay hidden" in at, "no word at the cap"
+
+
+# ------------------------------------------------------- the walls, said aloud
+def at(rating, target):
+    """The results page for a visitor at `rating` whose target is `target`."""
+    a_visitor(rating=rating)
+    conn = db.connect()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",
+                (target, db.utc_now(), HANDLE),
+            )
+    finally:
+        conn.close()
+    return client.get(f"/results/{HANDLE}").get_data(as_text=True)
+
+
+def the_floor_is_said():
+    """Found on review: at the bottom of the problemset, "too hard" gave back
+    the same five with no word why. Nothing is rated below 800."""
+    html = at(400, model.TARGET_EASIEST)
+    assert "Nothing left on Codeforces is as easy as" in html, "the floor went unsaid"
+
+
+def the_ceiling_is_said():
+    html = at(3500, model.TARGET_HARDEST)
+    assert "Nothing left on Codeforces is as hard as" in html, "the ceiling went unsaid"
+
+
+def the_end_of_the_ladder_is_said_when_the_list_is_fine():
+    html = at(1500, model.TARGET_EASIEST)
+    assert "Nothing left" not in html, "called a reachable target unreachable"
+    assert "is as easy as the target goes" in html, "the end of the ladder went unsaid"
+
+
+def a_near_miss_is_not_a_wall():
+    """Five problems all a point under the target are on target as far as the
+    model can tell (model.BAND), and the page must not call that a floor.
+    Added after a mutation that dropped the band survived every page-level
+    check: the real pages here never happen to land all on one side."""
+    near = [{"probability": model.DEFAULT_TARGET - model.BAND / 2} for _ in range(5)]
+    assert web.target_limits(near, model.DEFAULT_TARGET)["reach"] is None, "a near miss called a floor"
+    far = [{"probability": model.DEFAULT_TARGET - 2 * model.BAND} for _ in range(5)]
+    assert web.target_limits(far, model.DEFAULT_TARGET)["reach"] == "easiest", "a real floor missed"
+
+
+def an_ordinary_page_says_neither():
+    html = at(1500, model.DEFAULT_TARGET)
+    assert "Nothing left" not in html and "as the target goes" not in html, "a wall where there is none"
 
 
 def with_a_failing_write(trigger_sql, fn):
@@ -434,10 +556,23 @@ check("the undo survives a missing problemset", the_undo_survives_a_missing_prob
 print("\nwhat cannot be said")
 check("a verdict that is not one of the two", a_verdict_that_is_not_one_of_the_two_is_refused)
 check("a problem that does not exist", a_problem_that_does_not_exist_is_refused)
-check("half a verdict is never stored", half_a_verdict_is_never_stored)
-check("a failure at the write is not blamed on the problem", a_failure_at_the_write_is_not_blamed_on_the_problem)
 check("only a POST can say it", only_a_post_can_say_it)
 check("a junk handle is refused", a_junk_handle_is_refused)
+print("\nthe cap")
+check("a handle keeps only the latest fifty", a_handle_keeps_only_the_latest_fifty)
+check("pressing an old one again makes it the newest", pressing_an_old_one_again_makes_it_the_newest)
+check("the page says when the oldest will come back", the_page_says_when_the_oldest_will_come_back)
+
+print("\nthe walls, said aloud")
+check("the floor is said", the_floor_is_said)
+check("the ceiling is said", the_ceiling_is_said)
+check("the end of the ladder is said when the list is fine", the_end_of_the_ladder_is_said_when_the_list_is_fine)
+check("a near miss is not a wall", a_near_miss_is_not_a_wall)
+check("an ordinary page says neither", an_ordinary_page_says_neither)
+
+print("\nwhen a write fails")
+check("half a verdict is never stored", half_a_verdict_is_never_stored)
+check("a failure at the write is not blamed on the problem", a_failure_at_the_write_is_not_blamed_on_the_problem)
 
 print(f"\n{passed} passed, {failed} failed")
 shutil.rmtree(SCRATCH, ignore_errors=True)
