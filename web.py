@@ -276,11 +276,15 @@ def record_visit(response):
     # would make two visitors collide, which is a wrong count.
     visitor_id = sent if known else secrets.token_urlsafe(16)
 
-    # view_args holds the variable parts of the URL, so this is the handle on
-    # /results/<handle> and nothing at all on the pages without one. It is the
-    # spelling that was typed; the column is COLLATE NOCASE, so counting
-    # distinct handles does not care.
-    handle = (request.view_args or {}).get("handle")
+    # The handle whose page was actually shown, as the view declared it with
+    # shown_handle() -- NOT the one in the URL. Until 2026-09-26 this read
+    # request.view_args, and a mistyped handle answered from a remembered
+    # failure (a 200, because that request did work) was written down as
+    # somebody using the site under a handle that does not exist. Only the
+    # view knows whether the page it built was that handle's page, so only
+    # the view gets to say so. Every other page records the visit with no
+    # handle: somebody came, and looked nothing up.
+    handle = g.get("shown_handle")
 
     try:
         db.record_visit(get_db(), visitor_id, handle, request.path)
@@ -310,6 +314,18 @@ def record_visit(response):
         )
 
     return response
+
+
+def shown_handle(handle):
+    """Tell record_visit that this response is this handle's own page.
+
+    Called by a view just before it renders a page built from a handle's
+    stored history, with the spelling Codeforces uses. A view that renders
+    anything else -- an error, a failure it remembers -- does not call it, and
+    the visit is recorded without a handle. Opt-in rather than read from the
+    URL, because a URL says what was asked for, not what was found.
+    """
+    g.shown_handle = handle
 
 
 def queue_view(conn, job_id):
@@ -452,6 +468,10 @@ def results(handle):
         job_id = sync.start_sync(handle)
 
     rows = db.get_submissions(conn, handle, limit=RESULTS_LIMIT)
+
+    # This is the one page that counts as somebody using the site under a
+    # handle (section 9) -- a stored history, found and shown.
+    shown_handle(user["handle"])
 
     return render_template(
         "results.html",

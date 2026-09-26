@@ -4522,3 +4522,50 @@ we suggested" or answer the calibration question for problems it chose. That
 is the next piece, and it belongs beside this table.
 
 Fifteen checks, seven mutations, all caught. 263 pass, in 62 seconds.
+
+---
+
+## 2026-09-26 — Two bugs from this week, both about what a page is allowed to claim
+
+A review of the week's code found seven things. Two of them were real
+defects we had written ourselves in the last three days, and they went first,
+ahead of logging and error handling.
+
+### A typo was counted as a person
+
+`record_visit` decided a visit was "somebody using the site under a handle"
+from two facts: the endpoint was `results`, and the answer was 200. That was
+true when it was written. Two days later the remembered-failure page arrived
+-- a handle refused in the last ten minutes is answered from the failed job
+at once -- and it answers 200 too, because that request did work. Reload a
+mistyped handle and `visits` gained a row naming a handle that does not
+exist, which §9's handle counts would have counted.
+
+The obvious fix is to give that page an error status. It would have worked,
+and it would have left the real mistake in place: the visit record was
+reading what was *asked for* (the URL) as if it were what was *found*. Any
+future page that renders under `/results/<handle>` without being that
+handle's page would make the same wrong claim. So the rule moved to the one
+place that knows: the results view calls `shown_handle()` when it has
+rendered a stored history, with Codeforces' spelling of the handle, and
+everything else is a visit with no handle. The typo is still a visit --
+somebody came -- it just names nobody.
+
+What status the failure page *should* answer with is a real question, and it
+belongs to the error-handling work next rather than to this fix. This fix
+does not depend on the answer.
+
+### The undo disappeared exactly when it was needed
+
+"Put back the N problems I hid" sat inside the template branch that draws the
+five problems. Dismissals are stored and apply in every state, so the moment
+a visitor hid enough to empty the pool -- or the problemset was still loading
+after a restart -- the list and the way back vanished together. The empty
+state also said "You have solved every rated problem", which was false for
+them.
+
+The button now sits after all the branches, and an empty list with hidden
+problems gets its own sentence pointing at it.
+
+Five new checks, written first and seen to fail; seven mutations, each in a
+fresh copy of the repository, all caught. 268 pass, in 66 seconds.

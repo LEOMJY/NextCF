@@ -167,19 +167,6 @@
           </tbody>
         </table>
 
-        {# The undo for those buttons. Shown only when there is something to
-           undo, and it says how many -- "put them back" with no number is a
-           question the visitor cannot answer. It leaves the difficulty target
-           alone: hiding a problem and moving the target are two things, and
-           the way back from the target is the other button. #}
-        {% if dismissed %}
-          <form class="restore" method="post" action="{{ url_for('restore', handle=handle) }}">
-            <button type="submit">
-              Put back the {{ dismissed }} problem{{ 's' if dismissed > 1 }} I hid
-            </button>
-          </form>
-        {% endif %}
-
       {% elif recs.state == "unrated" %}
         <p class="meta">
           Codeforces has no rating for {{ handle }} yet, and the rating-only
@@ -192,11 +179,39 @@
           The problem list is still loading. Reload in a few seconds.
         </p>
 
+      {% elif dismissed %}
+        {# Empty, and the visitor's own hiding is at least part of why. The
+           sentence below would be false for them, and the button under this
+           one is the way out. #}
+        <p class="meta">
+          Every rated problem left for you is one you have hidden. Put some
+          back to see recommendations again.
+        </p>
+
       {% else %}
         <p class="meta">
           You have solved every rated problem on Codeforces. There is nothing
           left to recommend.
         </p>
+      {% endif %}
+
+      {# The undo for the too hard / too easy buttons. Shown only when there
+         is something to undo, and it says how many -- "put them back" with no
+         number is a question the visitor cannot answer. It leaves the
+         difficulty target alone: hiding a problem and moving the target are
+         two things, and the way back from the target is the other button.
+
+         Outside the branches above, not inside the one that draws the five.
+         Dismissals are stored and stay in force whatever state the list is
+         in -- loading, or emptied by the hiding itself -- so the way back has
+         to be there in every state too. Inside the "ok" branch it vanished at
+         exactly the moment a visitor had hidden too much. #}
+      {% if dismissed %}
+        <form class="restore" method="post" action="{{ url_for('restore', handle=handle) }}">
+          <button type="submit">
+            Put back the {{ dismissed }} problem{{ 's' if dismissed > 1 }} I hid
+          </button>
+        </form>
       {% endif %}
     </section>
 

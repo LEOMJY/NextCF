@@ -225,6 +225,46 @@ def the_form_post_is_not_counted():
     assert rows() == [], f"{len(rows())} rows for a POST"
 
 
+def a_remembered_failure_does_not_claim_the_handle():
+    """A mistyped handle is not somebody using the site under that handle.
+
+    Since 2026-09-24 a handle refused in the last ten minutes is answered from
+    the failed job at once, with a 200 -- the request worked, the sync did
+    not. Found on review: record_visit saw "results, 200" and wrote a row
+    naming a handle that does not exist, which section 9's handle counts
+    would then count as a person. The browser still came, so the visit
+    stays; the handle it claims does not.
+    """
+    clear()
+    conn = db.connect()
+    try:
+        job_id = db.create_job(conn, "sync", "no_such_handle_xyz")
+        db.finish_job(conn, job_id, error="Codeforces rejected the request: handle: User not found")
+    finally:
+        conn.close()
+
+    client = fresh_client()
+    response = client.get("/results/no_such_handle_xyz")
+    assert response.status_code == 200, response.status_code
+    assert b"not found" in response.data, "this is not the remembered-failure page"
+
+    written = rows()
+    assert len(written) == 1, f"{len(written)} rows"
+    assert written[0]["handle"] is None, f"a failed lookup claimed {written[0]['handle']!r}"
+    assert counted()["handles"] == 0, counted()
+
+
+def the_handle_recorded_is_the_one_codeforces_spells():
+    """The page shows Codeforces' spelling; the visit records the same one,
+    so a row always names a handle that really exists."""
+    clear()
+    synced("Spelled_This_Way")
+    fresh_client().get("/results/spelled_this_way")
+    written = rows()
+    assert len(written) == 1, f"{len(written)} rows"
+    assert written[0]["handle"] == "Spelled_This_Way", written[0]["handle"]
+
+
 def an_error_page_is_not_counted():
     clear()
     client = fresh_client()
@@ -452,6 +492,8 @@ check("the polling progress page is not counted", the_progress_page_is_not_count
 check("a redirect is not counted", a_redirect_is_not_counted)
 check("the form POST is not counted", the_form_post_is_not_counted)
 check("a 404 is not counted", an_error_page_is_not_counted)
+check("a remembered failure does not claim the handle", a_remembered_failure_does_not_claim_the_handle)
+check("the handle recorded is the one Codeforces spells", the_handle_recorded_is_the_one_codeforces_spells)
 
 print("\nthe cookie")
 check("HttpOnly, SameSite=Lax, 180 days, not Secure over http", the_cookie_is_locked_down)

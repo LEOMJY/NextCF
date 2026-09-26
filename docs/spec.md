@@ -324,8 +324,9 @@ visits                                                  nextcf.db only
   id             integer
   visitor_id     text     — a random id from a first-party cookie; NULL if
                             the browser kept none
-  handle         text     — the handle looked up, or NULL for a visit that
-                            looked nothing up
+  handle         text     — the handle whose stored page was shown, in
+                            Codeforces' spelling; NULL for every other page,
+                            including a lookup that failed
   path           text     — which page was opened
   visited_at     text     — ISO-8601 UTC
 

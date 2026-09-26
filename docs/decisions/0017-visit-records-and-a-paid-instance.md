@@ -133,6 +133,14 @@ the definition of done.
   Nothing §9 counts is lost, but the visits table cannot be trusted for
   anything before that day, and the first thing to verify after paying is that
   the file really is on the disk.
+- **"The handle that was looked up" means the handle whose page was shown.**
+  *Corrected 2026-09-26.* The first version took the handle from the URL of
+  any results page that answered 200, and since 2026-09-24 a mistyped handle
+  refused in the last ten minutes is answered with a 200 -- so a handle that
+  does not exist was written down as somebody using the site. A URL says what
+  was asked for, not what was found. The results view now declares the handle
+  when it renders a stored history, in Codeforces' spelling; every other page,
+  a remembered failure included, is a visit with no handle.
 - **The prices above are dated.** Render's free-Postgres expiry and Supabase's
   pause are the kind of term that changes; if this is reopened they get checked
   again rather than quoted from here.

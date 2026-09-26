@@ -281,6 +281,57 @@ def putting_them_back_leaves_the_target_alone():
     assert the_user()["target_prob"] == moved, "undoing a dismissal moved the target"
 
 
+def hide_everything():
+    """Every problem in the pool dismissed, which is what leaves the page
+    with nothing to recommend -- the state the undo matters most in."""
+    conn = db.connect()
+    try:
+        ids = [row[0] for row in conn.execute(
+            "SELECT id FROM problems WHERE in_problemset = 1")]
+        for problem_id in ids:
+            db.dismiss(conn, HANDLE, problem_id, "too_hard")
+    finally:
+        conn.close()
+    return len(ids)
+
+
+def the_undo_survives_an_empty_list():
+    """Found on review: the undo sat inside the branch that draws five
+    problems, so the moment dismissals emptied the pool the button went with
+    them -- and the dismissals, which are stored, stayed in force. The one
+    visitor who most needs the way back was the one who could not see it."""
+    a_visitor()
+    hidden = hide_everything()
+    html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
+    assert "rec-table" not in html, "the pool was not emptied; this checks nothing"
+    assert f"Put back the {hidden} problems I hid" in html, "no way back from an empty list"
+
+
+def an_empty_list_caused_by_hiding_does_not_claim_everything_is_solved():
+    """'You have solved every rated problem' is false when they were hidden."""
+    a_visitor()
+    hide_everything()
+    html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
+    assert "You have solved every rated problem" not in html, "blamed the visitor's solving"
+
+
+def the_undo_survives_a_missing_problemset():
+    """The few seconds after a restart, or a failed fetch: no list, and the
+    visitor's dismissals are still theirs to undo."""
+    a_visitor()
+    press(shown_problems()[0], "too_hard")
+    conn = db.connect()
+    try:
+        with conn:
+            conn.execute("UPDATE problems SET in_problemset = 0")
+        html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
+    finally:
+        conn.close()
+        a_problemset()
+    assert "still loading" in html, "the problemset was not missing; this checks nothing"
+    assert "Put back the 1 problem I hid" in html, "no way back while the list is loading"
+
+
 # ------------------------------------------------------- what cannot be said
 def a_verdict_that_is_not_one_of_the_two_is_refused():
     a_visitor()
@@ -323,6 +374,10 @@ check("the five change when the target does", the_five_change_when_the_target_do
 print("\nundoing")
 check("the page offers to put them back", the_page_offers_to_put_them_back)
 check("putting them back leaves the target alone", putting_them_back_leaves_the_target_alone)
+check("the undo survives an empty list", the_undo_survives_an_empty_list)
+check("an empty list from hiding is not 'solved everything'",
+      an_empty_list_caused_by_hiding_does_not_claim_everything_is_solved)
+check("the undo survives a missing problemset", the_undo_survives_a_missing_problemset)
 
 print("\nwhat cannot be said")
 check("a verdict that is not one of the two", a_verdict_that_is_not_one_of_the_two_is_refused)
