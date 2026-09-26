@@ -11,15 +11,18 @@ you something, and chosen from a model that is measured, not guessed.
 
 ---
 
-## Status: v0.6 done — the model works, and `/how` says how well; v0.7 next
+## Status: v0.7 done — ready for strangers, except the paid disk; v0.8 next
 
 | | |
 |---|---|
-| Works now | Enter a handle; the history is fetched in the background, then shown with a breakdown by topic and five recommended problems |
+| Works now | Enter a handle; the history is fetched in the background, then shown with a breakdown by topic and five recommended problems. "Too hard" or "too easy" on any of them hides it and moves the difficulty for you |
+| Built to be used at once by many | Syncs run one at a time, and a waiting visitor sees their place in the queue and a countdown; a returning visitor sees their page at once while it refreshes behind them ([ADR 0018](docs/decisions/0018-one-sync-at-a-time.md)) |
+| Built to be left running | A background thread keeps the problem list current and refreshes recent visitors when nobody is waiting ([ADR 0020](docs/decisions/0020-the-upkeep-thread.md)); every failure answers with a status code for its cause, on the site's own page, and is logged without the handle it was about ([ADR 0022](docs/decisions/0022-errors-and-logs.md)) |
 | The model | A logistic model of a first submission being accepted, learned from 4,000 other users: the problem's own record, its topics, the user's rating, their recent practice — [ADR 0014](docs/decisions/0014-topic-model.md), [ADR 0015](docs/decisions/0015-practice-history-and-computed-rating.md) |
 | Measured | Log loss on the first attempts of 2026, which no model was fitted on: **0.5934** against a rating-only baseline's 0.6535, lower in every rating band ([spec §9](docs/spec.md)) |
 | Collected (v0.3) | A dataset of 4000 users stratified by rating: 3.9 million submissions and every rating change, refreshed monthly |
-| Next (v0.7) | Nightly re-sync, logging, error handling and tests; `/privacy`; counting visits on storage that survives restarts |
+| Counted | Visits, for the "50 people used it, 20 came back" test in spec §9 — a handle and a random cookie id, nothing else; what is kept is on [`/privacy`](https://nextcf.onrender.com/privacy) ([ADR 0017](docs/decisions/0017-visit-records-and-a-paid-instance.md)) |
+| Next (v0.8) | The design pass, and every unhandled state made deliberate — see spec §7.1 |
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a
@@ -102,7 +105,9 @@ web.py               routes and pages
 templates/           the HTML, rendered by Jinja
 api_client.py        Codeforces API access
 db.py                the database: opening it, creating it, and every query
-sync.py              fetches one user's history in the background
+sync.py              fetches one user's history in the background, one at a time
+scheduler.py         keeps the problem list current, and refreshes recent visitors
+logs.py              how the running site writes its log — see docs/decisions/0022-errors-and-logs.md
 collect.py           draws, collects and refreshes the 4000-user dataset — see docs/decisions/0009-dataset-sample.md
 model.py             the rating-only baseline and the topic model; fits a visitor into it
 evaluate.py          the evaluation harness behind spec §9's number — see docs/decisions/0013-evaluation-protocol.md
@@ -119,9 +124,6 @@ docs/spec.md         what is being built, and what is deliberately excluded
 docs/devlog.md       dated entries: what was tried, what broke, what was learned
 docs/decisions/      one short file per significant technical decision (ADRs)
 ```
-
-Still to come: `scheduler.py`, the nightly re-sync — see
-[spec §4](docs/spec.md).
 
 ### Collecting the dataset
 
@@ -158,7 +160,7 @@ then about forty minutes of fitting:
 
 ## Tests
 
-181 checks in 14 scripts. Each one tests a claim by making the failure happen:
+About 290 checks in 19 scripts. Each one tests a claim by making the failure happen:
 a constraint is proved by violating it, a data leak by changing a later result
 and demanding that the earlier prediction does not move by a single bit.
 

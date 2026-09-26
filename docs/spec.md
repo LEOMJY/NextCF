@@ -851,7 +851,7 @@ figure is 45%, the model is overconfident and the probabilities are wrong.
 | v0.4 | Per-topic solve counts; rating-only baseline recommender; topic-breakdown chart. **Done 09-17**, except React taking the chart over — moved behind the model | late Sep |
 | v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
 | v0.6 | First real model, scored against the baseline; `/how`. **Done 09-19**: model 09-18, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh`; `/how` 09-19 | late Oct |
-| v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts | early Nov |
+| v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts. **Done 09-26**: visits and `/privacy` (ADR 0017), the queue (ADR 0018), the checks in the repository (ADR 0019), the upkeep thread (ADR 0020), too hard / too easy (ADR 0021), errors and logs (ADR 0022). Two things carried, each by decision: the paid disk is bought before the first stranger arrives, not before then (ADR 0017), and component tests arrive with the first React component rather than before it (ADR 0011, amended) | early Nov |
 | v0.8 | Design polish pass and unhandled states — see §7.1 | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
@@ -1074,8 +1074,9 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   sources at build time and fails when the working tree disagrees, which is what
   makes committing generated code safe. Building on the host was rejected mainly
   because a build failure would take the whole site down, on top of the cold
-  start ADR 0003 already accepted. Component tests are Vitest and arrive at
-  v0.7, where ADR 0008 already put them. See
+  start ADR 0003 already accepted. Component tests are Vitest, and arrive
+  in the same change as the first component -- moved from v0.7 on 09-26,
+  when v0.7 finished with no component to test. See
   `docs/decisions/0011-bundle-built-locally.md`.
 - **What counts as "solved"?** *(asked 08-11, due at v0.5, arrived at v0.4,
   answered 09-18.)* **The first submission being accepted.** "Eventually

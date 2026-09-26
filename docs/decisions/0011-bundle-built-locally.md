@@ -88,3 +88,22 @@ needs no build to run.
 - **If the bundle ever needs to be built somewhere else** — a second developer,
   or a CI service — this decision is what has to be revisited, and the staleness
   check is what will notice the disagreement.
+
+## Amendment — 2026-09-26: Vitest arrives with the first component
+
+The decision above says component tests "arrive at v0.7 with the rest of the
+tests". v0.7 finished on 2026-09-26 with no component to test. The React
+work was reordered behind the model on 2026-09-18 (spec §10), and the topic
+chart is still the server-rendered table ADR 0001's amendment describes.
+Installing Vitest now would give the project a tool with nothing to test,
+plus another set of packages to keep up to date.
+
+**Vitest is installed, and its first test written, in the same change that
+adds the first component.** It is still Vitest, for the reason above: it is
+the toolchain Vite assumes. What moved is only when it arrives. It is tied
+to the component, not to a milestone, so the two cannot drift apart again.
+
+The same goes for the staleness check this decision relies on. It has not
+been written, because there is no bundle for it to guard: no component
+sources, no `package.json`, nothing built. It arrives in that same change,
+and the first commit of a bundle must include it.

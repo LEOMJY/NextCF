@@ -4653,3 +4653,39 @@ had. It was invisible until requests were logged. The icon is a design
 decision, so it waits for v0.8.
 
 24 new checks; 292 pass, in 68 seconds.
+
+---
+
+## 2026-09-26 (evening) — v0.7 closed, with two things carried on purpose
+
+§10's row for v0.7 listed eight things. Six are built: the nightly re-sync,
+logging, error handling, the tests, `/privacy` and visit counting. The
+header says v0.7.
+
+Two are carried to later, and §10 now names them rather than letting "done"
+cover them:
+
+- **Storage that survives restarts.** The code needs nothing more. ADR 0017
+  decided that the disk is paid for just before the first stranger arrives,
+  because until then every visit recorded is the author's own, and §9
+  excludes the author.
+- **Component tests (Vitest).** ADR 0011 put them in v0.7, and there is no
+  component. The React topic chart was moved behind the model on 09-18. The
+  decision taken today ties Vitest to the first component rather than to a
+  milestone, and ADR 0011 is amended.
+
+Writing that amendment turned up something the documents had wrong. The
+"staleness check" ADR 0011 relies on, the one that fails when a component is
+edited and not rebuilt, was never written. There has never been a bundle for
+it to guard. The ADR described it as if it existed. It now says the check
+arrives with the first bundle, and the first commit of a bundle must include
+it.
+
+The README had fallen three milestones behind in places. It still said
+"still to come: `scheduler.py`" and "181 checks in 14 scripts". Two comments
+in `web.py` still promised v0.7 work, and one of those promises, a re-sync
+that stops early, was dropped on 09-13. All of it now describes what exists.
+
+Next is v0.8: the design pass, and every unhandled state made deliberate.
+Before launch, separately: the paid disk, then the author-exclusion settings
+on Render, then checking that the database file really is on the disk.

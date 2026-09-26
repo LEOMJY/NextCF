@@ -72,8 +72,10 @@ HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,24}$")
 # The trade: too short and every visit costs a fetch and a wait; too long and
 # somebody who just solved a problem is shown a page saying they did not. Ten
 # minutes is long enough that reloading never re-fetches, and short enough that
-# coming back after a contest does. It gets cheaper to shorten this once a
-# re-sync can stop early at submissions already stored -- v0.7 work.
+# coming back after a contest does. Shortening it would not make a refresh
+# cheaper: a sync is one request for the whole history either way, and
+# fetching only the newest submissions was dropped on 2026-09-13 because it
+# saves no request and misses verdicts that change after they were stored.
 FRESH_FOR_SECONDS = 600
 
 # How long a failed sync is believed before it is attempted again. Measured on
@@ -231,9 +233,8 @@ def load_problemset():
     A thread, not a step in startup, because the server should answer while
     this is in flight: the landing page and a stored history do not need it.
     The results page asks db.problemset_size() and says "not ready" honestly
-    until it is. A failure is printed and not retried here. On the free
-    instance a restart comes several times a day anyway; the nightly job at
-    v0.7 is the real retry, and it belongs in the scheduler, not bolted on.
+    until it is. A failure is logged and not retried here: the scheduler
+    asks again on its next tick (ADR 0020), which is where a retry belongs.
     """
     conn = db.connect()
     try:

@@ -66,6 +66,8 @@ the choice under (a).
   v0.4.
 - **Two languages to test.** The Python checks cannot see inside a React
   component; a JavaScript test tool is needed by v0.7 at the latest.
+  *(2026-09-26: not by v0.7 after all, but with the first component --
+  see ADR 0011's amendment.)*
 - **Layer 1 still holds.** Every component sits on HTML Flask has already
   rendered — a table is drawn by Jinja first and the component takes it over.
   If the bundle fails to load, the page still works, just without the
