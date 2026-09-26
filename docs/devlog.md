@@ -2055,8 +2055,9 @@ from one.
 This time the starting point was things a Codeforces user already knows by
 heart, not what a technical site usually looks like: a problem statement with
 the handle input in the Input box, the rank colours, a calibration plot, and
-ICPC balloons. The page is `.claude/design-directions-2.html`. The five problems
-on it are real; the 1520-rated history and every probability are illustrative.
+ICPC balloons. All four were built as one working page, kept locally and not
+in the repository. The five problems on it are real; the 1520-rated history
+and every probability are illustrative.
 
 My ranking: rank colours first, balloons second, statement and calibration
 plot flat.
