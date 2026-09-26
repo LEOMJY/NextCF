@@ -42,10 +42,12 @@ class FakeResponse:
     """What urlopen returns on a good call."""
 
     def __init__(self, payload):
-        self._data = json.dumps(payload).encode()
+        # A stream, like a real response: read(n) gives the next bytes and then
+        # b"" -- api_client reads in chunks until it gets b"" (ADR 0022).
+        self._body = io.BytesIO(json.dumps(payload).encode())
 
-    def read(self):
-        return self._data
+    def read(self, size=-1):
+        return self._body.read(size)
 
     def __enter__(self):
         return self
@@ -65,7 +67,7 @@ class StallingResponse:
     def __init__(self, exc):
         self.exc = exc
 
-    def read(self):
+    def read(self, size=-1):
         raise self.exc
 
     def __enter__(self):
@@ -95,7 +97,8 @@ class Script:
         answer = self.answers.pop(0) if self.answers else self.answers_exhausted()
         if isinstance(answer, Exception):
             raise answer
-        if isinstance(answer, StallingResponse):
+        if hasattr(answer, "read"):
+            # Already a response -- a stalling or a trickling one.
             return answer
         return FakeResponse(answer)
 
@@ -241,6 +244,51 @@ def three_stalls_read_as_network_failure():
 
 
 check("...and three stalls in a row give up as a network failure (URLError)", three_stalls_read_as_network_failure)
+
+
+class TricklingResponse:
+    """A body that never ends, one byte at a time, each just inside urlopen's
+    ten-second timeout -- so that timeout never fires. Each read moves a fake
+    clock forward nine seconds. Without a deadline of its own, api_client
+    would read this for ever, and with one worker running every sync in turn
+    (ADR 0018) the whole queue would wait behind it."""
+
+    def __init__(self, clock):
+        self.clock = clock
+        self.reads = 0
+
+    def read(self, size=-1):
+        self.reads += 1
+        assert self.reads < 1000, "still reading after 1000 chunks: there is no deadline"
+        self.clock[0] += 9.0
+        return b" "
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+def a_body_that_never_finishes_is_given_up_on():
+    clock = [0.0]
+    trickles = [TricklingResponse(clock) for _ in range(3)]
+    real_clock = api_client._clock
+    api_client._clock = lambda: clock[0]
+    try:
+        calls, waits, result, error = run(*trickles)
+    finally:
+        api_client._clock = real_clock
+    # A network failure, so retried, and after the last attempt given up as one.
+    assert isinstance(error, urllib.error.URLError), f"got {error!r}"
+    assert calls == 3, f"{calls} calls"
+    # Each attempt stopped at the deadline, not somewhere after it: one read
+    # past it at most, nine seconds a read.
+    limit = api_client.READ_DEADLINE_SECONDS / 9 + 2
+    assert all(t.reads <= limit for t in trickles), [t.reads for t in trickles]
+
+
+check("a body that never finishes is given up on at the deadline, and retried", a_body_that_never_finishes_is_given_up_on)
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

@@ -139,8 +139,10 @@ the definition of done.
   refused in the last ten minutes is answered with a 200 -- so a handle that
   does not exist was written down as somebody using the site. A URL says what
   was asked for, not what was found. The results view now declares the handle
-  when it renders a stored history, in Codeforces' spelling; every other page,
-  a remembered failure included, is a visit with no handle.
+  when it renders a stored history, in Codeforces' spelling; every other page
+  is a visit with no handle. *Later the same day* the remembered-failure page
+  stopped answering 200 (ADR 0022), so it is not counted at all now, the same
+  as the progress page a typo passes through first.
 - **The prices above are dated.** Render's free-Postgres expiry and Supabase's
   pause are the kind of term that changes; if this is reopened they get checked
   again rather than quoted from here.

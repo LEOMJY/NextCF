@@ -4569,3 +4569,86 @@ problems gets its own sentence pointing at it.
 
 Five new checks, written first and seen to fail; seven mutations, each in a
 fresh copy of the repository, all caught. 268 pass, in 66 seconds.
+
+---
+
+## 2026-09-26 (later) — Errors that say why, and a log that says what happened
+
+v0.7's logging and error handling, ADR 0022. Before starting, the site was
+measured breaking on purpose. A mistyped URL, a GET to a button and an
+exception in a view all got Flask's white page. A sync that worked left no
+trace anywhere. And every remembered failure answered 200.
+
+### The status code is the cause
+
+Three decisions were made before any code: status by cause, no handles in
+the log, and the two review findings about the feedback route folded in.
+
+The first needed a column. The obvious shortcut was to read the cause out of
+`jobs.error`: "Codeforces rejected..." means 404, "Could not reach..." means
+503. That works until either side rephrases a sentence, and then it fails
+without telling anyone. So a job now closes with a sentence for the person
+*and* one of four words for the program, and `finish_job` refuses one
+without the other.
+
+Writing the four words turned up a bug that had been there since the
+retries were added. `TemporaryFailure` is a subclass of `RuntimeError`, so a
+"Call limit exceeded" that outlasted every retry was caught by the
+`RuntimeError` clause and reported as "Codeforces rejected the request". The
+site blamed the handle for Codeforces' bad minute. Under the new rules that
+would have been a 404. It is now caught first, as `unreachable`.
+
+This morning's entry said a typo is "still a visit, just naming nobody".
+Since this afternoon it is not a visit at all. The page answers 404, and
+visits count only 200s. The progress page a typo passes through first was
+never counted either, so the two paths now agree.
+
+### The log
+
+`logs.py` configures Python's own `logging` once, and only the entry points
+call it. Every request gets one line (method, route pattern, status,
+milliseconds), every sync gets a start and an end with its cause, and every
+unexpected exception is logged with its traceback, where the old `print`
+lines kept only the message.
+
+No handle goes in, and it took more care than expected: the handle turned up
+in four places. The path of a results page is a handle, so requests are
+logged by route pattern. Codeforces' own refusal names the handle, so it
+goes to the jobs row and not the log. The old sync failure line printed the
+handle outright. And the fourth was found only by reading the finished diff:
+Flask logs an uncaught exception as "Exception on <path>", so a results
+page that crashed would have written its handle. That line is replaced with
+one naming the route. Each of the four has a check that searches the
+captured log for the handle it was about.
+
+`/privacy` says the log exists and holds neither handles nor IP addresses.
+Reading that page for the edit turned up an older gap: its "whole list" had
+never mentioned the too hard / too easy records or the record of fetches,
+both of which are kept per handle. It does now.
+
+### The stuck job ADR 0018 predicted
+
+`urlopen(..., timeout=10)` limits each wait for bytes, not the body. A
+server sending one byte every nine seconds never trips it, and with one
+worker running every sync that stalls the whole queue. Python cannot stop a
+thread from outside, so the limit had to go inside the read. The body is now
+read in 64 KB chunks, with a 60-second deadline per attempt. The check feeds
+it a body that never ends and a fake clock.
+
+### A mutant that survived for a good reason
+
+Twenty-three mutations, each in a fresh copy of the repository. Twenty-two
+were caught. The survivor deleted the 500 handler, and nothing changed: the
+handler for `HTTPException` was already answering, because Flask wraps an
+uncaught exception in `InternalServerError`, which is one. The 500 handler
+was dead code, so it is gone. The 500 sentence now lives in the one handler,
+a check pins it, and the replacement mutation is caught.
+
+### Seen on the first real run
+
+The log's first minute under waitress showed a `GET (no route) 404` after
+every page: the browser asking for `/favicon.ico`, which the site has never
+had. It was invisible until requests were logged. The icon is a design
+decision, so it waits for v0.8.
+
+24 new checks; 292 pass, in 68 seconds.

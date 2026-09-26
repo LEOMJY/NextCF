@@ -91,6 +91,8 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   scheduler.py    upkeep: the problemset every six hours, and one recent
                   visitor's history at a time when nothing is queued
                   (ADR 0020)
+  logs.py         how the running site writes its log: one format, to
+                  standard error, and never a handle (ADR 0022)
   tests/          the checks, and a runner for them (ADR 0019)
 ```
 
@@ -310,7 +312,12 @@ jobs
                             arrives. Recorded, not shown
   started_at     text     — ISO-8601 UTC
   finished_at    text     — ISO-8601 UTC; NULL while the job is unfinished
-  error          text     — why it failed, if it did
+  error          text     — why it failed, if it did, as a sentence for the
+                            visitor
+  failure        text     — the same as one of four causes: "rejected",
+                            "unreachable", "interrupted", "internal"; the
+                            status code a failure is answered with is read
+                            from this, never from the sentence (ADR 0022)
 
 dismissals                                              nextcf.db only
   handle         text     — who pushed it away

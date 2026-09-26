@@ -229,29 +229,26 @@ def a_remembered_failure_does_not_claim_the_handle():
     """A mistyped handle is not somebody using the site under that handle.
 
     Since 2026-09-24 a handle refused in the last ten minutes is answered from
-    the failed job at once, with a 200 -- the request worked, the sync did
-    not. Found on review: record_visit saw "results, 200" and wrote a row
-    naming a handle that does not exist, which section 9's handle counts
-    would then count as a person. The browser still came, so the visit
-    stays; the handle it claims does not.
+    the failed job at once -- with a 200 at first. Found on review:
+    record_visit saw "results, 200" and wrote a row naming a handle that does
+    not exist, which section 9's handle counts would then count as a person.
+    Fixed twice over: the handle is now declared by the view that found it,
+    and since ADR 0022 the page answers 404, which is not recorded at all.
     """
     clear()
     conn = db.connect()
     try:
         job_id = db.create_job(conn, "sync", "no_such_handle_xyz")
-        db.finish_job(conn, job_id, error="Codeforces rejected the request: handle: User not found")
+        db.finish_job(conn, job_id, error="Codeforces rejected the request: handle: User not found",
+                      failure="rejected")
     finally:
         conn.close()
 
     client = fresh_client()
     response = client.get("/results/no_such_handle_xyz")
-    assert response.status_code == 200, response.status_code
+    assert response.status_code == 404, response.status_code
     assert b"not found" in response.data, "this is not the remembered-failure page"
-
-    written = rows()
-    assert len(written) == 1, f"{len(written)} rows"
-    assert written[0]["handle"] is None, f"a failed lookup claimed {written[0]['handle']!r}"
-    assert counted()["handles"] == 0, counted()
+    assert counted()["handles"] == 0, f"a failed lookup was counted as a handle: {rows()}"
 
 
 def the_handle_recorded_is_the_one_codeforces_spells():

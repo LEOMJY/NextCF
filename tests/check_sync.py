@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 import tempfile
+import urllib.error
 from pathlib import Path
 
 SCRATCH = Path(tempfile.mkdtemp(prefix="sync-"))
@@ -147,6 +148,45 @@ def unknown_handle_fails_and_writes_nothing():
 
 
 check("a handle Codeforces does not know fails the job with the reason, after one request, writing nothing", unknown_handle_fails_and_writes_nothing)
+
+
+class Raises:
+    """api_client.call that raises one thing, whatever it is asked."""
+
+    def __init__(self, exc):
+        self.exc = exc
+
+    def __call__(self, method, **params):
+        raise self.exc
+
+
+def each_failure_is_closed_with_its_cause():
+    """ADR 0022: the web app answers each cause with a different status code,
+    so the cause is stored as a word, not left to be read out of a sentence."""
+    cases = [
+        (RuntimeError("handle: User with handle x not found"), "rejected", "rejected"),
+        (urllib.error.URLError("timed out"), "unreachable", "Could not reach"),
+        (KeyError("result"), "internal", "our side"),
+    ]
+    for n, (exc, cause, words) in enumerate(cases):
+        job, _ = synced(Raises(exc), f"cause_{n}")
+        assert job["failure"] == cause, f"{type(exc).__name__} closed as {job['failure']!r}, not {cause!r}"
+        assert words in job["error"], job["error"]
+
+
+check("each failure is closed with its cause: rejected, unreachable, internal", each_failure_is_closed_with_its_cause)
+
+
+def a_codeforces_bad_minute_is_not_a_refusal():
+    """TemporaryFailure is a RuntimeError, so it used to be caught as one and
+    read "Codeforces rejected the request: Call limit exceeded" -- blaming the
+    handle for Codeforces' bad minute, and now it would answer 404."""
+    job, _ = synced(Raises(api_client.TemporaryFailure("Call limit exceeded")), "bad_minute")
+    assert job["failure"] == "unreachable", job["failure"]
+    assert "rejected" not in job["error"], job["error"]
+
+
+check("Codeforces still failing after every retry is unreachable, not a refusal", a_codeforces_bad_minute_is_not_a_refusal)
 
 
 shutil.rmtree(SCRATCH, ignore_errors=True)

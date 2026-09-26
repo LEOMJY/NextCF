@@ -178,7 +178,8 @@ def failed_sync_explains_itself():
     conn = db.connect()
     try:
         job_id = db.create_job(conn, "sync", "beta")
-        db.finish_job(conn, job_id, error="Codeforces rejected the request: handle not found")
+        db.finish_job(conn, job_id, error="Codeforces rejected the request: handle not found",
+                      failure="rejected")
     finally:
         conn.close()
     response, html = get(f"/progress/{job_id}")

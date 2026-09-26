@@ -308,7 +308,19 @@ CREATE TABLE IF NOT EXISTS jobs (
     -- Why it failed, if it did. Written OUTSIDE the user's transaction: if it
     -- were inside, the rollback would erase the record that the failure ever
     -- happened, which is the one thing that must survive.
-    error        TEXT
+    error        TEXT,
+
+    -- The same failure as one of four words, for the program rather than the
+    -- person (ADR 0022). `error` is a sentence and may carry Codeforces' own
+    -- wording; deciding a status code by searching that sentence would break
+    -- the day either side rephrases it. NULL for a job that did not fail.
+    --   rejected     Codeforces answered and refused: nearly always a handle
+    --                that does not exist
+    --   unreachable  Codeforces could not be reached, or kept failing after
+    --                every retry
+    --   interrupted  this server restarted before the job finished
+    --   internal     a bug here
+    failure      TEXT    CHECK (failure IN ('rejected', 'unreachable', 'interrupted', 'internal'))
 ) STRICT;
 
 -- At most one unfinished job per target, so two people typing "tourist" at

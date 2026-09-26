@@ -188,11 +188,14 @@ def every_attempt_waits_its_turn():
 
     class Response:
         def __init__(self, payload):
+            import io
             import json
-            self.data = json.dumps(payload).encode()
+            # A stream, like a real response: read(n) gives the next bytes and
+            # then b"" -- api_client reads in chunks until it gets b"".
+            self.body = io.BytesIO(json.dumps(payload).encode())
 
-        def read(self):
-            return self.data
+        def read(self, size=-1):
+            return self.body.read(size)
 
         def __enter__(self):
             return self
@@ -256,8 +259,12 @@ def whole_history_url_has_no_paging():
     urls = []
 
     class Response:
-        def read(self):
-            return b'{"status": "OK", "result": []}'
+        def __init__(self):
+            import io
+            self.body = io.BytesIO(b'{"status": "OK", "result": []}')
+
+        def read(self, size=-1):
+            return self.body.read(size)
 
         def __enter__(self):
             return self

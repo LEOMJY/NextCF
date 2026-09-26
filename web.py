@@ -21,22 +21,26 @@ Every page except the progress page also records that somebody opened it, so
 that section 9's second criterion can be measured at all -- see
 record_visit() below and ADR 0017.
 
-Deliberately not here yet:
-    re-fetching the problemset nightly       v0.7, with the scheduler
-    syncs one at a time, behind a queue      v0.7, ADR 0018
+When something fails, the status code says why (ADR 0022): a handle
+Codeforces refused is 404, Codeforces unreachable or a restart is 503, a bug
+here is 500 -- always on the site's own error page. Every request is logged
+by its route's pattern, never its path, so no handle reaches the log.
 
 Usage:
     .venv\\Scripts\\python.exe web.py
     then open http://127.0.0.1:5000
 """
 
+import datetime
+import logging
 import os
 import re
 import secrets
 import sqlite3
-import sys
+import time
 
 from flask import Flask, g, jsonify, redirect, render_template, request, url_for
+from werkzeug.exceptions import HTTPException
 
 import api_client
 import db
@@ -47,6 +51,12 @@ import sync
 # this file. __name__ is how it works out where this file is. That is the only
 # reason this argument exists.
 app = Flask(__name__)
+
+# This module's log lines. The same logger Flask itself writes to when a page
+# throws, because Flask names the app's logger after the module too -- so an
+# unhandled exception and everything else this file says land together, in
+# the format logs.py sets.
+log = logging.getLogger(__name__)
 
 # Codeforces handles are letters, digits, underscore, hyphen, and dots on some
 # older accounts. This is a cheap filter to keep obvious junk out of an
@@ -73,6 +83,29 @@ FRESH_FOR_SECONDS = 600
 # ten minutes; a handle that failed because Codeforces was down might, which is
 # why the page that says so carries a button that ignores this.
 FAILURE_REMEMBERED_SECONDS = 600
+
+# The status code a remembered failure is answered with, by its cause (ADR
+# 0022). The page is the same for all four -- the reason in words, and a
+# button to try again -- and the code is what tells everything that is not a
+# person what happened: a crawler that should not index a typo as a page, a
+# browser deciding what to cache, a log that is searched for 5xx.
+#
+#   rejected     404  the handle's page does not exist, as far as anybody
+#                     can tell -- Codeforces says so
+#   unreachable  503  temporary, and not the handle's fault; Retry-After says
+#                     when asking again will really ask again
+#   interrupted  503  the same: this server restarted, and the handle may be
+#                     perfectly fine
+#   internal     500  a bug here
+#
+# /progress/<job> stays 200 for all of them. That page is about a job, and
+# the job exists; it is the handle's page that may not.
+FAILURE_STATUS = {
+    "rejected": 404,
+    "unreachable": 503,
+    "interrupted": 503,
+    "internal": 500,
+}
 
 # ------------------------------------------------------------------- visits
 #
@@ -175,7 +208,12 @@ EVALUATION = {
 # failed, which is only true at the moment the program that starts syncs has
 # just started -- ADR 0007. Every other program calls init_db() alone.
 db.init_db()
-db.fail_orphaned_jobs()
+_orphaned = db.fail_orphaned_jobs()
+if _orphaned:
+    # Each of these is a visitor whose sync died with the last process and
+    # who is now told so. Worth one line: a number that is high after every
+    # deploy says the deploys are cutting syncs off.
+    log.warning("marked %d unfinished jobs from before this start as interrupted", _orphaned)
 
 
 def load_problemset():
@@ -201,13 +239,13 @@ def load_problemset():
     try:
         problems = api_client.fetch_problemset()["problems"]
         stored, aliases = db.save_problemset(conn, problems)
-        print(f"problemset: {stored} problems, {aliases} aliases", file=sys.stderr)
+        log.info("problemset: %d problems, %d aliases", stored, aliases)
         return True
-    except Exception as exc:
+    except Exception:
         # The same reasoning as sync.run_sync: an exception escaping a thread
         # dies in silence, and here nobody would even see a stuck job. The log
-        # is the only place this can be told.
-        print(f"problemset fetch failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        # is the only place this can be told, and the traceback goes with it.
+        log.exception("problemset fetch failed")
         # Said rather than raised, and answered rather than swallowed: the
         # scheduler asks for this and tries again on its next tick (ADR 0020).
         return False
@@ -291,7 +329,9 @@ def record_visit(response):
     except sqlite3.Error as exc:
         # Logged rather than raised, and logged rather than swallowed. The
         # visitor gets their page; the failure is somewhere it can be found.
-        app.logger.warning("could not record a visit to %s: %s", request.path, exc)
+        # The route's pattern, not the path: the path of a results page is a
+        # handle, and the log does not keep handles (ADR 0022).
+        log.warning("could not record a visit to %s: %s", request.url_rule.rule, exc)
 
     if not known:
         response.set_cookie(
@@ -316,6 +356,96 @@ def record_visit(response):
     return response
 
 
+@app.before_request
+def start_clock():
+    """Note when this request began, for the line log_request writes."""
+    g.started = time.perf_counter()
+
+
+@app.after_request
+def log_request(response):
+    """One line per page served: method, route, status, milliseconds.
+
+    What it is for: "how often does anything fail, and is anything slow",
+    answered by reading the host's log -- which until now held nothing about
+    a request that went well, so there was nothing to compare a failure with.
+
+    The route's PATTERN, never the path. /results/tourist would put a handle
+    in a log the host keeps, and /privacy lists what this site keeps; it lists
+    no log of handles (ADR 0022). A request matching no route logs a
+    placeholder rather than the path it asked for, which could be anything.
+
+    Static files are skipped. They are one stylesheet, a font and a bundle per
+    page, and would bury the pages among them.
+
+    Flask runs this for a response built by an error handler too, so a 404
+    and a 500 are logged here like anything else. For a 500 Flask has already
+    logged the traceback, just before.
+    """
+    if request.endpoint == "static":
+        return response
+    route = request.url_rule.rule if request.url_rule is not None else "(no route)"
+    started = g.get("started")
+    elapsed = f"{(time.perf_counter() - started) * 1000:.0f}ms" if started is not None else "?"
+    log.info("%s %s %d %s", request.method, route, response.status_code, elapsed)
+    return response
+
+
+def log_exception(exc_info):
+    """Flask's line for an exception no view caught, minus the path.
+
+    Flask's own version writes "Exception on /results/tourist [GET]" -- the
+    path, which on a results page is a handle, into a log /privacy promises
+    holds none (ADR 0022). Found by reading the diff after every other line
+    had been made to name routes. Same traceback, same level; the route's
+    pattern in place of the path.
+
+    Flask calls app.log_exception(exc_info), so replacing that one attribute
+    on this one app is the whole change -- no subclass needed.
+    """
+    route = request.url_rule.rule if request.url_rule is not None else "(no route)"
+    log.error("exception on %s %s", request.method, route, exc_info=exc_info)
+
+
+app.log_exception = log_exception
+
+
+@app.errorhandler(HTTPException)
+def http_error(error):
+    """Every error Flask answers for us, on the site's own page.
+
+    Without this, a mistyped URL or a GET to a POST-only button got Flask's
+    white "Not Found" page -- unstyled, and the kind of thing spec section 7.1
+    names as what makes a site read as unfinished. The views that answer 404
+    for a reason of their own already render error.html; this covers
+    everything Flask decides before a view runs.
+
+    It covers a bug too. An exception no view caught reaches here as a 500:
+    Flask wraps it in InternalServerError, which is one of these, AFTER
+    writing the traceback to the log. That is where the detail goes, and
+    nowhere else -- the visitor gets a true sentence and a way to carry on,
+    and showing them the exception would be useless to them and a gift to
+    anyone probing the site. (A separate 500 handler was written first, and a
+    mutation removing it changed nothing: this one was already answering.)
+
+    The status code is kept exactly: this changes what the page looks like,
+    not what it says to a browser. The headers are kept too -- a 405 must say
+    which methods ARE allowed. Nothing here touches the database, because the
+    fault may be the database.
+    """
+    messages = {
+        404: "There is nothing at this address.",
+        405: "That address does not take this kind of request.",
+        500: "Something went wrong on our side. It has been logged.",
+    }
+    message = messages.get(error.code, error.description)
+    response = app.make_response((render_template("error.html", handle=None, message=message), error.code))
+    for name, value in error.get_headers():
+        if name.lower() != "content-type":
+            response.headers[name] = value
+    return response
+
+
 def shown_handle(handle):
     """Tell record_visit that this response is this handle's own page.
 
@@ -326,6 +456,34 @@ def shown_handle(handle):
     URL, because a URL says what was asked for, not what was found.
     """
     g.shown_handle = handle
+
+
+def remembered_failure(handle, job):
+    """The page for a handle whose sync failed in the last few minutes.
+
+    The same words and the same button whatever the cause; a status code
+    that says which cause it was (FAILURE_STATUS, ADR 0022). Until
+    2026-09-26 every cause answered 200 -- "this request worked, the sync did
+    not" -- and that is how a typo came to be counted as a visitor using the
+    site under a handle that does not exist.
+
+    A failure closed before the cause was recorded has none, and is answered
+    as ours: the one code that makes no claim about the handle or about
+    Codeforces.
+    """
+    status = FAILURE_STATUS.get(job["failure"], 500)
+    response = app.make_response((
+        render_template("error.html", handle=handle, message=job["error"], retry=True),
+        status,
+    ))
+    if status == 503:
+        # When asking again will really ask Codeforces again: the moment this
+        # failure stops being remembered. Before that, a reload gets this same
+        # page back, so telling a client to retry sooner would be untrue.
+        failed_at = datetime.datetime.fromisoformat(job["finished_at"])
+        age = (datetime.datetime.now(datetime.UTC) - failed_at).total_seconds()
+        response.headers["Retry-After"] = str(max(1, int(FAILURE_REMEMBERED_SECONDS - age)))
+    return response
 
 
 def queue_view(conn, job_id):
@@ -435,15 +593,7 @@ def results(handle):
             conn, "sync", handle, db.utc_ago(FAILURE_REMEMBERED_SECONDS)
         )
         if failed is not None:
-            # 200, not an error status, for the same reason as the progress
-            # page: this request worked perfectly, and the honest answer to it
-            # is a page explaining that the sync did not.
-            return render_template(
-                "error.html",
-                handle=handle,
-                message=failed["error"],
-                retry=True,
-            )
+            return remembered_failure(handle, failed)
 
         # Nothing stored and nothing known against it. Nothing here waits on
         # Codeforces: start_sync writes one row and returns.
@@ -562,16 +712,25 @@ def feedback(handle):
     if user is None or user["last_synced"] is None:
         return redirect(url_for("results", handle=handle))
 
-    target = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
-    try:
-        db.dismiss(conn, handle, problem_id, verdict)
-    except sqlite3.IntegrityError:
-        # The foreign key refused it: no such problem. A hand-made POST, or a
-        # problemset that has moved under us.
+    # Asked, not inferred from an error. The first version caught any
+    # IntegrityError from the insert and blamed the problem -- but the insert
+    # has two foreign keys, and SQLite's message does not say which one
+    # refused. Checking the one thing a visitor can get wrong, before
+    # writing, means a failure at the write is never passed off as theirs: it
+    # reaches the 500 page and the log, as a bug should.
+    if not db.problem_exists(conn, problem_id):
+        # A hand-made POST, or a problemset that has moved under us.
         return render_template("error.html", handle=handle,
                                message="That problem is not one this site knows about."), 404
 
-    db.set_target(conn, handle, model.nudge_target(target, verdict))
+    # Both halves in one transaction (db.record_feedback). As two, a crash
+    # between them left the problem hidden and the target where it was --
+    # half of what the visitor asked for, with nothing on the page to say so.
+    # The stored spelling, not the typed one, so every row about this person
+    # names them the same way.
+    target = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
+    db.record_feedback(conn, user["handle"], problem_id, verdict,
+                       model.nudge_target(target, verdict))
     return redirect(url_for("results", handle=handle))
 
 
@@ -913,6 +1072,13 @@ if __name__ == "__main__":
     # The debug reloader runs this file twice: a parent that only watches for
     # saved files, and a child that serves, which it marks with this variable.
     # Fetching in both would spend two requests on one problemset.
+    # The same log format as the deployed site (ADR 0022). Here rather than
+    # at the top of the file, because only running this file should set it:
+    # every check imports this module and prints its own way.
+    import logs  # noqa: E402
+
+    logs.configure()
+
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         import scheduler  # noqa: E402 -- it imports this module, so not at the top
 

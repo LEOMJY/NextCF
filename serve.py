@@ -12,17 +12,29 @@ Usage (identical locally and on the host):
     .venv\\Scripts\\python.exe serve.py
 """
 
+import logging
 import os
 
-from waitress import serve
+import logs
+
+# Before anything else is imported: importing web runs its startup -- the
+# tables created, abandoned jobs failed and counted -- and what it says about
+# that should arrive in the same format as everything after it (ADR 0022).
+#
+# Only when this file is the program. A check imports it for WAITRESS_OPTIONS
+# alone, and configuring logging there would change how the check prints.
+if __name__ == "__main__":
+    logs.configure()
+
+from waitress import serve  # noqa: E402
 
 # Importing `app` runs web.py top to bottom, defining the routes. It does NOT
 # start the development server -- that call is guarded by
 # `if __name__ == "__main__"`, which is false when the file is imported. So
 # debug mode, and its interactive console, cannot reach the internet.
-import scheduler
-import sync
-from web import app
+import scheduler  # noqa: E402
+import sync  # noqa: E402
+from web import app  # noqa: E402
 
 # An environment variable is a named value living outside the program, set by
 # whoever starts it. The host picks a port at launch and announces it this way,
@@ -72,5 +84,5 @@ if __name__ == "__main__":
     # weeks recommends from the problem pool it had on the morning it
     # started, and a failed startup fetch is never retried.
     scheduler.start()
-    print(f"serving on http://{HOST}:{PORT}")
+    logging.getLogger("serve").info("serving on http://%s:%d", HOST, PORT)
     serve(app, host=HOST, port=PORT, **WAITRESS_OPTIONS)

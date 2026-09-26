@@ -12,6 +12,7 @@ Usage:
 
 import http.client
 import json
+import logging
 import sys
 import threading
 import time
@@ -20,6 +21,8 @@ import urllib.parse
 import urllib.request
 
 API_BASE = "https://codeforces.com/api"
+
+log = logging.getLogger(__name__)
 
 # Codeforces asks for no more than one request every two seconds, and answers
 # faster callers with "Call limit exceeded".
@@ -33,6 +36,27 @@ SECONDS_BETWEEN_REQUESTS = 2.0
 # enough that somebody watching a progress page has not given up.
 MAX_ATTEMPTS = 3
 RETRY_SECONDS = 2.0
+
+# How long one attempt may spend receiving its body, start to finish.
+#
+# urlopen's timeout=10 is NOT this. It bounds each wait for the next bytes,
+# so a server that sends one byte every nine seconds never trips it, and the
+# attempt runs for as long as the server likes. With one worker running every
+# sync in turn (ADR 0018), that one attempt would hold the whole queue, and
+# Python has no way to stop a thread from outside. So the limit has to live
+# here, inside the loop that reads.
+#
+# Sixty seconds is far past what a real body needs -- the longest history in
+# the dataset is about eleven thousand submissions, a few megabytes -- and
+# short enough that a job cannot hold the queue for more than about three
+# minutes in the worst case: three attempts, each at most this plus one last
+# ten-second wait for bytes, plus the six seconds between them.
+READ_DEADLINE_SECONDS = 60.0
+READ_CHUNK_BYTES = 64 * 1024
+
+# The clock the deadline is measured on. A name of its own so the checks can
+# hand in a fake one; nothing else should change it.
+_clock = time.monotonic
 RATING_WIDTH = 6
 
 
@@ -138,12 +162,32 @@ def call(method, **params):
             # Wait longer each time. If Codeforces is busy, or is telling us
             # to slow down, asking again immediately is part of the problem.
             wait = RETRY_SECONDS * 2 ** (attempt - 1)
-            print(
-                f"{method}: {exc} -- retrying in {wait:.0f}s"
-                f" (attempt {attempt + 1} of {MAX_ATTEMPTS})",
-                file=sys.stderr,
+            # The method and the failure, never the parameters: a handle is
+            # a parameter, and this line goes to the host's log (ADR 0022).
+            log.warning(
+                "%s: %s -- retrying in %.0fs (attempt %d of %d)",
+                method, exc, wait, attempt + 1, MAX_ATTEMPTS,
             )
             time.sleep(wait)
+
+
+def _read_body(response):
+    """The whole body, or TimeoutError if it takes longer than the deadline.
+
+    Read in chunks so the clock can be looked at between them -- one read()
+    of everything would block until the server finished, however long that
+    took. TimeoutError is what a stalled read raises already, so the caller
+    treats both the same way: as a network failure, retried.
+    """
+    deadline = _clock() + READ_DEADLINE_SECONDS
+    chunks = []
+    while True:
+        chunk = response.read(READ_CHUNK_BYTES)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+        if _clock() > deadline:
+            raise TimeoutError(f"the body took longer than {READ_DEADLINE_SECONDS:.0f}s to arrive")
 
 
 def _call_once(method, params):
@@ -167,9 +211,10 @@ def _call_once(method, params):
     status_code = None
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
-            # .read() gives raw bytes; json.loads turns them into ordinary Python
-            # dicts and lists. After this line there is no JSON left, just containers.
-            payload = json.loads(response.read())
+            # _read_body gives raw bytes; json.loads turns them into ordinary
+            # Python dicts and lists. After this line there is no JSON left,
+            # just containers.
+            payload = json.loads(_read_body(response))
     except urllib.error.HTTPError as exc:
         # Codeforces reports a bad handle as HTTP 400, and urlopen raises on
         # any 4xx/5xx. But the useful explanation is in the *body* of that

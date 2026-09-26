@@ -205,18 +205,30 @@ def _migrate(conn):
     When this grows long enough to be hard to read, that is the moment to
     replace it with numbered migration files -- not before.
     """
-    # ADR 0010. ALTER TABLE ... ADD COLUMN is metadata only: SQLite records the
-    # new column and its default and does not touch a single row, so this
-    # returns instantly on a 680 MB file. NOT NULL is allowed here precisely
-    # because there is a non-null DEFAULT for the existing rows to take.
-    # ADR 0021. Same reasoning as the column below it: metadata only, and
-    # NULL is the whole point -- it separates a visitor who chose 0.70 from one
-    # who never chose anything, which a float alone cannot do.
+    # ADR 0021. Metadata only, like the in_problemset column below, and NULL
+    # is the whole point -- it separates a visitor who chose 0.70 from one who
+    # never chose anything, which a float alone cannot do.
     columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
     if "target_chosen_at" not in columns:
         with conn:
             conn.execute("ALTER TABLE users ADD COLUMN target_chosen_at TEXT")
 
+    # ADR 0022. Metadata only again. SQLite tests a new column's CHECK against
+    # every existing row, which is why this one cannot also say "set exactly
+    # when the job failed": failed rows from before the column exist, and they
+    # have no cause to give. finish_job enforces that pairing instead.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "failure" not in columns:
+        with conn:
+            conn.execute(
+                "ALTER TABLE jobs ADD COLUMN failure TEXT CHECK "
+                "(failure IN ('rejected', 'unreachable', 'interrupted', 'internal'))"
+            )
+
+    # ADR 0010. ALTER TABLE ... ADD COLUMN is metadata only: SQLite records the
+    # new column and its default and does not touch a single row, so this
+    # returns instantly on a 680 MB file. NOT NULL is allowed here precisely
+    # because there is a non-null DEFAULT for the existing rows to take.
     columns = {row[1] for row in conn.execute("PRAGMA table_info(problems)")}
     if "in_problemset" not in columns:
         with conn:
@@ -257,7 +269,8 @@ def fail_orphaned_jobs(path=DB_PATH):
                 UPDATE jobs
                    SET state       = 'failed',
                        finished_at = ?,
-                       error       = 'The server restarted before this job finished.'
+                       error       = 'The server restarted before this job finished.',
+                       failure     = 'interrupted'
                  WHERE state IN ('pending', 'running')
                 """,
                 (utc_now(),),
@@ -619,7 +632,7 @@ def get_job(conn, job_id):
     """One job's row, or None. What /progress/<job> polls."""
     return conn.execute(
         """
-        SELECT id, kind, target, state, progress, started_at, finished_at, error
+        SELECT id, kind, target, state, progress, started_at, finished_at, error, failure
           FROM jobs
          WHERE id = ?
         """,
@@ -637,7 +650,7 @@ def get_active_job(conn, kind, target):
     """
     return conn.execute(
         """
-        SELECT id, kind, target, state, progress, started_at, finished_at, error
+        SELECT id, kind, target, state, progress, started_at, finished_at, error, failure
           FROM jobs
          WHERE kind = ? AND target = ? AND state IN ('pending', 'running')
         """,
@@ -709,7 +722,7 @@ def next_pending_job(conn, kind="sync"):
     """
     return conn.execute(
         """
-        SELECT id, kind, target, state, progress, started_at, finished_at, error
+        SELECT id, kind, target, state, progress, started_at, finished_at, error, failure
           FROM jobs
          WHERE kind = ? AND state = 'pending'
          ORDER BY id
@@ -729,7 +742,7 @@ def recent_failed_job(conn, kind, target, since):
     """
     return conn.execute(
         """
-        SELECT id, kind, target, state, progress, started_at, finished_at, error
+        SELECT id, kind, target, state, progress, started_at, finished_at, error, failure
           FROM jobs
          WHERE kind = ? AND target = ? AND state = 'failed'
            AND finished_at >= ?
@@ -812,34 +825,68 @@ def set_job_progress(conn, job_id, progress):
         conn.execute("UPDATE jobs SET progress = ? WHERE id = ?", (progress, job_id))
 
 
-def finish_job(conn, job_id, error=None):
-    """Close a job out: done, or failed with a reason.
+FAILURES = ("rejected", "unreachable", "interrupted", "internal")
+
+
+def finish_job(conn, job_id, error=None, failure=None):
+    """Close a job out: done, or failed with a reason and a cause.
 
     `error` is shown to whoever is watching the progress page, so it should
-    read as a sentence rather than as a stack trace.
+    read as a sentence rather than as a stack trace. `failure` is one of
+    FAILURES, and it is what the web app decides a status code from (ADR
+    0022) -- see the jobs table in schema.sql for what each means.
+
+    Both or neither. A failure with a sentence and no cause would be answered
+    as a bug of ours whatever it really was, and a cause with no sentence
+    leaves the visitor a page that says nothing. Refusing here, where the job
+    is closed, is the only place both are in hand at once.
     """
+    if (error is None) != (failure is None):
+        raise ValueError(f"a failed job needs both a sentence and a cause (error={error!r}, failure={failure!r})")
+    if failure is not None and failure not in FAILURES:
+        raise ValueError(f"unknown failure {failure!r}; expected one of {FAILURES}")
     with conn:
         conn.execute(
-            "UPDATE jobs SET state = ?, finished_at = ?, error = ? WHERE id = ?",
-            ("failed" if error else "done", utc_now(), error, job_id),
+            "UPDATE jobs SET state = ?, finished_at = ?, error = ?, failure = ? WHERE id = ?",
+            ("failed" if error else "done", utc_now(), error, failure, job_id),
         )
 
 
-def dismiss(conn, handle, problem_id, reason):
-    """Record that this visitor pushed a problem away, and why. ADR 0021.
+def record_feedback(conn, handle, problem_id, reason, target):
+    """"Too hard" or "too easy": hide the problem AND move the target, together.
 
-    One row per (person, problem): pressing the other button later replaces
-    the answer rather than keeping both, because only the latest one is what
-    they think. INSERT OR REPLACE is exactly that, said in SQL.
+    One transaction for both. Until 2026-09-26 they were two functions, each
+    committing on its own, called in turn -- so a crash between them, or a
+    failure in the second, left the problem hidden and the target unmoved:
+    half of what the visitor asked for, and nothing on the page to say so.
+    Inside one `with conn:` the second statement failing rolls the first back.
+
+    INSERT OR REPLACE because a dismissal is one row per (person, problem):
+    pressing the other button later replaces the answer rather than keeping
+    both, since only the latest one is what they think. The timestamp on the
+    target is what tells a chosen 0.70 from the column's default 0.70 (ADR
+    0021).
     """
+    now = utc_now()
     with conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO dismissals (handle, problem_id, reason, dismissed_at)
                  VALUES (?, ?, ?, ?)
             """,
-            (handle, problem_id, reason, utc_now()),
+            (handle, problem_id, reason, now),
         )
+        conn.execute(
+            "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",
+            (target, now, handle),
+        )
+
+
+def problem_exists(conn, problem_id):
+    """Whether this id is a problem the database holds at all."""
+    return conn.execute(
+        "SELECT 1 FROM problems WHERE id = ?", (problem_id,)
+    ).fetchone() is not None
 
 
 def count_dismissals(conn, handle):
@@ -855,19 +902,6 @@ def clear_dismissals(conn, handle):
     with conn:
         cursor = conn.execute("DELETE FROM dismissals WHERE handle = ?", (handle,))
     return cursor.rowcount
-
-
-def set_target(conn, handle, target):
-    """Move this visitor's difficulty target, and record that it was chosen.
-
-    The timestamp is not decoration: it is what tells a chosen 0.70 from the
-    0.70 this column was created with, which is the same number (ADR 0021).
-    """
-    with conn:
-        conn.execute(
-            "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",
-            (target, utc_now(), handle),
-        )
 
 
 # ------------------------------------------------------------------- visits

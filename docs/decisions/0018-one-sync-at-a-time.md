@@ -96,6 +96,10 @@ stored.
   already bounded — three attempts at a 10-second timeout with waits between,
   about 36 seconds at worst — so nothing hangs forever, but the job as a whole
   wants its own limit when error handling is written in this milestone.
+  *(2026-09-26: "about 36 seconds" was only true of a server that went
+  silent. One that trickles a byte every nine seconds never trips a
+  per-read timeout, so the limit went on each body instead: 60 seconds per
+  attempt, about three minutes a job at worst — ADR 0022.)*
 - **The progress page shows a position rather than a count.** It lost the count
   on 2026-09-13, when one request replaced paging (§6); a position is the
   number a waiting visitor actually wants.

@@ -400,7 +400,7 @@ def a_failed_sync_is_said_plainly():
     conn = db.connect()
     try:
         db.claim_job(conn, job["id"])
-        db.finish_job(conn, job["id"], error="Codeforces did not answer.")
+        db.finish_job(conn, job["id"], error="Codeforces did not answer.", failure="unreachable")
     finally:
         conn.close()
 
@@ -417,13 +417,14 @@ def a_job_that_no_longer_exists_is_404():
     assert response.status_code == 404, response.status_code
 
 
-def a_failed_job(handle, error="Codeforces rejected the request: no such user", finished_at=None):
+def a_failed_job(handle, error="Codeforces rejected the request: no such user", finished_at=None,
+                 failure="rejected"):
     """A job that was tried and refused, as sync.py would leave it."""
     conn = db.connect()
     try:
         job_id = db.create_job(conn, "sync", handle)
         db.claim_job(conn, job_id)
-        db.finish_job(conn, job_id, error=error)
+        db.finish_job(conn, job_id, error=error, failure=failure)
         if finished_at is not None:
             with conn:
                 conn.execute("UPDATE jobs SET finished_at = ? WHERE id = ?", (finished_at, job_id))
@@ -441,7 +442,9 @@ def a_handle_that_just_failed_is_answered_at_once():
     response = client.get("/results/nosuchuser42qq")
     html = response.get_data(as_text=True)
 
-    assert response.status_code == 200, response.status_code
+    # 404: Codeforces says this handle does not exist, so its page does not
+    # either (ADR 0022). Answered 200 until 2026-09-26.
+    assert response.status_code == 404, response.status_code
     assert "That did not work" in html, html[:300]
     assert "no such user" in html, "the reason was not shown"
     assert waiting() == [], f"asked Codeforces again anyway: {waiting()}"

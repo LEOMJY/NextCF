@@ -28,13 +28,15 @@ Usage:
     started by serve.py and web.py; nothing to run by hand
 """
 
-import sys
+import logging
 import threading
 import time
 
 import db
 import sync
 import web
+
+log = logging.getLogger(__name__)
 
 # How often the loop wakes to ask whether anything is due. Cheap: two small
 # queries, and on most ticks the answer is no.
@@ -87,11 +89,11 @@ def run():
     while True:
         try:
             tick()
-        except Exception as exc:
+        except Exception:
             # Same reasoning as the sync worker: a thread that dies takes its
             # own error message with it, and nothing else would ever notice
             # that the problemset had stopped being refreshed.
-            print(f"scheduler: {type(exc).__name__}: {exc}", file=sys.stderr)
+            log.exception("upkeep: the tick threw; trying again next tick")
         time.sleep(TICK_SECONDS)
 
 
@@ -111,8 +113,11 @@ def tick():
 
         handle = user_to_refresh(conn)
         if handle is not None:
-            sync.start_sync(handle)
+            job_id = sync.start_sync(handle)
             done.append(handle)
+            # The job id and not the handle, for the reason in sync.run_sync:
+            # the log is kept, and /privacy does not list handles in it.
+            log.info("upkeep: queued a refresh of a recent visitor, job %d", job_id)
     finally:
         conn.close()
     return done

@@ -21,6 +21,7 @@ Usage:
     .venv\\Scripts\\python.exe sync.py tourist
 """
 
+import logging
 import sqlite3
 import sys
 import threading
@@ -29,6 +30,11 @@ import urllib.error
 
 import api_client
 import db
+
+# Where this file's log lines go, named after the module so a line in the host's
+# log says which part of the program wrote it. How lines look and where they
+# end up is decided once, in logs.py, by whichever program is running.
+log = logging.getLogger(__name__)
 
 # One request per sync, for the whole history.
 #
@@ -94,6 +100,13 @@ def run_sync(handle, job_id):
             # cost every other visitor four seconds of queue for nothing.
             return
 
+        # The job id, never the handle, in every line this writes to the log:
+        # /privacy lists what this site keeps, and a log kept by the host is
+        # kept. The id leads back to the handle through the jobs table, which
+        # /privacy already covers (ADR 0022).
+        started = time.monotonic()
+        log.info("job %d: started", job_id)
+
         try:
             # Codeforces handles are case-insensitive, so both requests accept
             # the handle as typed; a handle that does not exist is refused by
@@ -122,30 +135,56 @@ def run_sync(handle, job_id):
             # One call, one transaction, all or nothing. ADR 0004.
             db.save_sync(conn, canonical, rating, submissions, rating_changes=changes)
 
+        # Each failure is closed with a sentence for the visitor AND one of
+        # four causes for the program (db.FAILURES), because the web app
+        # answers them with different status codes -- ADR 0022.
+
+        except api_client.TemporaryFailure as exc:
+            # FIRST, because it is a subclass of RuntimeError and the clause
+            # below would take it. This is Codeforces unwell or asking us to
+            # slow down, still so after every retry api_client made -- not a
+            # refusal. Until 2026-09-26 it landed below and read "Codeforces
+            # rejected the request: Call limit exceeded", which blamed the
+            # handle for Codeforces' bad minute.
+            db.finish_job(conn, job_id, error=f"Codeforces is not answering properly: {exc}",
+                          failure="unreachable")
+            log.warning("job %d: Codeforces unwell after retries, %.1fs", job_id, time.monotonic() - started)
+
         except RuntimeError as exc:
             # Codeforces answered and refused -- nearly always a handle that
             # does not exist, and api_client has already dug the real
-            # explanation out of the error body.
-            db.finish_job(conn, job_id, error=f"Codeforces rejected the request: {exc}")
+            # explanation out of the error body. The explanation names the
+            # handle, so it goes to the jobs row and not to the log.
+            db.finish_job(conn, job_id, error=f"Codeforces rejected the request: {exc}",
+                          failure="rejected")
+            log.info("job %d: rejected by Codeforces, %.1fs", job_id, time.monotonic() - started)
 
         except urllib.error.URLError as exc:
             # The network itself failed. Ordering note, same as web.py:
             # HTTPError is a subclass of URLError, so this clause would
             # swallow it -- api_client turns it into RuntimeError first.
-            db.finish_job(conn, job_id, error=f"Could not reach Codeforces: {exc.reason}")
+            db.finish_job(conn, job_id, error=f"Could not reach Codeforces: {exc.reason}",
+                          failure="unreachable")
+            log.warning("job %d: could not reach Codeforces (%s), %.1fs",
+                        job_id, exc.reason, time.monotonic() - started)
 
-        except Exception as exc:
+        except Exception:
             # A bare `except Exception` is usually a mistake. Here it is the
             # opposite. This runs in a thread whose only way to tell anyone
             # anything is the jobs row, so an exception that escaped would
             # kill the thread in silence and leave the job marked running
             # forever, with the progress page spinning for a visitor who will
-            # never be told. The real error goes to the log, not to them.
-            db.finish_job(conn, job_id, error="Something went wrong on our side.")
-            print(f"sync job {job_id} ({handle}) failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+            # never be told. The real error goes to the log, not to them --
+            # log.exception writes the whole traceback, which is what a bug
+            # needs and what a one-line print threw away.
+            db.finish_job(conn, job_id, error="Something went wrong on our side.",
+                          failure="internal")
+            log.exception("job %d: failed on our side", job_id)
 
         else:
             db.finish_job(conn, job_id)
+            log.info("job %d: done, %d submissions, %.1fs",
+                     job_id, len(submissions), time.monotonic() - started)
 
     finally:
         conn.close()
@@ -225,14 +264,14 @@ def _work():
 
             run_sync(job["target"], job["id"])
 
-        except Exception as exc:
+        except Exception:
             # This thread is the only thing that runs syncs anywhere. If it
             # dies, every visitor watches a page that will never change and
             # nothing says why. run_sync reports its own failures into the
             # jobs row; this is for what surrounds it -- a database that would
             # not open, most likely -- and the pause keeps a permanent failure
             # from filling the log in a tight loop.
-            print(f"sync worker: {type(exc).__name__}: {exc}", file=sys.stderr)
+            log.exception("sync worker: the loop threw; carrying on")
             _abandon(job)
             time.sleep(IDLE_SECONDS)
 
@@ -250,11 +289,12 @@ def _abandon(job):
     try:
         conn = db.connect()
         try:
-            db.finish_job(conn, job["id"], error="Something went wrong on our side.")
+            db.finish_job(conn, job["id"], error="Something went wrong on our side.",
+                          failure="internal")
         finally:
             conn.close()
-    except Exception as exc:
-        print(f"sync worker: could not close job {job['id']}: {exc}", file=sys.stderr)
+    except Exception:
+        log.exception("sync worker: could not close job %d", job["id"])
 
 
 def start_sync(handle):

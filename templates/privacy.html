@@ -40,6 +40,21 @@
       identifier from a cookie this site sets.
     </p>
     <p>
+      For each handle: a record of each time it was fetched &mdash; when, and
+      whether it worked &mdash; and, if anybody pressed <em>too hard</em> or
+      <em>too easy</em> on its page, which problems were hidden and the
+      difficulty that was chosen.
+    </p>
+    {# ADR 0022. The server's log is kept by the host, so it is on this list
+       -- and the code is written so that this sentence stays true: pages are
+       logged by their route's pattern, fetches by job number, and nothing in
+       a log line names a handle. #}
+    <p>
+      The server also writes a log of what it did, which the host keeps. It
+      names pages by their kind and fetches by number: no handle and no IP
+      address is ever written to it.
+    </p>
+    <p>
       That is the whole list. <strong>No IP address, no browser or device
       details, no referrer, no accounts, no passwords.</strong> Nothing here
       is shared with anybody, sold, or sent anywhere else, and no page on this

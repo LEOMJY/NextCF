@@ -289,7 +289,7 @@ def hide_everything():
         ids = [row[0] for row in conn.execute(
             "SELECT id FROM problems WHERE in_problemset = 1")]
         for problem_id in ids:
-            db.dismiss(conn, HANDLE, problem_id, "too_hard")
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55)
     finally:
         conn.close()
     return len(ids)
@@ -347,6 +347,58 @@ def a_problem_that_does_not_exist_is_refused():
     assert the_user()["target_chosen_at"] is None, "a junk problem moved the target"
 
 
+def with_a_failing_write(trigger_sql, fn):
+    """Run fn while one write the route makes is made to fail, the way a
+    crash or a full disk would. A trigger in the file, so the web app's own
+    connection meets it."""
+    conn = db.connect()
+    try:
+        with conn:
+            conn.execute(trigger_sql)
+        return fn()
+    finally:
+        with conn:
+            conn.execute("DROP TRIGGER IF EXISTS failing_write")
+        conn.close()
+
+
+def half_a_verdict_is_never_stored():
+    """Found on review: hiding the problem and moving the target were two
+    transactions, so a failure in the second left the first standing -- the
+    problem gone and the target unmoved, half of what was asked."""
+    a_visitor()
+    problem = shown_problems()[0]
+    response = with_a_failing_write(
+        "CREATE TRIGGER failing_write BEFORE UPDATE OF target_prob ON users "
+        "BEGIN SELECT RAISE(ABORT, 'simulated failure'); END",
+        lambda: press(problem, "too_hard"),
+    )
+    assert response.status_code == 500, response.status_code
+    conn = db.connect()
+    try:
+        assert db.count_dismissals(conn, HANDLE) == 0, "the problem was hidden and the target never moved"
+    finally:
+        conn.close()
+    assert the_user()["target_chosen_at"] is None, "the target moved"
+
+
+def a_failure_at_the_write_is_not_blamed_on_the_problem():
+    """Found on review: every IntegrityError was reported as "not a problem
+    this site knows", though the insert has two foreign keys and SQLite does
+    not say which refused. A real problem, and the write failing anyway,
+    must read as ours."""
+    a_visitor()
+    problem = shown_problems()[0]
+    response = with_a_failing_write(
+        "CREATE TRIGGER failing_write BEFORE INSERT ON dismissals "
+        "BEGIN SELECT RAISE(ABORT, 'simulated failure'); END",
+        lambda: press(problem, "too_hard"),
+    )
+    html = response.get_data(as_text=True)
+    assert "not one this site knows" not in html, "blamed the problem for a failure of ours"
+    assert response.status_code == 500, response.status_code
+
+
 def only_a_post_can_say_it():
     a_visitor()
     assert client.get(f"/results/{HANDLE}/feedback").status_code == 405
@@ -382,6 +434,8 @@ check("the undo survives a missing problemset", the_undo_survives_a_missing_prob
 print("\nwhat cannot be said")
 check("a verdict that is not one of the two", a_verdict_that_is_not_one_of_the_two_is_refused)
 check("a problem that does not exist", a_problem_that_does_not_exist_is_refused)
+check("half a verdict is never stored", half_a_verdict_is_never_stored)
+check("a failure at the write is not blamed on the problem", a_failure_at_the_write_is_not_blamed_on_the_problem)
 check("only a POST can say it", only_a_post_can_say_it)
 check("a junk handle is refused", a_junk_handle_is_refused)
 

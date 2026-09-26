@@ -205,11 +205,15 @@ def orphaned_jobs():
 
     conn = db.connect(path)
     try:
-        rows = {r["target"]: dict(r) for r in conn.execute("SELECT target, state, finished_at, error FROM jobs")}
+        rows = {r["target"]: dict(r) for r in conn.execute(
+            "SELECT target, state, finished_at, error, failure FROM jobs")}
         assert marked == 2, f"fail_orphaned_jobs reported {marked} orphaned jobs, expected 2"
         for t in ("tourist", "alice"):
             assert rows[t]["state"] == "failed", f"{t} is still {rows[t]['state']}"
             assert rows[t]["finished_at"] and rows[t]["error"], f"{t} has no finished_at or error"
+            # Not the handle's fault and not Codeforces': 503, try again (ADR 0022).
+            assert rows[t]["failure"] == "interrupted", f"{t} closed as {rows[t]['failure']!r}"
+        assert rows["bob"]["failure"] is None, "a finished job was given a cause"
         assert rows["bob"]["state"] == "done", "a finished job was modified"
         with conn:
             conn.execute(
@@ -545,7 +549,7 @@ def job_lifecycle():
         assert db.get_job(conn, job_id)["state"] == "running"
         assert db.get_job(conn, job_id)["progress"] == 300
 
-        db.finish_job(conn, job_id, error="Codeforces did not answer.")
+        db.finish_job(conn, job_id, error="Codeforces did not answer.", failure="unreachable")
         job = db.get_job(conn, job_id)
         assert job["state"] == "failed" and job["finished_at"] and job["error"]
         assert db.get_active_job(conn, "sync", "tourist") is None, "a finished job still counts as active"
@@ -560,6 +564,88 @@ def job_lifecycle():
 check("job lifecycle: one active at a time, retry after it finishes", job_lifecycle)
 
 
+def a_failure_needs_its_cause():
+    """ADR 0022: a sentence with no cause would be answered as our bug
+    whatever it really was; a cause with no sentence leaves an empty page."""
+    path = fresh_path()
+    db.init_db(path)
+    conn = db.connect(path)
+    try:
+        job_id = db.create_job(conn, "sync", "tourist")
+        for kwargs in ({"error": "It broke."}, {"failure": "rejected"},
+                       {"error": "It broke.", "failure": "gremlins"}):
+            try:
+                db.finish_job(conn, job_id, **kwargs)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"finish_job accepted {kwargs}")
+        assert db.get_job(conn, job_id)["state"] == "pending", "a refused close changed the job"
+
+        # And the column itself, for anything that writes around finish_job.
+        try:
+            with conn:
+                conn.execute("UPDATE jobs SET failure = 'gremlins' WHERE id = ?", (job_id,))
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("the column accepted a cause that is not one of the four")
+    finally:
+        conn.close()
+
+
+check("a failed job needs a sentence AND one of four causes", a_failure_needs_its_cause)
+
+
+def an_old_jobs_table_gains_the_cause():
+    """The migration, on a file made before the column existed -- which is
+    every nextcf.db on a disk at the time, and dataset.db."""
+    path = fresh_path()
+    conn = db.connect(path)
+    try:
+        with conn:
+            # jobs as it was until 2026-09-26, with one failure already in it.
+            conn.execute(
+                """
+                CREATE TABLE jobs (
+                    id INTEGER PRIMARY KEY,
+                    kind TEXT NOT NULL CHECK (kind IN ('sync', 'collect')),
+                    target TEXT NOT NULL COLLATE NOCASE,
+                    state TEXT NOT NULL DEFAULT 'pending'
+                          CHECK (state IN ('pending', 'running', 'done', 'failed')),
+                    progress INTEGER NOT NULL DEFAULT 0,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    error TEXT
+                ) STRICT
+                """
+            )
+            conn.execute(
+                "INSERT INTO jobs (kind, target, state, started_at, finished_at, error) "
+                "VALUES ('sync', 'old', 'failed', '2026-09-01T00:00:00Z', '2026-09-01T00:00:04Z', 'It broke.')"
+            )
+    finally:
+        conn.close()
+
+    db.init_db(path)
+    db.init_db(path)            # twice: the migration must be idempotent
+
+    conn = db.connect(path)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+        assert "failure" in columns, columns
+        old = conn.execute("SELECT error, failure FROM jobs WHERE target = 'old'").fetchone()
+        assert old["error"] == "It broke." and old["failure"] is None, dict(old)
+        job_id = db.create_job(conn, "sync", "new")
+        db.finish_job(conn, job_id, error="Refused.", failure="rejected")
+        assert db.get_job(conn, job_id)["failure"] == "rejected"
+    finally:
+        conn.close()
+
+
+check("an old jobs table gains the cause column, keeping its rows", an_old_jobs_table_gains_the_cause)
+
+
 def job_record_survives_a_failed_sync():
     """ADR 0004: the failure record must outlive the rollback that caused it."""
     path = synced_db()
@@ -570,7 +656,8 @@ def job_record_survives_a_failed_sync():
         try:
             db.save_sync(conn, "tourist", None, [api_sub(1, contest_id=None)])
         except ValueError as exc:
-            db.finish_job(conn, job_id, error=f"could not read a submission: {exc.__class__.__name__}")
+            db.finish_job(conn, job_id, error=f"could not read a submission: {exc.__class__.__name__}",
+                          failure="internal")
         job = db.get_job(conn, job_id)
         assert job is not None, "the job row was rolled back with the sync"
         assert job["state"] == "failed", job["state"]
