@@ -4736,3 +4736,77 @@ mutation is caught.
 
 8 new checks; nine mutations in fresh copies, all caught in the end. 300
 pass, in 62 seconds.
+
+---
+
+## 2026-09-26 (late) — An audit that looked at what is recommended, not how
+
+The site was walked as a stranger would walk it, on desktop and phone, and
+the recommender was run for real users. The earlier audit (09-24) scored the
+pages; this one checked the five problems. The problems were the finding.
+Nothing below is fixed yet. It is written down so the decisions are made on
+measurements rather than memory.
+
+### The five problems are chosen on a probability measured under selection
+
+The recommender was run exactly as the site runs it, at the default 50%, for
+60 users drawn at random from the dataset (a scratch copy; the dataset itself
+was not touched):
+
+| | picks, out of 300 |
+|---|---|
+| rated 500 or more **above** the user | 102 (34%) |
+| rated 500 or more below | 15 (5%) |
+| a "hard version" whose easy version the user has not solved | 18 |
+| tagged `*special` (Kotlin Heroes, April Fools, Russian-only rounds) | 13 |
+| median spread between the easiest and hardest of the five | 1,000 rating points |
+
+At the easiest target, 65%, 25% of picks are still 500 or more above the
+user. The difficulty ladder cannot fix this, because the cause is per
+problem.
+
+The cause is §8's fourth assumption, at full strength. For users rated
+under 1300, the model gives 2233E2, a 2300-rated "difficult version", a 51%
+first-try chance, and gives Watermelon (4A, rated 800) 38%. Among the 188
+dataset users who attempted 2233E2, 58% were accepted first time, because
+nearly everyone attempts the hard version after solving the easy one. Among
+those who attempted Watermelon, many were on their first submission ever.
+The model is calibrated on attempts people **chose**. The site offers
+problems it chose **for** them, and there it is confidently wrong at the
+hard end. ADR 0012 and ADR 0014 both predicted the direction. Nobody had
+measured the size.
+
+Seen on the page: a 1491-rated visitor got problems rated 1000 to 2300,
+all at 49–50%. Pressing "too hard" on the 2300 one moved the target to 55%
+and brought back problems rated 2400 and 2500. At 65% the list still held
+two problems rated 2300.
+
+The `*special` finding is worse than a bad number. 2199A was recommended at
+"1000"; it is from Kotlin Heroes: Episode 14, and Codeforces accepts only
+Kotlin for it. 371 such problems are in the pool.
+
+### Bugs confirmed by running them
+
+- **A double-click moves the target twice.** Two identical POSTs from one
+  press moved it 65% → 55% while hiding one problem.
+- **The upkeep thread can stick on one handle forever.** A handle whose sync
+  keeps failing, for example one renamed on Codeforces, keeps the oldest
+  `last_synced`, so every tick picks it again. Five simulated ticks
+  refreshed the same dead handle five times and nobody else. It cannot happen
+  on the free instance, where `visits` does not survive; it will on the paid
+  disk.
+- **A pasted profile URL, or `@handle`, is refused.**
+  `https://codeforces.com/profile/tourist` answers "There is nothing at this
+  address".
+
+### Friction, confirmed on the page
+
+- On a 375px phone, the handle field is below the fold on the landing page.
+- "Too hard" and "too easy" are 62×16 pixels, 16 pixels apart, and do
+  opposite things.
+- The target can only be moved back by hiding more problems, and "put back"
+  does not reset it.
+- Pressing either button gives no confirmation. The only sign is "Aiming at
+  55%" inside a paragraph, and the page jumps to the top.
+- Nothing on the results page explains why a 1000-rated problem and a
+  2300-rated one both say 49%.
