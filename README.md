@@ -116,6 +116,8 @@ topic_model.json     the topic model's crowd part, refitted monthly
 support.json         who attempted each problem, by rating: what may be offered — see docs/decisions/0023-guard-rails-on-what-is-offered.md
 static/style.css     the whole design system — see docs/decisions/0006-design-direction.md
 static/fonts/        IBM Plex Mono, served from this site, with its licence
+static/app/          the built topic chart component, committed — see docs/decisions/0011-bundle-built-locally.md
+frontend/            its React source, and the Vite build that makes static/app/ — see docs/decisions/0025-problems-by-topic.md
 schema.sql           the tables and the view — see docs/spec.md §6
 serve.py             production entry point — see docs/decisions/0003-hosting.md
 requirements.txt     direct dependencies
@@ -161,7 +163,7 @@ then about forty minutes of fitting:
 
 ## Tests
 
-About 290 checks in 19 scripts. Each one tests a claim by making the failure happen:
+About 370 checks in 23 scripts. Each one tests a claim by making the failure happen:
 a constraint is proved by violating it, a data leak by changing a later result
 and demanding that the earlier prediction does not move by a single bit.
 
@@ -178,6 +180,15 @@ is asked for:
 .venv\Scripts\python.exe tests/run.py --dataset
 ```
 
+The topic chart component has its own tests, run by Vitest in `frontend/`;
+`tests/run.py` runs them too when the packages are installed, and says it
+skipped them when they are not. To install them, and to rebuild the bundle
+after changing a component (a check fails until you do):
+
+```bash
+cd frontend && npm ci && npm run build
+```
+
 `tests/check_mirrors.py` and `tests/check_problem_ids.py` are diagnostics
 rather than tests: they call the Codeforces API and print a report instead of
 passing or failing, and no test run touches the network. How the suite is
@@ -187,9 +198,12 @@ shaped, and why it is not a framework, is in
 ## Stack
 
 Python 3.14, Flask, SQLite, hand-written CSS; the model is plain Python, with
-no numerical libraries. Today there is no JavaScript build step and no frontend
-framework; React components are planned for the interactive parts of pages
-Flask still renders ([ADR 0008](docs/decisions/0008-react-islands.md)). Reasoning, and the list of things explicitly rejected, is in
+no numerical libraries. Pages are rendered by Flask and work without
+JavaScript; the one interactive part, the topic chart, is a React component
+mounted onto the page Flask drew ([ADR 0008](docs/decisions/0008-react-islands.md),
+[ADR 0025](docs/decisions/0025-problems-by-topic.md)). Vite builds it on the
+author's machine and the built file is committed, so the host never runs Node
+([ADR 0011](docs/decisions/0011-bundle-built-locally.md)). Reasoning, and the list of things explicitly rejected, is in
 [spec §7](docs/spec.md).
 
 ## Notes

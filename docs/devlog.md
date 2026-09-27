@@ -5017,3 +5017,68 @@ the next.
 
 10 new checks; ten mutations in fresh copies, all caught in the end. 330
 pass.
+
+---
+
+## 2026-09-26 (after midnight UTC) — Problems by topic, and the first React component
+
+The author moved per-topic recommendations out of v1.5 and into v0.8,
+changing the spec first, as §5 requires (ADR 0025). The design had three
+decisions. The author chose against the recommendation on all three: fill a
+small topic to five, a target per topic, and React now rather than plain
+links. Each alternative is recorded in the ADR, and the build holds to the
+choices.
+
+### What was built
+
+- **Server.** `?topic=` on the results page, validated against the topics
+  the pool can hold. A `topic_targets` table. Presses carry their topic and
+  move only that topic's target, while hiding stays global. A small topic's
+  empty places are filled from problems that did not pass the guard rail,
+  marked row by row. `recommendations.topic` records which list a problem
+  was first shown in. And a data route,
+  `/results/<handle>/recommendations?topic=`, which calls the same view the
+  page does, so the two cannot disagree.
+- **Page.** Every topic in the table is a link that works without script,
+  and topics never practised sit on a line of their own.
+- **Component.** The first npm packages: eight, into `frontend/` only, with
+  the author's consent for the list. A React component takes over the
+  recommendations and the topic table. Choosing a topic swaps the five in
+  place, the address follows, the back button works, and focus moves to the
+  new heading. If the fetch fails, it goes where the link goes. The bundle is
+  229 KB, 72 KB compressed, and loads after the page is drawn.
+- **ADR 0011, kept.** The staleness hash (Vite writes it, Python recomputes
+  it, line endings normalised) and Vitest arrived with the first component,
+  as that decision was amended to require.
+
+### What only the browser found
+
+Clicking through a real page found three things no check had asked about,
+and each now has one:
+
+- **A hard version on a topic's list, its easy version unsolved.** 1249C2 is
+  tagged meet-in-the-middle and 1249C1 is not, so on that list the easy
+  version was not in the pool and the rule found nothing to wait for. It now
+  looks in everything the visitor has not solved.
+- **`choose()` ignored the target outside the band.** With too few problems
+  within ±2.5 points it widened the band, up to everything, then picked by
+  topic and contest alone: 15% and 73% were chosen at a target of 50% over
+  nearer problems. The fix was made because topic lists hit it all the time,
+  but it lives in the shared chooser, so it also changes the overall five
+  for very strong visitors. It changes no prediction.
+- **Five scattered around the target, unexplained.** 30%, 31%, 63% on a
+  50% list straddle the target, so neither wall applied and the page said
+  nothing. Now it says the topic has few problems near the target.
+
+One check was wrong rather than the code. An "ordinary page" check asserted
+the new scattered note was absent. The fixture it used really does have
+only two problems near 50% for its visitor, so the note was true of it. The
+assertion went, with a note saying why, and the rule is checked directly.
+
+### How it was checked
+
+18 server checks for topics, 11 component tests, 6 bundle checks. Twenty
+mutations, each in a fresh copy of the repository. For the component ones,
+the copy is linked to the real `node_modules` rather than copying 78 MB each
+time, and the real folder was confirmed intact before and after. All
+twenty were caught. 368 pass; the dataset tier 372.

@@ -513,9 +513,37 @@ def a_near_miss_is_not_a_wall():
     assert web.target_limits(far, model.DEFAULT_TARGET)["reach"] == "easiest", "a real floor missed"
 
 
+def five_scattered_around_the_target_are_said():
+    """Found in the browser on a small topic: 30%, 31%, 63% at a target of
+    50%. Neither wall applies -- the five straddle the target -- and without
+    this the page said nothing about why they were so far from it."""
+    far = [{"probability": p} for p in (0.30, 0.31, 0.63, 0.40, 0.47)]
+    assert web.target_limits(far, 0.5)["scattered"] is True
+    near = [{"probability": p} for p in (0.48, 0.52, 0.49, 0.51, 0.50)]
+    assert web.target_limits(near, 0.5)["scattered"] is False
+    # A wall already explains a list that is all on one side.
+    low = [{"probability": p} for p in (0.30, 0.31, 0.32, 0.33, 0.34)]
+    assert web.target_limits(low, 0.5)["scattered"] is False
+
+
+def places_the_band_cannot_fill_go_to_the_nearest():
+    """Found in the browser on 2026-09-26: with too few problems inside the
+    band, choose() widened it and then picked by topic and contest alone --
+    15% and 73% chosen at a target of 50% while nearer problems were left.
+    Outside the band, nearness decides."""
+    rows = lambda *ids: [{"id": i, "contest_id": 1, "name": i, "problem_index": "A"} for i in ids]
+    candidates = list(zip((0.50, 0.49, 0.15, 0.73, 0.29, 0.62, 0.60), rows("a", "b", "c", "d", "e", "f", "g")))
+    picked = {row["id"] for _, row in model.choose(candidates, 0.5, 5, {})}
+    assert picked == {"a", "b", "g", "f", "e"}, f"picked {sorted(picked)}: the nearest outside the band are 0.60, 0.62, 0.29"
+
+
 def an_ordinary_page_says_neither():
     html = at(1500, model.DEFAULT_TARGET)
     assert "Nothing left" not in html and "as the target goes" not in html, "a wall where there is none"
+    # Not asserted here: that the list is not "scattered". This file's fake
+    # problemset has three problems per rating, and near 50% for a 1500
+    # visitor it really has only two -- the note is true of it. The rule is
+    # checked directly in five_scattered_around_the_target_are_said.
 
 
 # ---------------------------------------------- the guard rail, on the page
@@ -666,6 +694,8 @@ check("the floor is said", the_floor_is_said)
 check("the ceiling is said", the_ceiling_is_said)
 check("the end of the ladder is said when the list is fine", the_end_of_the_ladder_is_said_when_the_list_is_fine)
 check("a near miss is not a wall", a_near_miss_is_not_a_wall)
+check("five scattered around the target are said", five_scattered_around_the_target_are_said)
+check("places the band cannot fill go to the nearest", places_the_band_cannot_fill_go_to_the_nearest)
 check("an ordinary page says neither", an_ordinary_page_says_neither)
 
 print("\nthe guard rail, on the page")

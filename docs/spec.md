@@ -97,6 +97,9 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   logs.py         how the running site writes its log: one format, to
                   standard error, and never a handle (ADR 0022)
   tests/          the checks, and a runner for them (ADR 0019)
+  frontend/       the topic chart, a React component, and the Vite build
+                  that turns it into static/app/app.js -- built on the
+                  author's machine, committed (ADR 0011, ADR 0025)
 ```
 
 ```

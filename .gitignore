@@ -23,3 +23,8 @@ __pycache__/
 .idea/
 Thumbs.db
 desktop.ini
+
+# The React build's installed packages (ADR 0011, ADR 0025). Recreated from
+# frontend/package-lock.json, which IS committed, by `npm ci` in frontend/.
+# The built bundle, static/app/, is committed too: the host never runs Node.
+node_modules/

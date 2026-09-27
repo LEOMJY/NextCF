@@ -220,7 +220,7 @@ def the_report_scores_first_submissions_after_the_showing():
         with conn:
             for pid, p in (("1001A", 0.52), ("1002A", 0.48), ("1003A", 0.50),
                            ("1004A", 0.51), ("1005A", 0.33)):
-                conn.execute("INSERT INTO recommendations VALUES (?, ?, ?, ?, 0.5, 'topic', NULL, 1)",
+                conn.execute("INSERT INTO recommendations VALUES (?, ?, ?, ?, 0.5, 'topic', NULL, 1, NULL)",
                              (HANDLE, pid, SHOWN_AT, p))
         db.save_sync(conn, HANDLE, 1500, [
             a_submission(1, "999A", 1600000000, "OK"),        # a_visitor's own solve
@@ -245,7 +245,7 @@ def the_report_reads_a_solve_under_either_id():
     conn = db.connect()
     try:
         with conn:
-            conn.execute("INSERT INTO recommendations VALUES (?, '1001A', ?, 0.5, 0.5, 'topic', NULL, 1)",
+            conn.execute("INSERT INTO recommendations VALUES (?, '1001A', ?, 0.5, 0.5, 'topic', NULL, 1, NULL)",
                          (HANDLE, SHOWN_AT))
         # The sync first: it stores 7001A, which the alias row has to point from.
         db.save_sync(conn, HANDLE, 1500, [a_submission(21, "7001A", SHOWN_SECONDS + 60, "OK")])
@@ -264,7 +264,7 @@ def the_author_is_left_out_of_the_report():
     conn = db.connect()
     try:
         with conn:
-            conn.execute("INSERT INTO recommendations VALUES (?, '1001A', ?, 0.5, 0.5, 'topic', NULL, 1)",
+            conn.execute("INSERT INTO recommendations VALUES (?, '1001A', ?, 0.5, 0.5, 'topic', NULL, 1, NULL)",
                          (HANDLE, SHOWN_AT))
         assert db.recommendation_calibration(conn)["shown"] == 1
         assert db.recommendation_calibration(conn, exclude_handles=(HANDLE,))["shown"] == 0

@@ -104,3 +104,43 @@ cannot do.
   one.
 - **v0.8 is larger.** This comes out of the same weeks as the design pass
   and the disk before launch.
+
+## Built — 2026-09-26, and what building it found
+
+Everything above is built. The component is `frontend/src/` (three
+components and a module of addresses). It is built into `static/app/app.js`,
+229 KB and 72 KB compressed, almost all of it React. It is loaded only on the
+results page, as a module script, after the page is drawn. Measured in a
+browser: choosing a topic swaps the five with no reload, the address follows
+it, the back button returns to the list it names, focus moves to the new
+heading, and "too hard" on a topic's list comes back to that list with only
+that topic's target moved.
+
+Three things were wrong until the browser showed them, and each has a check:
+
+- **The easier-version rule looked in the wrong place.** On a topic's list
+  the pool is that topic's problems, and 1249C1 "Good Numbers (easy
+  version)" is not tagged meet-in-the-middle while 1249C2 is. So on that list
+  C1 was not in the pool, and C2 was offered though C1 was unsolved. The rule
+  now looks at everything the visitor has not solved.
+- **Past the band, the choice ignored the target.** When fewer than five
+  problems sit within `model.BAND` of the target, `choose()` used to widen
+  the band, up to "everything", and pick from it by topic and contest alone:
+  a list aiming at 50% came out 15%, 51%, 29%, 50%, 73%, with nearer
+  problems left out. Places the band cannot fill now go to the nearest
+  problems. This affects the overall five too, for very strong visitors and
+  nearly exhausted pools. It changes no prediction.
+- **A list scattered around the target said nothing.** A small topic's five
+  can straddle 50% at 30% and 63%, and neither of ADR 0023's walls describes
+  that. The page now says so when any pick is more than twice the band from
+  the target.
+
+The small-topic fill, as decided: on the measured page the guard rail held
+for all five on meet-in-the-middle at 1491, so nothing was filled. On the
+checks' fake problemset, fft's two problems show with the one that did not
+pass marked.
+
+Checks: 18 in `tests/check_by_topic.py`; 11 component tests (Vitest, run by
+`tests/check_components.py`); `tests/check_bundle.py` for the staleness
+hash. Twenty mutations, each in a fresh copy of the repository (the Python
+code, the component, and one "edited but not rebuilt"), all caught.

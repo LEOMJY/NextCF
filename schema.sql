@@ -414,10 +414,31 @@ CREATE TABLE IF NOT EXISTS recommendations (
     source       TEXT    NOT NULL CHECK (source IN ('topic', 'rating')),
     model        TEXT,
 
-    -- 1 if ADR 0023's guard rail held, 0 if it stood aside for this visitor.
+    -- 1 if ADR 0023's guard rail held, 0 if it stood aside. Per row, because
+    -- a topic's list can mix both (ADR 0025).
     guarded      INTEGER NOT NULL CHECK (guarded IN (0, 1)),
 
+    -- The topic the list was filtered to when this problem was first shown,
+    -- NULL for the overall five (ADR 0025). The two kinds of pick answer
+    -- different questions and are judged apart.
+    topic        TEXT,
+
     PRIMARY KEY (handle, problem_id)
+) STRICT;
+
+
+-- A difficulty target per (handle, topic) -- ADR 0025. "Too hard" pressed on
+-- a topic's list moves that topic's target and nothing else, so a visitor can
+-- want easy dp and hard greedy. A row exists only once a topic's buttons
+-- have been pressed; until then the topic starts from the overall target in
+-- users.target_prob. Same reasoning as that column's chosen_at: without the
+-- timestamp, "never moved" and "moved to the same number" look alike.
+CREATE TABLE IF NOT EXISTS topic_targets (
+    handle       TEXT NOT NULL COLLATE NOCASE,
+    tag          TEXT NOT NULL,
+    target_prob  REAL NOT NULL CHECK (target_prob > 0 AND target_prob < 1),
+    chosen_at    TEXT NOT NULL,
+    PRIMARY KEY (handle, tag)
 ) STRICT;
 
 

@@ -97,7 +97,8 @@ def seed():
 
 seed()
 HTML = client.get("/results/chartuser").get_data(as_text=True)
-ROWS = re.findall(r'<tr style="--bar: ([\d.]+)%">\s*<th scope="row" class="topic-name">([^<]+)', HTML)
+# Since ADR 0025 each topic name is a link to that topic's five.
+ROWS = re.findall(r'<tr style="--bar: ([\d.]+)%">\s*<th scope="row" class="topic-name">\s*<a [^>]*>([^<]+)', HTML)
 BARS = {tag.strip(): float(pct) for pct, tag in ROWS}
 
 print("topic chart")
@@ -127,7 +128,7 @@ def a_single_solve_is_floored_so_it_can_be_seen():
 def nothing_solved_draws_nothing():
     """The floor must never turn "none" into "a little"."""
     assert BARS["geometry"] == 0.0, BARS
-    row = re.search(r'--bar: [\d.]+%">\s*<th[^>]*>geometry</th>(.*?)</tr>', HTML, re.S)
+    row = re.search(r'--bar: [\d.]+%">\s*<th[^>]*>\s*<a[^>]*>geometry</a>\s*</th>(.*?)</tr>', HTML, re.S)
     assert row, "no geometry row found"
     assert "0<span" in row.group(1) or ">0<" in row.group(1), "geometry should show 0 solved"
 
@@ -152,8 +153,8 @@ def the_rated_count_appears_only_when_it_differs():
     And dp, where every solve is rated, must not -- a caveat on every row is a
     caveat nobody reads.
     """
-    sortings = re.search(r'>sortings</th>(.*?)</tr>', HTML, re.S).group(1)
-    dp = re.search(r'>dp</th>(.*?)</tr>', HTML, re.S).group(1)
+    sortings = re.search(r'>sortings</a>\s*</th>(.*?)</tr>', HTML, re.S).group(1)
+    dp = re.search(r'>dp</a>\s*</th>(.*?)</tr>', HTML, re.S).group(1)
     assert "(2 rated)" in sortings, sortings
     assert "rated)" not in dp, dp
 

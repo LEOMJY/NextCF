@@ -226,6 +226,14 @@ def _migrate(conn):
                 "(failure IN ('rejected', 'unreachable', 'interrupted', 'internal'))"
             )
 
+    # ADR 0025. The recommendations table shipped a few hours before this
+    # column (ADR 0024); existing rows were all overall picks, which is what
+    # NULL means.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(recommendations)")}
+    if "topic" not in columns:
+        with conn:
+            conn.execute("ALTER TABLE recommendations ADD COLUMN topic TEXT")
+
     # ADR 0010. ALTER TABLE ... ADD COLUMN is metadata only: SQLite records the
     # new column and its default and does not touch a single row, so this
     # returns instantly on a 680 MB file. NOT NULL is allowed here precisely
@@ -579,8 +587,11 @@ def problemset_size(conn):
     ).fetchone()[0]
 
 
-def recommendation_pool(conn, handle):
+def recommendation_pool(conn, handle, topic=None):
     """Every problem this user could be recommended. None if not synced.
+
+    With `topic`, only problems carrying that tag (ADR 0025) -- the
+    problemset's own tags, which are the canonical problem's.
 
     Problemset problems that have a rating, minus the ones this user has
     solved. 11,102 rows before the subtraction; model.recommend() scores all
@@ -639,9 +650,31 @@ def recommendation_pool(conn, handle):
            -- contest id, so a new round of the same kind is left out too
            -- (ADR 0010, amended).
            AND p.id NOT IN (SELECT problem_id FROM problem_tags WHERE tag = '*special')
+           -- One topic's list, when one was chosen (ADR 0025).
+           AND (? IS NULL OR p.id IN (SELECT problem_id FROM problem_tags WHERE tag = ?))
         """,
-        (handle, handle),
+        (handle, handle, topic, topic),
     ).fetchall()
+
+
+def pool_topics(conn):
+    """Every topic a recommendation can be filtered to, alphabetically.
+
+    The tags on problems the pool could ever hold: in the problemset, rated,
+    not *special. What `?topic=` is checked against, and what the page offers
+    beyond the topics this visitor has practised (ADR 0025) -- somebody who
+    has never solved an fft problem may be exactly the person asking for one.
+    """
+    return [row[0] for row in conn.execute(
+        """
+        SELECT DISTINCT t.tag
+          FROM problem_tags t
+          JOIN problems p ON p.id = t.problem_id
+         WHERE p.in_problemset = 1 AND p.rating IS NOT NULL
+           AND t.tag != '*special'
+           AND p.id NOT IN (SELECT problem_id FROM problem_tags WHERE tag = '*special')
+         ORDER BY t.tag
+        """)]
 
 
 def get_job(conn, job_id):
@@ -890,7 +923,7 @@ def finish_job(conn, job_id, error=None, failure=None):
 DISMISSALS_KEPT = 50
 
 
-def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KEPT):
+def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KEPT, topic=None):
     """"Too hard" or "too easy": hide the problem AND move the target, together.
 
     One transaction for both. Until 2026-09-26 they were two functions, each
@@ -963,11 +996,33 @@ def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KE
             """,
             (handle, handle, keep),
         )
-        conn.execute(
-            "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",
-            (target, now, handle),
-        )
+        if topic is None:
+            conn.execute(
+                "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",
+                (target, now, handle),
+            )
+        else:
+            # A press on a topic's list moves that topic's target only (ADR
+            # 0025). The hiding above stays global either way: "not this
+            # problem" is about the problem, not the list it was seen in.
+            conn.execute(
+                """
+                INSERT INTO topic_targets (handle, tag, target_prob, chosen_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT (handle, tag) DO UPDATE SET target_prob = excluded.target_prob,
+                                                        chosen_at = excluded.chosen_at
+                """,
+                (handle, topic, target, now),
+            )
     return True
+
+
+def topic_target(conn, handle, tag):
+    """This visitor's own target for one topic, or None if they have never
+    pressed "too hard" or "too easy" on that topic's list (ADR 0025)."""
+    row = conn.execute(
+        "SELECT target_prob FROM topic_targets WHERE handle = ? AND tag = ?", (handle, tag)
+    ).fetchone()
+    return row[0] if row is not None else None
 
 
 def problem_exists(conn, problem_id):
@@ -1009,11 +1064,15 @@ RECOMMENDATIONS_KEPT = 500
 
 
 def record_recommendations(conn, handle, picks, target, source, model_version, guarded,
-                           keep=RECOMMENDATIONS_KEPT):
+                           keep=RECOMMENDATIONS_KEPT, topic=None):
     """Write down the problems this page is showing, the first time each is
     shown. Returns how many rows were new.
 
-    `picks` are dicts with "id" and "probability" -- the chance as computed.
+    `picks` are dicts with "id" and "probability" -- the chance as computed --
+    and, on a topic's list, "guarded" for the one row it describes: a topic's
+    five can mix problems that passed ADR 0023's guard rail with ones filled
+    in without it (ADR 0025). `guarded` is the answer for rows that do not say.
+    `topic` is the list's topic, None for the overall five.
     INSERT OR IGNORE, because a row is the FIRST showing: reloading the page,
     or a later visit that shows the same problem at a slightly different
     chance, must not overwrite what the visitor saw before they tried it.
@@ -1030,17 +1089,17 @@ def record_recommendations(conn, handle, picks, target, source, model_version, g
             cursor = conn.execute(
                 """
                 INSERT OR IGNORE INTO recommendations
-                       (handle, problem_id, shown_at, probability, target, source, model, guarded)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                       (handle, problem_id, shown_at, probability, target, source, model, guarded, topic)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (handle, pick["id"], now, pick["probability"], target, source,
-                 model_version, 1 if guarded else 0),
+                 model_version, 1 if pick.get("guarded", guarded) else 0, topic),
             )
             added += cursor.rowcount
     return added
 
 
-def recommendation_calibration(conn, exclude_handles=(), bin_width=0.1):
+def recommendation_calibration(conn, exclude_handles=(), bin_width=0.1, kind=None):
     """Of the problems the site recommended, how often was the visitor's first
     submission accepted, against how often the site said it would be?
 
@@ -1058,10 +1117,18 @@ def recommendation_calibration(conn, exclude_handles=(), bin_width=0.1):
     Returns {"shown", "tried_before", "tried", "bins": [(low, n, said, happened)]}.
     """
     handles = tuple(exclude_handles)
-    where, params = "", []
+    conditions, params = [], []
     if handles:
-        where = f"WHERE r.handle NOT IN ({', '.join('?' for _ in handles)})"
+        conditions.append(f"r.handle NOT IN ({', '.join('?' for _ in handles)})")
         params.extend(handles)
+    # ADR 0025: the overall five and a topic's five are different kinds of
+    # pick -- a topic's list reaches further for a small topic -- and are
+    # judged apart. kind=None reads both together.
+    if kind == "overall":
+        conditions.append("r.topic IS NULL")
+    elif kind == "topic":
+        conditions.append("r.topic IS NOT NULL")
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     rows = conn.execute(
         f"""
         WITH attempts AS (
@@ -1654,15 +1721,17 @@ def main():
 
         # Section 9's second-order question, and ADR 0023's open one: on the
         # problems the site CHOSE, did its chances come true? (ADR 0024)
-        live = recommendation_calibration(conn, AUTHOR_HANDLES)
-        print("\nrecommended problems, the author excluded (ADR 0024):")
-        print(f"  shown               {live['shown']}, of which {live['tried_before']} had been tried "
-              f"before they were shown (not scored)")
-        print(f"  tried afterwards    {live['tried']}, first submission judged")
-        if live["bins"]:
-            print(f"  {'site said':>11}{'happened':>10}{'tried':>7}")
-            for low, n, said, happened in live["bins"]:
-                print(f"  {said:>11.0%}{happened:>10.0%}{n:>7}")
+        # The overall five and a topic's five, apart (ADR 0025).
+        for kind, label in (("overall", "the overall five"), ("topic", "a topic's five")):
+            live = recommendation_calibration(conn, AUTHOR_HANDLES, kind=kind)
+            print(f"\nrecommended problems, {label}, the author excluded (ADR 0024):")
+            print(f"  shown               {live['shown']}, of which {live['tried_before']} had been tried "
+                  f"before they were shown (not scored)")
+            print(f"  tried afterwards    {live['tried']}, first submission judged")
+            if live["bins"]:
+                print(f"  {'site said':>11}{'happened':>10}{'tried':>7}")
+                for low, n, said, happened in live["bins"]:
+                    print(f"  {said:>11.0%}{happened:>10.0%}{n:>7}")
     finally:
         conn.close()
 

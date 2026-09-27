@@ -665,12 +665,29 @@ tbody tr:hover td {
 
 /* The row background is the chart, and a cell background would paint over it.
    The submissions table keeps its hover because a hundred rows of log need
-   the help; these rows are short, already banded by their own bars, and not
-   clickable yet. When they become clickable, hover comes back meaning
-   something. */
+   the help; these rows are short and already banded by their own bars. Since
+   ADR 0025 the topic NAME is a link, and the link's own hover says what is
+   clickable -- the row does not need to. */
 .topics tbody tr:hover td,
 .topics tbody tr:hover th {
   background: transparent;
+}
+
+/* The topic whose five are on screen (ADR 0025). Weight and a solid rule,
+   not the accent: the accent means "act here", and this is "you are here". */
+.topics a[aria-current="page"] {
+  font-weight: 600;
+  border-bottom-color: var(--ink);
+}
+
+/* A small topic's list is filled to five, and a row that did not pass the
+   guard rail says so under its name (ADR 0025). Muted and small: a caveat on
+   one row, not a warning about the page. */
+.thin-note {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-small);
+  margin-top: var(--s1);
 }
 
 /* Columns of figures line up only with tabular figures, and right alignment

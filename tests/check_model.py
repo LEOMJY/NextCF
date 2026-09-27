@@ -300,7 +300,7 @@ def a_problem_nobody_near_you_tried_is_not_offered():
     support = a_support({f"{c}A": {1500: 3} for c in range(1, 6)} | {"6A": {2500: 50}})
     rows, notes = model.guard_pool(pool, 1500, support)
     assert {r["id"] for r in rows} == {"1A", "2A", "3A", "4A", "5A"}, [r["id"] for r in rows]
-    assert notes == {"looked_up_at": None, "fallback": False}, notes
+    assert (notes["looked_up_at"], notes["fallback"]) == (None, False), notes
 
 
 def outside_the_data_the_nearest_covered_rating_is_used_and_said():
@@ -337,6 +337,18 @@ def a_later_version_is_offered_once_the_easier_one_is_out_of_the_pool():
     assert "7E2" in ids, ids
 
 
+def on_a_topic_list_the_easier_version_is_looked_for_everywhere():
+    """Found in the browser on 2026-09-26: 1249C2 "Good Numbers (hard
+    version)" is tagged meet-in-the-middle and its easy version 1249C1 is not,
+    so on the meet-in-the-middle list C1 was not in the (filtered) pool, and
+    C2 was offered though C1 was unsolved. The easier version is looked for
+    in everything the visitor has not solved, not in the list being drawn."""
+    topic_pool = [row(c, "A") for c in range(10, 16)] + [row(1249, "C2")]
+    unsolved = topic_pool + [row(1249, "C1")]
+    ids = {r["id"] for r in model.guard_pool(topic_pool, 1500, support={}, unsolved=unsolved)[0]}
+    assert "1249C2" not in ids, "a hard version offered while its easy version is unsolved elsewhere"
+
+
 def an_index_without_a_letter_is_not_a_version():
     """Contest 921 numbers its problems 01 to 14 (spec section 6)."""
     pool = [row(921, "01"), row(921, "02")] + [row(c, "A") for c in range(10, 15)]
@@ -353,6 +365,8 @@ check("too few left: the rule is not applied, and that is said", too_few_left_fa
 check("a later version waits for the easier one", a_later_version_waits_for_the_easier_one)
 check("...and is offered once the easier one is out of the pool",
       a_later_version_is_offered_once_the_easier_one_is_out_of_the_pool)
+check("on a topic's list, the easier version is looked for everywhere",
+      on_a_topic_list_the_easier_version_is_looked_for_everywhere)
 check("an index without a letter is not a version", an_index_without_a_letter_is_not_a_version)
 
 

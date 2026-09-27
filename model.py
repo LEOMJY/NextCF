@@ -1669,12 +1669,14 @@ def choose(candidates, target, count, tags_of):
     more about how a problem was labelled than about what it teaches.
 
     If fewer than `count` problems are in the band -- a very strong user, a
-    nearly exhausted pool -- it widens, doubling, until there are enough.
+    nearly exhausted pool, a small topic -- the rest of the places go to the
+    NEAREST problems outside it. Outside the band distance is information the
+    model does have, so it decides. Until 2026-09-26 the band widened instead,
+    doubling up to "everything", and the widened band was then chosen from by
+    topic and contest alone: a small topic's list at a target of 50% came out
+    15%, 51%, 29%, 50%, 73% with problems nearer than 15% and 73% left out.
     """
-    for band in (BAND, 2 * BAND, 4 * BAND, 8 * BAND, 1.0):
-        near = [(p, row) for p, row in candidates if abs(p - target) <= band]
-        if len(near) >= count:
-            break
+    near = [(p, row) for p, row in candidates if abs(p - target) <= BAND]
     near.sort(key=lambda pr: (-(pr[1]["contest_id"] or 0), pr[1]["id"]))
     chosen, covered = [], set()
     while near and len(chosen) < count:
@@ -1683,6 +1685,11 @@ def choose(candidates, target, count, tags_of):
         p, row = near.pop(best)
         chosen.append((p, row))
         covered |= set(tags_of.get(row["id"], ()))
+    if len(chosen) < count:
+        taken = {row["id"] for _, row in chosen}
+        rest = sorted(((p, row) for p, row in candidates if row["id"] not in taken),
+                      key=lambda pr: (abs(pr[0] - target), -(pr[1]["contest_id"] or 0), pr[1]["id"]))
+        chosen += rest[:count - len(chosen)]
     return chosen
 
 
@@ -1800,7 +1807,7 @@ def current_support(path=SUPPORT_PATH):
         return None
 
 
-def guard_pool(pool, rating, support=None, count=5):
+def guard_pool(pool, rating, support=None, count=5, fill=False, unsolved=None):
     """The pool with the two rules applied, and what the page should say.
 
     Returns (rows, notes). notes["looked_up_at"] is the rating the support
@@ -1809,6 +1816,19 @@ def guard_pool(pool, rating, support=None, count=5):
     fewer than `count` problems, and was not applied -- a strong visitor who
     has solved most of what people near them have tried still gets a page.
 
+    With fill=True -- a topic's list, ADR 0025 -- the rule is not lifted for
+    the whole list. The rows that pass come back as `rows`, however few, and
+    the ones that did not come back as notes["rest"]; the caller picks from
+    `rows` first and fills only the empty places from `rest`, marking those.
+    A small topic (fft has 1 candidate near 1000) would otherwise lift the
+    rule every time and put back exactly what ADR 0023 took out.
+
+    `unsolved` is everything the visitor has not solved, when `pool` is only
+    part of it -- a topic's list. The easier version is looked for there:
+    1249C1 is not tagged meet-in-the-middle, so on that list it is not in
+    `pool`, and without this 1249C2 was offered though C1 was unsolved
+    (found in the browser, 2026-09-26). Defaults to `pool`.
+
     The easier-first rule works on the pool itself. The pool is what this
     visitor has NOT solved, so "an easier version is still in the pool" is
     "they have not solved it yet". An easier version they hid themselves is
@@ -1816,10 +1836,10 @@ def guard_pool(pool, rating, support=None, count=5):
     have said what they think of the easy one.
     """
     support = current_support() if support is None else support
-    notes = {"looked_up_at": None, "fallback": False}
+    notes = {"looked_up_at": None, "fallback": False, "rest": []}
 
     waiting = set()
-    for row in pool:
+    for row in (pool if unsolved is None else unsolved):
         match = VERSION_INDEX.match(row["problem_index"] or "")
         if match:
             waiting.add((row["contest_id"], match.group(1), int(match.group(2))))
@@ -1845,6 +1865,10 @@ def guard_pool(pool, rating, support=None, count=5):
     supported = [row for row in rows
                  if attempters_near(entries.get(row["id"]), lookup) >= support["min_attempters"]]
     if len(supported) < count:
+        if fill:
+            passed = {row["id"] for row in supported}
+            notes["rest"] = [row for row in rows if row["id"] not in passed]
+            return supported, notes
         notes["fallback"] = True
         return rows, notes
     return supported, notes

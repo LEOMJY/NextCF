@@ -107,3 +107,9 @@ The same goes for the staleness check this decision relies on. It has not
 been written, because there is no bundle for it to guard: no component
 sources, no `package.json`, nothing built. It arrives in that same change,
 and the first commit of a bundle must include it.
+
+*Kept 2026-09-26 (ADR 0025): the first component arrived, and both
+obligations above arrived with it. Vitest runs its tests, and
+`tests/check_bundle.py` recomputes, in Python, the hash that
+`frontend/vite.config.js` writes beside the bundle. It normalises line
+endings, so a CRLF checkout does not fail it.*

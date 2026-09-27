@@ -194,6 +194,10 @@ MAX_REFRESH_SECONDS = 10
 # and bury the five recommendations that are the actual product.
 RESULTS_LIMIT = 10
 
+# How many problems a list offers. Five since v0.4; named since a topic's
+# list has to be filled up to it (ADR 0025).
+RECOMMENDED = 5
+
 # Spec section 9's number, for /how: `evaluate.py final` on 2026-09-18, the
 # second look at the 2026 test set (ADR 0013's amendment), for the model that
 # ships. It is the same table as spec section 9, so change the two together --
@@ -643,15 +647,30 @@ def results(handle):
     if job_id is None and stale:
         job_id = sync.start_sync(handle)
 
+    # One topic's five instead of the overall five (ADR 0025). Checked against
+    # the topics the pool can hold: a hand-typed ?topic=nonsense is a page
+    # that does not exist, not an empty list.
+    topic = request.args.get("topic") or None
+    if topic is not None and topic not in db.pool_topics(conn):
+        return render_template("error.html", handle=None,
+                               message="There is no topic by that name."), 404
+
     rows = db.get_submissions(conn, handle, limit=RESULTS_LIMIT)
 
     # This is the one page that counts as somebody using the site under a
     # handle (section 9) -- a stored history, found and shown.
     shown_handle(user["handle"])
 
-    recs = recommendation_view(conn, user)
+    recs = recommendation_view(conn, user, topic)
     if recs["state"] == "ok":
         record_shown(conn, user, recs)
+    topics = topic_rows(db.topic_breakdown(conn, handle))
+    dismissed = db.count_dismissals(conn, handle)
+    totals = db.problem_totals(conn, handle)
+    # Topics this visitor has never practised are offered too: somebody who
+    # has never solved an fft problem may be exactly who is asking for one.
+    practised = {row["tag"] for row in topics}
+    other_topics = [tag for tag in db.pool_topics(conn) if tag not in practised]
 
     return render_template(
         "results.html",
@@ -662,15 +681,16 @@ def results(handle):
         rows=[display_row(row) for row in rows],
         total=db.count_submissions(conn, handle),
         last_synced=user["last_synced"],
-        topics=topic_rows(db.topic_breakdown(conn, handle)),
-        totals=db.problem_totals(conn, handle),
+        topics=topics,
+        other_topics=other_topics,
+        totals=totals,
         recs=recs,
         # Older than the freshness window: the page says so rather than
         # letting the numbers pass for current.
         stale=stale,
         # How many problems this visitor has pushed away, so the page can
         # offer to put them back (ADR 0021).
-        dismissed=db.count_dismissals(conn, handle),
+        dismissed=dismissed,
         dismissals_kept=db.DISMISSALS_KEPT,
         # Everything the live line needs, or None when nothing is running.
         # The line's wording lives in templates/_sync_line.html, which the
@@ -678,8 +698,64 @@ def results(handle):
         # receives cannot drift into two different sentences.
         syncing=queue_view(conn, job_id) if job_id is not None else None,
         state=active["state"] if active is not None else "pending",
-        here=url_for("results", handle=handle),
+        here=url_for("results", handle=handle, topic=topic),
+        # What the topic chart component starts from (ADR 0025): the same
+        # data this template has just drawn, so the component's first render
+        # is this page, not a second opinion about it.
+        island=island_data(user["handle"], recs, dismissed, topics, other_topics, totals),
     )
+
+
+def island_data(handle, recs, dismissed, topics, other_topics, totals):
+    """Everything the topic chart component needs, as plain data -- ADR 0025.
+
+    Embedded in the page as JSON, so the component renders the same five and
+    the same chart the template drew; the addresses are worked out here, by
+    Flask, so the component never builds a URL of its own that could drift
+    from the routes.
+    """
+    return {
+        "handle": handle,
+        "recs": recs,
+        "dismissed": dismissed,
+        "dismissals_kept": db.DISMISSALS_KEPT,
+        "topics": topics,
+        "other_topics": other_topics,
+        "totals": dict(totals),
+        "urls": {
+            "results": url_for("results", handle=handle),
+            "recommendations": url_for("recommendations_data", handle=handle),
+            "feedback": url_for("feedback", handle=handle),
+            "restore": url_for("restore", handle=handle),
+            "how": url_for("how"),
+        },
+    }
+
+
+@app.route("/results/<handle>/recommendations")
+def recommendations_data(handle):
+    """One topic's five -- or the overall five -- as data, for the topic chart
+    to swap in without reloading the page (ADR 0025).
+
+    The same recommendation_view the page calls, so a topic's five cannot
+    depend on whether JavaScript ran; and shown is shown, so they are
+    recorded here as they are on the page (ADR 0024). A GET, because it
+    changes nothing a visitor chose: the record of what was shown is the
+    site's own bookkeeping, the same as a visit.
+    """
+    if not HANDLE_PATTERN.match(handle):
+        return jsonify({"error": "not a handle"}), 404
+    conn = get_db()
+    user = db.get_user(conn, handle)
+    if user is None or user["last_synced"] is None:
+        return jsonify({"error": "no stored history for this handle"}), 404
+    topic = request.args.get("topic") or None
+    if topic is not None and topic not in db.pool_topics(conn):
+        return jsonify({"error": "no such topic"}), 404
+    recs = recommendation_view(conn, user, topic)
+    if recs["state"] == "ok":
+        record_shown(conn, user, recs)
+    return jsonify({"recs": recs, "dismissed": db.count_dismissals(conn, handle)})
 
 
 def record_shown(conn, user, recs):
@@ -701,6 +777,10 @@ def record_shown(conn, user, recs):
             source=recs["source"],
             model_version=fitted.get("fitted_at") if fitted else None,
             guarded=not recs["unguarded"],
+            # Which list: None for the overall five, else the topic -- and
+            # each problem carries its own "guarded", since a small topic's
+            # five can mix both (ADR 0025).
+            topic=recs["topic"],
         )
     except sqlite3.Error as exc:
         log.warning("could not record what %s showed: %s", request.url_rule.rule, exc)
@@ -778,15 +858,26 @@ def feedback(handle):
         return render_template("error.html", handle=handle,
                                message="That problem is not one this site knows about."), 404
 
+    # Pressed on a topic's list, the press moves that topic's target, from
+    # wherever it stands -- its own, or the overall one it started from (ADR
+    # 0025). Checked like ?topic= on the page: anything can POST here.
+    topic = request.form.get("topic") or None
+    if topic is not None and topic not in db.pool_topics(conn):
+        return render_template("error.html", handle=handle,
+                               message="There is no topic by that name."), 400
+    overall = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
+    own = db.topic_target(conn, user["handle"], topic) if topic else None
+    target = own if own is not None else overall
+
     # Both halves in one transaction (db.record_feedback). As two, a crash
     # between them left the problem hidden and the target where it was --
     # half of what the visitor asked for, with nothing on the page to say so.
     # The stored spelling, not the typed one, so every row about this person
     # names them the same way.
-    target = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
     db.record_feedback(conn, user["handle"], problem_id, verdict,
-                       model.nudge_target(target, verdict))
-    return redirect(url_for("results", handle=handle))
+                       model.nudge_target(target, verdict), topic=topic)
+    # Back to the list the press was made on.
+    return redirect(url_for("results", handle=handle, topic=topic))
 
 
 @app.route("/results/<handle>/restore", methods=["POST"])
@@ -802,7 +893,9 @@ def restore(handle):
                                message="That does not look like a Codeforces handle."), 404
 
     db.clear_dismissals(get_db(), handle)
-    return redirect(url_for("results", handle=handle))
+    # Back to the list the visitor was on. Only used to build the address,
+    # and url_for escapes it, so an unknown topic costs a 404 page at worst.
+    return redirect(url_for("results", handle=handle, topic=request.form.get("topic") or None))
 
 
 @app.route("/progress/<int:job_id>/status")
@@ -958,8 +1051,14 @@ def display_row(row):
     }
 
 
-def recommendation_view(conn, user):
+def recommendation_view(conn, user, topic=None):
     """Everything the recommendations section needs, or the reason there are none.
+
+    With `topic`, the five are that topic's (ADR 0025): the pool filtered to
+    its tag, aimed at the topic's own target -- the overall one until
+    "too hard" or "too easy" has been pressed on that topic's list -- and, in
+    a topic too small for five to pass ADR 0023's guard rail, the empty places
+    filled from the rest and marked `thin` row by row.
 
     Four outcomes, and each gets its own sentence on the page, because "no
     recommendations" means four different things and a visitor deserves to
@@ -983,14 +1082,16 @@ def recommendation_view(conn, user):
     unrated = user["cf_rating"] is None
 
     if db.problemset_size(conn) == 0:
-        return {"state": "not_ready"}
+        return {"state": "not_ready", "topic": topic}
 
     # The visitor's own target if they have ever pressed "too hard" or "too
     # easy", and the product default if they have not (ADR 0021).
     # target_chosen_at is what separates the two: target_prob's own default is
     # 0.70, which is a number somebody could also choose.
-    target = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
-    pool = db.recommendation_pool(conn, user["handle"])
+    overall = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
+    own = db.topic_target(conn, user["handle"], topic) if topic else None
+    target = own if own is not None else overall
+    pool = db.recommendation_pool(conn, user["handle"], topic)
 
     # The topic model when topic_model.json exists, the rating-only baseline
     # when it does not. Never silently: `source` goes to the page, which says
@@ -1012,22 +1113,44 @@ def recommendation_view(conn, user):
     # and a harder version only after the easier one. Neither rule changes a
     # prediction; they keep the model from being asked where it has no
     # evidence. `guard` says what the page should tell the visitor about it.
-    pool, guard = model.guard_pool(pool, rating)
+    # On a topic's list, the easier-version rule looks at everything the
+    # visitor has not solved, not only this topic's problems: an easy version
+    # can carry different tags from its hard one (model.guard_pool).
+    unsolved = db.recommendation_pool(conn, user["handle"]) if topic else None
+    pool, guard = model.guard_pool(pool, rating, fill=topic is not None, unsolved=unsolved)
 
-    picks = model.topic_recommend(conn, user["handle"], rating, pool, target)
-    source = "topic"
-    if picks is None:
+    def choose_from(rows, count):
+        """The topic model's `count` nearest the target, or the baseline's
+        when there is no model file -- None if neither can serve."""
+        chosen = model.topic_recommend(conn, user["handle"], rating, rows, target, count=count)
+        if chosen is not None:
+            return chosen, "topic"
         if unrated:
-            return {"state": "unrated"}
-        picks = model.recommend(pool, user["cf_rating"], target)
-        source = "rating"
+            return None, None
+        return model.recommend(rows, user["cf_rating"], target, count=count), "rating"
+
+    picks, source = choose_from(pool, RECOMMENDED)
+    if picks is None:
+        return {"state": "unrated", "topic": topic}
+    # A topic too small for five to pass the guard rail: the empty places,
+    # and only those, from what did not pass -- marked, row by row.
+    thin = set()
+    if topic and len(picks) < RECOMMENDED and guard["rest"]:
+        extra, _ = choose_from(guard["rest"], RECOMMENDED - len(picks))
+        thin = {p["id"] for p in extra}
+        picks = picks + extra
     if not picks:
-        return {"state": "exhausted"}
+        return {"state": "exhausted", "topic": topic}
 
     baseline = model.current_baseline()
     return {
         "state": "ok",
         "source": source,
+        # The topic this list is filtered to, None for the overall five, and
+        # whether its target is its own or still the overall one (ADR 0025).
+        "topic": topic,
+        "own_target": own is not None,
+        "overall_target": round(overall * 100),
         # A rating outside what the model was fitted on is answered, but as an
         # extrapolation, and the page says so -- see model.outside_range.
         "extrapolated": source == "topic" and model.outside_range(
@@ -1077,6 +1200,11 @@ def recommendation_view(conn, user):
                     f"https://codeforces.com/problemset/problem/"
                     f"{pick['contest_id']}/{pick['problem_index']}"
                 ),
+                # Filled into a small topic's list without the guard rail's
+                # evidence (ADR 0025); the row says so, and the record of
+                # what was shown marks it unguarded.
+                "thin": pick["id"] in thin,
+                "guarded": pick["id"] not in thin and not guard["fallback"],
             }
             for pick in picks
         ],
@@ -1116,7 +1244,13 @@ def target_limits(picks, target):
     elif target <= model.TARGET_HARDEST:
         at_end = "hardest"
 
-    return {"reach": reach, "at_end": at_end}
+    # A third case, found in the browser on a small topic's list (ADR 0025):
+    # the five straddle the target but some are far from it -- 30%, 31%,
+    # 63% at a target of 50% -- because the topic has too few problems near
+    # it. Neither wall above says that. "Far" is twice the model's band.
+    scattered = reach is None and any(abs(p - target) > 2 * model.BAND for p in probabilities)
+
+    return {"reach": reach, "at_end": at_end, "scattered": scattered}
 
 
 def topic_rows(rows):

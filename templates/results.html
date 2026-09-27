@@ -57,8 +57,23 @@
        recs.state is decided in web.py's recommendation_view, and each state
        gets its own sentence, because "no recommendations" means four
        different things and the visitor deserves to know which. #}
+    {# ADR 0025: the recommendations and the topic chart are one React
+       component on pages where its bundle loads -- choosing a topic swaps
+       the five without a reload. Everything inside this div is drawn here
+       first, from the same data the component is handed below, so a page
+       without JavaScript, or whose bundle failed, is this page, and every
+       topic is still a link that works. #}
+    <div id="topic-island">
     <section class="recs">
-      <h2>Next</h2>
+      <h2>Next{% if recs.topic %} in {{ recs.topic }}{% endif %}</h2>
+
+      {% if recs.topic %}
+        {# A chosen topic, said plainly, with the way back. #}
+        <p class="meta topic-scope">
+          Only problems tagged <strong>{{ recs.topic }}</strong>.
+          <a href="{{ url_for('results', handle=handle) }}">All topics</a>
+        </p>
+      {% endif %}
 
       {% if recs.state == "ok" %}
         {# The sentence that says exactly what the number is. A bare "71%"
@@ -80,6 +95,21 @@
             {{ recs.target }}%.
             <a href="{{ url_for('how') }}">How this works</a>
           </p>
+          {# ADR 0025: each topic keeps its own target once its buttons have
+             been pressed. Until then it borrows the overall one, and the
+             page says which, because "too hard" here moves only this. #}
+          {% if recs.topic %}
+            <p class="footnote">
+              {% if recs.own_target %}
+                This is {{ recs.topic }}&rsquo;s own target: &ldquo;too hard&rdquo;
+                and &ldquo;too easy&rdquo; here move it, and nothing else.
+              {% else %}
+                The same as your overall target, until you press &ldquo;too
+                hard&rdquo; or &ldquo;too easy&rdquo; here: then
+                {{ recs.topic }} keeps a target of its own.
+              {% endif %}
+            </p>
+          {% endif %}
           {# Said plainly rather than hidden: the model learned from users
              rated roughly 350 to 2,370 at the time of their attempts, and
              beyond that its numbers are a guess with the same confidence
@@ -165,13 +195,13 @@
            web.target_limits. #}
         {% if recs.reach == "easiest" %}
           <p class="footnote">
-            Nothing left on Codeforces is as easy as {{ recs.target }}% for you:
+            Nothing left {% if recs.topic %}in {{ recs.topic }}{% else %}on Codeforces{% endif %} is as easy as {{ recs.target }}% for you:
             these are the easiest problems there are, so &ldquo;too hard&rdquo;
             can hide one but cannot find anything easier.
           </p>
         {% elif recs.reach == "hardest" %}
           <p class="footnote">
-            Nothing left on Codeforces is as hard as {{ recs.target }}% for you:
+            Nothing left {% if recs.topic %}in {{ recs.topic }}{% else %}on Codeforces{% endif %} is as hard as {{ recs.target }}% for you:
             these are the hardest problems there are, so &ldquo;too easy&rdquo;
             can hide one but cannot find anything harder.
           </p>
@@ -184,6 +214,15 @@
           <p class="footnote">
             {{ recs.target }}% is as hard as the target goes. &ldquo;Too
             easy&rdquo; still hides a problem, and no longer moves the target.
+          </p>
+        {% endif %}
+        {# Five that straddle the target but reach far from it: a topic with
+           few problems near it (web.target_limits). #}
+        {% if recs.scattered %}
+          <p class="footnote">
+            Few problems {% if recs.topic %}in {{ recs.topic }}{% else %}left{% endif %}
+            come near {{ recs.target }}% for you, so some of these are well off
+            it: the chance on each says how far.
           </p>
         {% endif %}
 
@@ -200,6 +239,12 @@
               <tr>
                 <td>
                   <a href="{{ problem.url }}">{{ problem.name }}</a>
+                  {# ADR 0025: a small topic's list is filled to five, and a
+                     problem that did not pass ADR 0023's guard rail says so
+                     on its own row -- the rest of the list did pass. #}
+                  {% if problem.thin %}
+                    <span class="thin-note">few people near your rating have tried this one, so its chance rests on less evidence</span>
+                  {% endif %}
                   {# ADR 0021. Two words under the name rather than a fourth
                      column: at 375px a column of buttons squeezes the name,
                      which is the thing being chosen between.
@@ -211,6 +256,9 @@
                   <form class="verdict-form" method="post"
                         action="{{ url_for('feedback', handle=handle) }}">
                     <input type="hidden" name="problem" value="{{ problem.id }}">
+                    {# The list the press was made on: its topic's target
+                       moves, and the page comes back to it (ADR 0025). #}
+                    {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
                     <button type="submit" name="verdict" value="too_hard">too hard</button>
                     <button type="submit" name="verdict" value="too_easy">too easy</button>
                   </form>
@@ -235,6 +283,15 @@
       {% elif recs.state == "not_ready" %}
         <p class="meta">
           The problem list is still loading. Reload in a few seconds.
+        </p>
+
+      {% elif recs.topic %}
+        {# A topic with nothing left -- solved, or hidden, or both. Not the
+           sentence below, which is about the whole of Codeforces. #}
+        <p class="meta">
+          Nothing left to recommend in {{ recs.topic }}: every rated problem
+          tagged it is one you have solved{% if dismissed %} or hidden{% endif %}.
+          <a href="{{ url_for('results', handle=handle) }}">All topics</a>
         </p>
 
       {% elif dismissed %}
@@ -266,6 +323,7 @@
          exactly the moment a visitor had hidden too much. #}
       {% if dismissed %}
         <form class="restore" method="post" action="{{ url_for('restore', handle=handle) }}">
+          {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
           <button type="submit">
             Put back the {{ dismissed }} problem{{ 's' if dismissed > 1 }} I hid
           </button>
@@ -294,17 +352,21 @@
        make the accent decoration, and ADR 0006 spends it on one meaning:
        "this is good, or this is where you act". The recommendations at v0.4
        are where it is going. #}
-    {% if topics %}
+    {% if topics or other_topics %}
       <section class="topics">
         <h2>Topics</h2>
 
         {# The honest framing, and it is short on purpose. This page is read in
            a hurry, and the claim it must not make -- that these numbers say
-           how good somebody is -- takes one sentence to refuse. #}
+           how good somebody is -- takes one sentence to refuse. The second
+           sentence is ADR 0025's: the table is now also where a topic is
+           chosen, and the page offers every topic without suggesting any. #}
         <p class="meta">
           What you have practised. Not yet how good you are at it.
+          Choose a topic to see five problems in it.
         </p>
 
+        {% if topics %}
         <table>
           <thead>
             <tr>
@@ -326,23 +388,30 @@
                is the one thing that belongs in a style attribute: it is a
                value, not a rule, and the rule using it stays in the
                stylesheet where the token system lives. #}
-            {% for topic in topics %}
-              <tr style="--bar: {{ topic.width }}%">
-                <th scope="row" class="topic-name">{{ topic.tag }}</th>
+            {# `t`, not `topic`: recs.topic is the topic this page is
+               filtered to, and a loop variable of the same name would read
+               like it. Each name is a link to that topic's five (ADR 0025),
+               marked when it is the one on screen. #}
+            {% for t in topics %}
+              <tr style="--bar: {{ t.width }}%">
+                <th scope="row" class="topic-name">
+                  <a href="{{ url_for('results', handle=handle, topic=t.tag) }}"
+                     {% if t.tag == recs.topic %}aria-current="page"{% endif %}>{{ t.tag }}</a>
+                </th>
 
                 <td class="num">
-                  {{ topic.solved }}<span class="of">/{{ topic.attempted }}</span>
+                  {{ t.solved }}<span class="of">/{{ t.attempted }}</span>
                 </td>
 
                 <td class="num">
-                  {% if topic.mean is not none %}
-                    {{ topic.mean }}
+                  {% if t.mean is not none %}
+                    {{ t.mean }}
                     {# Only shown when the average rests on fewer problems than
                        the user solved, which happens because about a third of
                        the problemset has no rating. A mean over two problems
                        and a mean over three hundred must not look alike. #}
-                    {% if topic.rated_solved != topic.solved %}
-                      <span class="of">({{ topic.rated_solved }} rated)</span>
+                    {% if t.rated_solved != t.solved %}
+                      <span class="of">({{ t.rated_solved }} rated)</span>
                     {% endif %}
                   {% else %}
                     &mdash;
@@ -369,8 +438,26 @@
           differ in how hard their problems are for everybody, so the averages
           are not yet comparable between rows.
         </p>
+        {% endif %}
+
+        {# The topics this visitor has never practised, as a line of links
+           rather than empty rows: nothing to chart, and still worth choosing
+           (ADR 0025). #}
+        {% if other_topics %}
+          <p class="meta other-topics">
+            Not practised yet:
+            {% for tag in other_topics -%}
+              <a href="{{ url_for('results', handle=handle, topic=tag) }}"
+                 {% if tag == recs.topic %}aria-current="page"{% endif %}>{{ tag }}</a>{{ ", " if not loop.last }}
+            {%- endfor %}
+          </p>
+        {% endif %}
       </section>
     {% endif %}
+    </div>
+    {# The data the component starts from: exactly what drew the page above
+       (web.island_data). tojson escapes it for the inside of a script tag. #}
+    <script type="application/json" id="topic-island-data">{{ island | tojson }}</script>
 
     {# A real account with zero submissions is a valid answer, not an error, and
        an empty table with no explanation looks like a bug. #}
@@ -507,4 +594,10 @@
       })();
     </script>
   {% endif %}
+
+  {# The topic chart component (ADR 0025), built by Vite from frontend/ and
+     committed (ADR 0011). A module script runs after the page is parsed, so
+     everything above is on screen first; if this fails to load, nothing on
+     the page stops working -- every topic is a link. #}
+  <script type="module" src="{{ url_for('static', filename='app/app.js') }}"></script>
 {% endblock %}
