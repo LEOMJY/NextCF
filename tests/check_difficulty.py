@@ -104,7 +104,8 @@ def a_visitor(rating=1500):
         }])
         with conn:
             conn.execute(
-                "UPDATE users SET target_prob = 0.70, target_chosen_at = NULL WHERE handle = ?",
+                "UPDATE users SET target_prob = 0.70, target_chosen_at = NULL, "
+                "target_step = NULL, target_direction = NULL WHERE handle = ?",
                 (HANDLE,),
             )
             conn.execute("DELETE FROM dismissals WHERE handle = ?", (HANDLE,))
@@ -184,18 +185,54 @@ a_problemset()
 a_visitor()
 
 
-# ------------------------------------------------------------------- the ladder
+# --------------------------------------------------------------- the staircase
 def too_hard_asks_for_easier_problems():
     """The inversion somebody will get backwards: easier means a HIGHER
-    chance of solving it."""
-    assert model.nudge_target(0.50, "too_hard") == 0.55, model.nudge_target(0.50, "too_hard")
-    assert model.nudge_target(0.50, "too_easy") == 0.45, model.nudge_target(0.50, "too_easy")
+    chance of solving it. "too hard" points easier; "too easy" harder."""
+    assert model.plan_direction(["too_hard"]) == "easier"
+    assert model.plan_direction(["too_easy"]) == "harder"
+    assert model.step_target(0.50, None, None, "easier") == (0.525, 0.025, "easier")
+    assert model.step_target(0.50, None, None, "harder") == (0.475, 0.025, "harder")
 
 
-def the_ladder_has_ends():
-    assert model.nudge_target(model.TARGET_EASIEST, "too_hard") == model.TARGET_EASIEST
-    assert model.nudge_target(model.TARGET_HARDEST, "too_easy") == model.TARGET_HARDEST
-    # And 0.70 is off the ladder on purpose: it is the value the column was
+def a_plans_presses_count_together():
+    """ADR 0027: one direction per plan, from the presses that outnumber the
+    others. Solves are not presses and count for nothing here."""
+    assert model.plan_direction(["too_easy", "too_easy", "too_hard", None, None]) == "harder"
+    assert model.plan_direction(["too_easy", "too_hard"]) is None, "a tie moved the target"
+    assert model.plan_direction([None] * 5) is None, "a plan nobody pressed moved the target"
+
+
+def the_step_grows_the_same_way_and_halves_on_turning():
+    """First 2.5 points, then half as much again each time it goes the same
+    way; turning round halves it."""
+    t, step, last = 0.50, None, None
+    moves = []
+    for direction in ("harder", "harder", "harder", "easier"):
+        t, step, last = model.step_target(t, step, last, direction)
+        moves.append(step)
+    exact = [0.025, 0.0375, 0.05625, 0.028125]
+    assert all(abs(a - b) < 1e-4 for a, b in zip(moves, exact)), moves
+    assert abs(t - (0.50 - 0.025 - 0.0375 - 0.05625 + 0.028125)) < 2e-4, t
+    # No evidence, no change -- not even to the step.
+    assert model.step_target(0.44, 0.0375, "harder", None) == (0.44, 0.0375, "harder")
+
+
+def the_step_has_limits():
+    """Never below one point after many turns; never above ten however long
+    it keeps going one way."""
+    step, last = 0.02, "harder"
+    for direction in ("easier", "harder", "easier", "harder"):
+        _, step, last = model.step_target(0.50, step, last, direction)
+    assert step == model.SMALLEST_STEP, step
+    _, step, _ = model.step_target(0.50, 0.09, "harder", "harder")
+    assert step == model.LARGEST_STEP, step
+
+
+def the_range_has_ends():
+    assert model.step_target(model.TARGET_EASIEST, 0.05, "easier", "easier")[0] == model.TARGET_EASIEST
+    assert model.step_target(model.TARGET_HARDEST, 0.05, "harder", "harder")[0] == model.TARGET_HARDEST
+    # And 0.70 is off the range on purpose: it is the value the column was
     # created with, and leaving it unreachable keeps "never chosen" readable.
     assert model.TARGET_EASIEST < 0.70, model.TARGET_EASIEST
 
@@ -220,31 +257,31 @@ def the_page_offers_both_buttons_on_every_problem():
 
 
 def too_hard_moves_the_target_and_says_so():
-    """The target moves at once, and the page says so at once -- as where the
-    NEXT plan will aim, since this plan keeps its five (ADR 0026). The next
-    plan is then chosen at it."""
+    """The page says at once where the NEXT plan will aim; the target itself
+    moves when this plan ends (ADR 0027), and the next plan is chosen at it."""
     a_visitor()
     first = shown_problems()
     response = press(first[0], "too_hard")
     assert response.status_code == 302, response.status_code
+    assert the_user()["target_chosen_at"] is None, "a press moved the target before its plan ended"
 
-    user = the_user()
-    expected = model.nudge_target(model.DEFAULT_TARGET, "too_hard")
-    assert user["target_prob"] == expected, user["target_prob"]
-    assert user["target_chosen_at"] is not None, "the choice was not recorded as one"
-
+    expected = model.step_target(model.DEFAULT_TARGET, None, None, "easier")[0]
     html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
-    assert f"Your next five will aim at {round(expected * 100)}%" in html, \
+    assert f"Your next five will aim at {round(expected * 100)}%" in " ".join(html.split()), \
         "the page did not say where the next plan will aim"
     assert quotes_target(model.DEFAULT_TARGET), "the plan on screen changed its target"
     swap()
+    user = the_user()
+    assert user["target_prob"] == expected, user["target_prob"]
+    assert user["target_chosen_at"] is not None, "the move was not recorded as one"
     assert quotes_target(expected), "the next plan did not aim at the new target"
 
 
 def too_easy_moves_it_the_other_way():
     a_visitor()
     press(shown_problems()[0], "too_easy")
-    assert the_user()["target_prob"] == model.nudge_target(model.DEFAULT_TARGET, "too_easy")
+    swap()
+    assert the_user()["target_prob"] == model.step_target(model.DEFAULT_TARGET, None, None, "harder")[0]
 
 
 def the_problem_goes_away_and_stays_away():
@@ -325,7 +362,9 @@ def the_page_offers_to_put_them_back():
 def putting_them_back_leaves_the_target_alone():
     a_visitor()
     press(shown_problems()[0], "too_hard")
+    swap()
     moved = the_user()["target_prob"]
+    assert moved != 0.70, "nothing moved; this checks nothing"
     client.post(f"/results/{HANDLE}/restore")
     assert the_user()["target_prob"] == moved, "undoing a dismissal moved the target"
 
@@ -341,7 +380,7 @@ def hide_everything():
             # keep= past the cap: a real pool holds 11,000 problems and the
             # cap is 50, so only a nearly exhausted pool can be emptied by
             # hiding -- this builds that pool out of sixty.
-            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55, keep=len(ids))
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard", keep=len(ids))
     finally:
         conn.close()
     return len(ids)
@@ -400,52 +439,61 @@ def a_problem_that_does_not_exist_is_refused():
 
 
 # ------------------------------------------------------------- one press, once
-def saying_the_same_thing_twice_moves_the_target_once():
+def saying_the_same_thing_twice_counts_once():
     """Found by the audit of 2026-09-26: a double-click sends the same POST
-    twice, and each moved the target a step -- 65% to 55% for one press."""
+    twice. The second finds the answer already given and changes nothing --
+    one problem, one vote at the plan's end."""
     a_visitor()
-    problem = shown_problems()[0]
-    press(problem, "too_easy")
-    once = the_user()["target_prob"]
-    press(problem, "too_easy")
-    assert the_user()["target_prob"] == once, \
-        f"the same answer twice moved the target to {the_user()['target_prob']}"
+    first = shown_problems()
+    press(first[0], "too_easy")
+    press(first[0], "too_easy")
+    press(first[1], "too_hard")
+    swap()
+    # Counted twice, the first problem would outvote the second and move the
+    # target; counted once, the two cancel and it stays.
+    assert the_user()["target_chosen_at"] is None, \
+        f"one answer said twice counted twice: the target moved to {the_user()['target_prob']}"
 
 
-def a_double_click_arriving_at_once_moves_the_target_once():
-    """Both requests in flight together, on two of the server's threads with
-    two connections. Holds even for a naive check-then-write, because both
-    requests read the target before either writes and so write the same
-    number (see db.record_feedback); kept because "two clicks at once, one
-    step" is the promise, whichever way the code keeps it."""
+def a_double_click_on_swap_moves_the_target_once():
+    """Both POSTs in flight together, on two of the server's threads with two
+    connections: both read the plan before either ends it. db.end_plan moves
+    the target only if its own UPDATE ended the plan, so the second, which
+    finds it ended, moves nothing."""
     import threading
     a_visitor()
-    problem = shown_problems()[0]
+    press(shown_problems()[0], "too_easy")
+    conn = db.connect()
+    try:
+        plan, _ = db.active_plan(conn, HANDLE, "")
+    finally:
+        conn.close()
     start = threading.Barrier(2)
 
     def one_click():
         start.wait()
-        web.app.test_client().post(f"/results/{HANDLE}/feedback",
-                                   data={"problem": problem, "verdict": "too_easy"})
+        web.app.test_client().post(f"/results/{HANDLE}/plan", data={"plan": plan["id"]})
 
     clicks = [threading.Thread(target=one_click) for _ in range(2)]
     for t in clicks:
         t.start()
     for t in clicks:
         t.join()
-    expected = model.nudge_target(model.DEFAULT_TARGET, "too_easy")
+    expected = model.step_target(model.DEFAULT_TARGET, None, None, "harder")[0]
     assert the_user()["target_prob"] == expected, \
         f"two clicks at once moved the target to {the_user()['target_prob']}, not {expected}"
 
 
-def changing_your_mind_still_counts():
-    """Too hard, then too easy on the same problem: two different answers,
-    so the target goes one way and back."""
+def changing_your_mind_counts_the_last_answer():
+    """Too hard, then too easy on the same problem: the last answer is what
+    the visitor thinks, and it is the one the plan's end counts."""
     a_visitor()
     problem = shown_problems()[0]
     press(problem, "too_hard")
     press(problem, "too_easy")
-    assert the_user()["target_prob"] == model.DEFAULT_TARGET, the_user()["target_prob"]
+    swap()
+    assert the_user()["target_prob"] == model.step_target(model.DEFAULT_TARGET, None, None, "harder")[0], \
+        the_user()["target_prob"]
 
 
 # ------------------------------------------------------------------ the cap
@@ -476,7 +524,7 @@ def a_handle_keeps_only_the_latest_fifty():
     conn = db.connect()
     try:
         for problem_id in ids:
-            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55)
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard")
     finally:
         conn.close()
     hidden = hidden_ids()
@@ -492,9 +540,9 @@ def pressing_an_old_one_again_makes_it_the_newest():
     conn = db.connect()
     try:
         for problem_id in ids[:db.DISMISSALS_KEPT]:
-            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55)
-        db.record_feedback(conn, HANDLE, ids[0], "too_easy", 0.50)        # the oldest, again
-        db.record_feedback(conn, HANDLE, ids[-1], "too_hard", 0.55)       # one past the cap
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard")
+        db.record_feedback(conn, HANDLE, ids[0], "too_easy")        # the oldest, again
+        db.record_feedback(conn, HANDLE, ids[-1], "too_hard")       # one past the cap
     finally:
         conn.close()
     hidden = hidden_ids()
@@ -507,9 +555,9 @@ def the_page_says_when_the_oldest_will_come_back():
     conn = db.connect()
     try:
         for problem_id in all_problem_ids()[:db.DISMISSALS_KEPT - 1]:
-            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55)
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard")
         below = client.get(f"/results/{HANDLE}").get_data(as_text=True)
-        db.record_feedback(conn, HANDLE, all_problem_ids()[db.DISMISSALS_KEPT], "too_hard", 0.55)
+        db.record_feedback(conn, HANDLE, all_problem_ids()[db.DISMISSALS_KEPT], "too_hard")
         at = client.get(f"/results/{HANDLE}").get_data(as_text=True)
     finally:
         conn.close()
@@ -655,23 +703,23 @@ def with_a_failing_write(trigger_sql, fn):
 
 
 def half_a_verdict_is_never_stored():
-    """Found on review: hiding the problem and moving the target were two
-    transactions, so a failure in the second left the first standing -- the
-    problem gone and the target unmoved, half of what was asked."""
+    """Found on review: two writes in two transactions, and a failure in the
+    second left the first standing. Since ADR 0027 the two are hiding the
+    problem and settling it in its plan; a failure in the second must take
+    the first with it, or the plan shows "to do" a problem that is hidden."""
     a_visitor()
     problem = shown_problems()[0]
     response = with_a_failing_write(
-        "CREATE TRIGGER failing_write BEFORE UPDATE OF target_prob ON users "
+        "CREATE TRIGGER failing_write BEFORE UPDATE ON plan_problems "
         "BEGIN SELECT RAISE(ABORT, 'simulated failure'); END",
         lambda: press(problem, "too_hard"),
     )
     assert response.status_code == 500, response.status_code
     conn = db.connect()
     try:
-        assert db.count_dismissals(conn, HANDLE) == 0, "the problem was hidden and the target never moved"
+        assert db.count_dismissals(conn, HANDLE) == 0, "the problem was hidden and never settled"
     finally:
         conn.close()
-    assert the_user()["target_chosen_at"] is None, "the target moved"
 
 
 def a_failure_at_the_write_is_not_blamed_on_the_problem():
@@ -702,9 +750,12 @@ def a_junk_handle_is_refused():
     assert client.post("/results/!!!/restore").status_code == 404
 
 
-print("the ladder")
+print("the staircase")
 check("too hard asks for easier problems", too_hard_asks_for_easier_problems)
-check("the ladder has ends, and 0.70 is off it", the_ladder_has_ends)
+check("a plan's presses count together", a_plans_presses_count_together)
+check("the step grows the same way and halves on turning", the_step_grows_the_same_way_and_halves_on_turning)
+check("the step has limits", the_step_has_limits)
+check("the range has ends, and 0.70 is off it", the_range_has_ends)
 check("an untouched target is the product default", an_untouched_target_is_the_product_default)
 
 print("\npressing them")
@@ -729,9 +780,9 @@ check("a problem that does not exist", a_problem_that_does_not_exist_is_refused)
 check("only a POST can say it", only_a_post_can_say_it)
 check("a junk handle is refused", a_junk_handle_is_refused)
 print("\none press, once")
-check("saying the same thing twice moves the target once", saying_the_same_thing_twice_moves_the_target_once)
-check("a double-click arriving at once moves the target once", a_double_click_arriving_at_once_moves_the_target_once)
-check("changing your mind still counts", changing_your_mind_still_counts)
+check("saying the same thing twice counts once", saying_the_same_thing_twice_counts_once)
+check("a double-click on swap moves the target once", a_double_click_on_swap_moves_the_target_once)
+check("changing your mind counts the last answer", changing_your_mind_counts_the_last_answer)
 
 print("\nthe cap")
 check("a handle keeps only the latest fifty", a_handle_keeps_only_the_latest_fifty)

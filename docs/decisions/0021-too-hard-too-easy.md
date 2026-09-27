@@ -172,3 +172,15 @@ same instant could not move the target twice anyway, because both work out
 the new target from the same value they read. The case that did move it
 twice was the second request arriving just after the first had committed,
 and the stored row is what stops that one.
+
+## Amendment — 2026-09-28: the target moves per plan, by a staircase
+
+Superseded in part by ADR 0027. A press still hides the problem, and still
+marks it in the plans that hold it (ADR 0026). It no longer moves the target
+by itself. The presses in one plan are counted together when the plan ends,
+and move the target once, by an adaptive step: 2.5 points first, half as
+much again each time it goes the same way, half as much when it turns
+round. The fixed 5-point step was bigger than the model's usual error about
+one person (4.2 points, measured on validation). The same answer twice
+still counts once; what now keeps a double-click from moving the target
+twice is that only the request that ends the plan writes the move.

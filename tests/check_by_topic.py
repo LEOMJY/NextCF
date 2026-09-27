@@ -101,14 +101,15 @@ def a_visitor():
             conn.execute("DELETE FROM dismissals WHERE handle = ?", (HANDLE,))
             conn.execute("DELETE FROM topic_targets WHERE handle = ?", (HANDLE,))
             conn.execute("DELETE FROM recommendations WHERE handle = ?", (HANDLE,))
+            conn.execute("DELETE FROM plans WHERE handle = ?", (HANDLE,))
         db.save_sync(conn, HANDLE, 1500, [{
             "id": 1, "creationTimeSeconds": 1600000000, "verdict": "OK",
             "author": {"participantType": "PRACTICE"},
             "problem": {"contestId": 1999, "index": "A", "name": "Solved",
                         "tags": ["math"], "rating": 900}}])
         with conn:
-            conn.execute("UPDATE users SET target_prob = 0.70, target_chosen_at = NULL WHERE handle = ?",
-                         (HANDLE,))
+            conn.execute("UPDATE users SET target_prob = 0.70, target_chosen_at = NULL, "
+                         "target_step = NULL, target_direction = NULL WHERE handle = ?", (HANDLE,))
     finally:
         conn.close()
 
@@ -147,6 +148,25 @@ def press(problem, verdict, topic=None):
     if topic:
         data["topic"] = topic
     return client.post(f"/results/{HANDLE}/feedback", data=data)
+
+
+def end(topic=None):
+    """Swap the list's plan: what moves its target, since ADR 0027."""
+    conn = db.connect()
+    try:
+        plan, _ = db.active_plan(conn, HANDLE, topic or "")
+    finally:
+        conn.close()
+    data = {"plan": str(plan["id"])}
+    if topic:
+        data["topic"] = topic
+    return client.post(f"/results/{HANDLE}/plan", data=data)
+
+
+def one_step(direction, target=None):
+    """Where a target that has never moved goes on its first step."""
+    return model.step_target(model.DEFAULT_TARGET if target is None else target,
+                             None, None, direction)[0]
 
 
 a_visitor()
@@ -193,37 +213,46 @@ def a_topic_starts_from_the_overall_target_and_says_so():
 
 
 def a_press_on_a_topic_list_moves_only_that_topic():
+    """At the end of that topic's plan (ADR 0027), and nowhere else."""
     a_visitor()
     _, html = page("dp")
     response = press(shown(html)[0], "too_hard", topic="dp")
     assert response.status_code == 302, response.status_code
     assert response.headers["Location"].endswith("?topic=dp"), response.headers["Location"]
+    assert targets() == (model.DEFAULT_TARGET, {}), f"a press moved a target before its plan ended: {targets()}"
+    end("dp")
     overall, per_topic = targets()
     assert overall == model.DEFAULT_TARGET, f"the overall target moved to {overall}"
-    assert per_topic == {"dp": model.nudge_target(model.DEFAULT_TARGET, "too_hard")}, per_topic
+    assert per_topic == {"dp": one_step("easier")}, per_topic
     _, html = page("dp")
     assert "own target" in " ".join(html.split()), "the page does not say dp now has its own"
 
 
 def a_topic_target_moves_from_where_it_stands():
+    """Two plans pointing the same way: the second step is the first grown
+    by half -- the topic's own staircase."""
     a_visitor()
     for _ in range(2):
         _, html = page("greedy")
         press(shown(html)[0], "too_easy", topic="greedy")
+        end("greedy")
     _, per_topic = targets()
-    two_steps = model.nudge_target(model.nudge_target(model.DEFAULT_TARGET, "too_easy"), "too_easy")
-    assert per_topic.get("greedy") == two_steps, per_topic
+    first = model.step_target(model.DEFAULT_TARGET, None, None, "harder")
+    second = model.step_target(*first, "harder")
+    assert per_topic.get("greedy") == second[0], (per_topic, second)
 
 
 def a_press_on_the_overall_list_leaves_topics_alone():
     a_visitor()
     _, html = page("dp")
     press(shown(html)[0], "too_hard", topic="dp")
+    end("dp")
     _, html = page()
     press(shown(html)[0], "too_easy")
+    end()
     overall, per_topic = targets()
-    assert overall == model.nudge_target(model.DEFAULT_TARGET, "too_easy"), overall
-    assert per_topic == {"dp": model.nudge_target(model.DEFAULT_TARGET, "too_hard")}, per_topic
+    assert overall == one_step("harder"), overall
+    assert per_topic == {"dp": one_step("easier")}, per_topic
 
 
 def hiding_is_global():

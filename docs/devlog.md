@@ -5245,3 +5245,87 @@ recommendations record (ADR 0024) is where that can be checked, once the
 disk keeps it.
 
 The design questions this reopens are with the author.
+
+---
+
+## 2026-09-28, later — The staircase, and the measurement checked against itself
+
+### The measurement had a flaw
+
+The spread above was put into `evaluate.py offsets`, and a check for it was
+written the only way such a number can be checked: made-up people with a
+known spread, outcomes drawn from them, and the method asked to find it.
+It did not. With a true spread of 0.166 log-odds it found 0.073 when people
+had 20 attempts each, 0.139 at 40, and only came right at 100.
+
+The cause: each person's offset was fitted exactly, and its variance taken
+at that fit. A person whose luck made them look extreme also got a large
+variance, so the method discounted exactly the people carrying the signal,
+and subtracted too much "noise". This is a known weakness of the method on
+small binary samples.
+
+The replacement is one Newton step from zero: solves minus expected solves,
+over the information in the attempts. Its variance comes from the model's
+probabilities alone, whatever the person did. On the same made-up people it
+finds 0.148 at 20 attempts, 0.155 at 40 and 0.164 at 100.
+
+Re-measured with it, the answer barely moved, because the median person in
+validation has 94 attempts:
+
+| | before | after |
+|---|---|---|
+| real spread, topic model | 4.1 points | **4.2** |
+| off by more than 5 / 7.5 / 10 | 24% / 7% / 2% | 25% / 8% / 2% |
+| rating-only baseline | 9.4 | 9.6 |
+| the part that lasts a quarter | 3.2 (58%) | 3.2 (51%) |
+
+People with at least 100 attempts alone: 3.9. `evaluate.py offsets`
+reproduces the new column, and `tests/check_offsets.py` holds the method to
+the made-up people, including the case the first version failed.
+
+The conclusion did not change, but the first number was only right by luck
+of the data, and it was not safe to assume it would be.
+
+### What was built (ADR 0027)
+
+- **A press no longer moves the target.** It hides the problem and marks it
+  in its plan, as before.
+- **When a plan ends, its presses are counted together.** The majority's
+  direction moves the target one step, in the same transaction that ends
+  the plan. A tie, or no presses, leaves it where it is.
+- **The step adapts.** 2.5 points first, ×1.5 each time it goes the same
+  way, halved when it turns round, between 1 and 10 points. Each list keeps
+  its own staircase: `users.target_step` and `target_direction`, and the same
+  on `topic_targets`, added by migration.
+- **Solves do not vote.** One plan's first attempts cannot see a typical
+  error; the model learns from solves through the history.
+- **The page shows the model's chance**, and says so under the table when
+  the next plan will aim somewhere else: "The buttons move where the next
+  five aim, not the chances: those come from your own history, and change
+  as your solves arrive." That sentence answers the question that started
+  this.
+- **`/privacy` now mentions practice plans.** It should have from the day
+  they were built; it did not.
+
+In the browser, on a local copy: two "too easy" and one "too hard" on one
+plan said the next five would aim at 52% (55 − 2.5). The swap stored 0.525,
+a step of 0.025, heading harder, and the new plan aimed there.
+
+### How it was checked
+
+New staircase checks (direction, growth, turning, limits, range), and the
+plan's end driving it end to end: a plan's presses move the target once and
+by their balance, a plan of solves moves nothing, steps grow and turn across
+plans, the page's preview is the move, each list has its own staircase, a
+failed write leaves the plan running, and a double-click on swap moves the
+target once. The per-press checks written for ADR 0021 were rewritten for
+the new rule, not deleted. 417 pass.
+
+Twenty mutations: nineteen caught. The survivor removed the test in
+`db.end_plan` that stops a request which did not end the plan from writing
+the move. On inspection it is equivalent. A late second click names a plan
+that has already ended and is turned away earlier. Two clicks at the same
+instant both work out their move from the same plan before either writes,
+so both would write the same numbers. The test stays, and its docstring now
+says what it does and does not do, as `record_feedback`'s did after the
+same kind of survivor on 2026-09-26.

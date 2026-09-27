@@ -45,6 +45,14 @@
       <em>too easy</em> on its page, which problems were hidden and the
       difficulty that was chosen.
     </p>
+    {# ADR 0026. The plans and plan_problems tables. "Solved" is not among
+       them: it is read from the public submissions above, never stored. #}
+    <p>
+      And each handle&rsquo;s practice plans: the five problems in each, when
+      it began and ended, and which were marked <em>too hard</em> or
+      <em>too easy</em>. Whether a problem in a plan was solved is not
+      stored &mdash; it is read from the public submissions.
+    </p>
     {# ADR 0024. The recommendations table: the first time each problem was
        shown on a handle's page, and the chance it was shown with. #}
     <p>

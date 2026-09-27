@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS users (
 
     -- Difficulty target from spec section 1, and READ AGAIN since
     -- 2026-09-24: the "too hard" and "too easy" buttons on each
-    -- recommendation move it one step (ADR 0021).
+    -- recommendation move it (ADR 0021) -- since 2026-09-28 once per plan,
+    -- by an adaptive staircase (ADR 0027).
     --
     -- The DEFAULT is still the 0.70 this column was created with, and it is
     -- not the product default -- that is model.DEFAULT_TARGET, 0.50 (ADR
@@ -59,6 +60,12 @@ CREATE TABLE IF NOT EXISTS users (
     -- anything and is still carrying the default this table was born with".
     -- Without it the two are the same number and the code has to guess.
     target_chosen_at TEXT,
+
+    -- The staircase's memory (ADR 0027): how far the target last moved, and
+    -- which way. The next move grows if it goes the same way and halves if
+    -- it turns round. Both NULL until the target has moved once.
+    target_step      REAL,
+    target_direction TEXT CHECK (target_direction IN ('harder', 'easier')),
 
     -- ISO-8601 UTC text, e.g. "2026-09-09T14:03:00Z". SQLite has no date
     -- type; spec section 6 has the reasoning for text over integer seconds.
@@ -488,15 +495,19 @@ CREATE TABLE IF NOT EXISTS plan_problems (
 
 -- A difficulty target per (handle, topic) -- ADR 0025. "Too hard" pressed on
 -- a topic's list moves that topic's target and nothing else, so a visitor can
--- want easy dp and hard greedy. A row exists only once a topic's buttons
--- have been pressed; until then the topic starts from the overall target in
--- users.target_prob. Same reasoning as that column's chosen_at: without the
--- timestamp, "never moved" and "moved to the same number" look alike.
+-- want easy dp and hard greedy. A row exists only once a topic's target has
+-- moved; until then the topic starts from the overall target in
+-- users.target_prob, with a staircase of its own that has not moved yet.
+-- Same reasoning as that column's chosen_at: without the timestamp, "never
+-- moved" and "moved to the same number" look alike.
 CREATE TABLE IF NOT EXISTS topic_targets (
     handle       TEXT NOT NULL COLLATE NOCASE,
     tag          TEXT NOT NULL,
     target_prob  REAL NOT NULL CHECK (target_prob > 0 AND target_prob < 1),
     chosen_at    TEXT NOT NULL,
+    -- The staircase's memory, as users.target_step and target_direction.
+    step         REAL,
+    direction    TEXT CHECK (direction IN ('harder', 'easier')),
     PRIMARY KEY (handle, tag)
 ) STRICT;
 

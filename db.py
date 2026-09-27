@@ -234,6 +234,22 @@ def _migrate(conn):
         with conn:
             conn.execute("ALTER TABLE recommendations ADD COLUMN topic TEXT")
 
+    # ADR 0027. The staircase's memory, on both places a target lives. NULL
+    # for every existing row is right: under the old fixed ladder no target
+    # had a staircase yet, so each starts from the first step.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "target_step" not in columns:
+        with conn:
+            conn.execute("ALTER TABLE users ADD COLUMN target_step REAL")
+            conn.execute("ALTER TABLE users ADD COLUMN target_direction TEXT "
+                         "CHECK (target_direction IN ('harder', 'easier'))")
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(topic_targets)")}
+    if "step" not in columns:
+        with conn:
+            conn.execute("ALTER TABLE topic_targets ADD COLUMN step REAL")
+            conn.execute("ALTER TABLE topic_targets ADD COLUMN direction TEXT "
+                         "CHECK (direction IN ('harder', 'easier'))")
+
     # ADR 0010. ALTER TABLE ... ADD COLUMN is metadata only: SQLite records the
     # new column and its default and does not touch a single row, so this
     # returns instantly on a 680 MB file. NOT NULL is allowed here precisely
@@ -341,7 +357,8 @@ def get_user(conn, handle):
     # the table later cannot silently change the shape of what callers get.
     return conn.execute(
         """
-        SELECT handle, cf_rating, target_prob, target_chosen_at, first_seen, last_synced
+        SELECT handle, cf_rating, target_prob, target_chosen_at, target_step, target_direction,
+               first_seen, last_synced
           FROM users
          WHERE handle = ?
         """,
@@ -923,44 +940,28 @@ def finish_job(conn, job_id, error=None, failure=None):
 DISMISSALS_KEPT = 50
 
 
-def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KEPT, topic=None):
-    """"Too hard" or "too easy": hide the problem AND move the target, together.
+def record_feedback(conn, handle, problem_id, reason, keep=DISMISSALS_KEPT):
+    """"Too hard" or "too easy": hide the problem, and settle it in the plans.
 
-    One transaction for both. Until 2026-09-26 they were two functions, each
-    committing on its own, called in turn -- so a crash between them, or a
-    failure in the second, left the problem hidden and the target unmoved:
-    half of what the visitor asked for, and nothing on the page to say so.
-    Inside one `with conn:` the second statement failing rolls the first back.
+    The target is NOT moved here any more (ADR 0027). Every press in one plan
+    is an answer about the same five, so they are counted together when the
+    plan ends and move the target once, by the staircase in model.py -- see
+    end_plan. Until 2026-09-28 each press moved the target 5 points at once.
+
+    One transaction for everything below, so a failure part-way leaves
+    nothing half-done: the problem is not hidden while its plan still shows
+    it to do, or the other way round.
 
     The same answer about the same problem, said twice, counts once, and
-    returns False having changed nothing. Found by the audit of 2026-09-26: a
-    double-click sends the same POST twice, and each moved the target, so one
-    press went two steps. A different answer about the same problem still
-    counts -- that is somebody changing their mind -- and replaces the first,
-    since a dismissal is one row per (person, problem) and only the latest
-    answer is what they think.
-
-    A double-click arrives one of two ways, and both count once. One after
-    the other -- the second request reads the target after the first has
-    committed -- is the way that moved it twice, and the INSERT OR IGNORE
-    below stops it: the row is already there. Both at once -- both requests
-    read the target before either writes -- could not move it twice even
-    without that, because the route works out the new target from what it
-    read, so both write the same number. (A mutation replacing this with a
-    read-then-write was therefore not caught, and on inspection could not do
-    harm: it is equivalent. The first statement is a write all the same, so
-    that no reader has to work that out again.)
+    returns False having changed nothing: a double-click sends the same POST
+    twice. A different answer about the same problem still counts -- that is
+    somebody changing their mind -- and replaces the first, since a dismissal
+    is one row per (person, problem) and only the latest answer is what they
+    think.
 
     Then only the newest `keep` dismissals for this handle survive, in the
     same transaction, so the table can never hold more than `keep` rows for
-    anybody -- not even for a moment another connection could see. The
-    timestamp on the target is what tells a chosen 0.70 from the column's
-    default 0.70 (ADR 0021).
-
-    What is still possible: two presses on two DIFFERENT problems at the same
-    instant, from two tabs, both read the target before either writes it, and
-    the target moves one step instead of two. Rare, harmless, and not worth
-    moving the target's arithmetic into this module to prevent.
+    anybody -- not even for a moment another connection could see.
     """
     now = utc_now()
     with conn:
@@ -978,7 +979,7 @@ def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KE
             (handle, problem_id, reason, now),
         )
         if cursor.rowcount == 0:
-            # Said already, in these words. Nothing moves.
+            # Said already, in these words. Nothing changes.
             return False
 
         # Newest by time, then by rowid for presses in the same second. A
@@ -996,30 +997,13 @@ def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KE
             """,
             (handle, handle, keep),
         )
-        if topic is None:
-            conn.execute(
-                "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",
-                (target, now, handle),
-            )
-        else:
-            # A press on a topic's list moves that topic's target only (ADR
-            # 0025). The hiding above stays global either way: "not this
-            # problem" is about the problem, not the list it was seen in.
-            conn.execute(
-                """
-                INSERT INTO topic_targets (handle, tag, target_prob, chosen_at) VALUES (?, ?, ?, ?)
-                ON CONFLICT (handle, tag) DO UPDATE SET target_prob = excluded.target_prob,
-                                                        chosen_at = excluded.chosen_at
-                """,
-                (handle, topic, target, now),
-            )
         # And the problem is settled in every active plan that holds it (ADR
         # 0026): it stays on the page, marked, and the plan does not refill.
         # Every plan, not only the list's: the hiding is global, so a problem
         # in both the overall plan and a topic's would otherwise stay "to do"
         # in the other one, with buttons that could no longer do anything --
-        # the INSERT above would find the row and return False. Same
-        # transaction, so the plans and the dismissal cannot disagree.
+        # the INSERT above would find the row and return False. The outcome
+        # is also what the plan's end counts to move the target (end_plan).
         conn.execute(
             """
             UPDATE plan_problems SET outcome = ?, settled_at = ?
@@ -1031,13 +1015,15 @@ def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KE
     return True
 
 
+
 def topic_target(conn, handle, tag):
-    """This visitor's own target for one topic, or None if they have never
-    pressed "too hard" or "too easy" on that topic's list (ADR 0025)."""
-    row = conn.execute(
-        "SELECT target_prob FROM topic_targets WHERE handle = ? AND tag = ?", (handle, tag)
+    """This visitor's own target for one topic -- a row with target_prob,
+    step and direction -- or None if that topic's target has never moved
+    (ADR 0025, 0027). What a missing row means is web.list_target's to say."""
+    return conn.execute(
+        "SELECT target_prob, step, direction FROM topic_targets WHERE handle = ? AND tag = ?",
+        (handle, tag),
     ).fetchone()
-    return row[0] if row is not None else None
 
 
 # ------------------------------------------------------------ practice plans
@@ -1138,7 +1124,7 @@ def create_plan(conn, handle, list_key, picks, *, target, source, rating, shown,
     return active_plan(conn, handle, list_key)
 
 
-def end_plan(conn, handle, list_key, plan_id):
+def end_plan(conn, handle, list_key, plan_id, move=None):
     """End this list's active plan: "completed" if every problem was settled
     -- solved, or pressed -- else "swapped". Returns the state it ended in,
     or None if nothing was ended. The next page view makes the next.
@@ -1147,17 +1133,59 @@ def end_plan(conn, handle, list_key, plan_id):
     A double-click sends two POSTs; by the second, the page may already have
     made the next plan, and without the id the second press would end that
     one too -- a plan swapped before it was ever seen.
+
+    `move` is where the list's target goes now that the plan is over --
+    (target, step, direction) from model.step_target -- or None to leave it
+    (ADR 0027). Written in the same transaction as the end, so the plan is
+    never ended without its move, nor the target moved with the plan still
+    running.
+
+    A double-click moves the target once, and the plan id above is what
+    does it: the second POST names a plan that has already ended. Only two
+    requests arriving at the same instant get past it, and they worked out
+    their move from the same plan and the same target before either wrote,
+    so they would write the same numbers. The rowcount test below makes the
+    second one write nothing at all, which is the same outcome said plainly.
+    (A mutation removing it survived every check for exactly that reason.)
     """
     found = active_plan(conn, handle, list_key)
     if found is None or found[0]["id"] != plan_id:
         return None
     plan, rows = found
     state = "completed" if all(row["solved"] or row["outcome"] for row in rows) else "swapped"
+    now = utc_now()
     with conn:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE plans SET state = ?, ended_at = ? WHERE id = ? AND state = 'active'",
-            (state, utc_now(), plan["id"]),
+            (state, now, plan["id"]),
         )
+        if cursor.rowcount == 0:
+            return None
+        if move is not None:
+            target, step, direction = move
+            if list_key == "":
+                conn.execute(
+                    """
+                    UPDATE users SET target_prob = ?, target_chosen_at = ?,
+                                     target_step = ?, target_direction = ?
+                     WHERE handle = ?
+                    """,
+                    (target, now, step, direction, handle),
+                )
+            else:
+                # A topic's target moves on its own (ADR 0025), and its first
+                # move creates its row.
+                conn.execute(
+                    """
+                    INSERT INTO topic_targets (handle, tag, target_prob, chosen_at, step, direction)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (handle, tag) DO UPDATE SET target_prob = excluded.target_prob,
+                                                            chosen_at = excluded.chosen_at,
+                                                            step = excluded.step,
+                                                            direction = excluded.direction
+                    """,
+                    (handle, list_key, target, now, step, direction),
+                )
     return state
 
 

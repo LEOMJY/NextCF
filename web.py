@@ -833,11 +833,10 @@ def resync(handle):
 def feedback(handle):
     """"Too hard" or "too easy" on one recommendation -- ADR 0021.
 
-    Two things happen, because the visitor is saying two things at once: that
-    problem is settled, and their difficulty target moves one step. Then back
-    to their page, where the problem stays in the plan, marked, and the page
-    says what the next plan will aim at (ADR 0026) -- the plan on screen keeps
-    its five.
+    The problem is hidden and settled in its plan, where it stays, marked
+    (ADR 0026). The difficulty target moves later: when the plan ends, by
+    what all of its presses say together (ADR 0027). The page says now where
+    the next plan will aim.
 
     POST and a redirect, like every other button here: a GET that changes
     something is followed by anything that walks the page, and a redirect is
@@ -870,24 +869,19 @@ def feedback(handle):
         return render_template("error.html", handle=handle,
                                message="That problem is not one this site knows about."), 404
 
-    # Pressed on a topic's list, the press moves that topic's target, from
-    # wherever it stands -- its own, or the overall one it started from (ADR
-    # 0025). Checked like ?topic= on the page: anything can POST here.
+    # The list the press was made on, for the way back. Checked like ?topic=
+    # on the page: anything can POST here.
     topic = request.form.get("topic") or None
     if topic is not None and topic not in db.pool_topics(conn):
         return render_template("error.html", handle=handle,
                                message="There is no topic by that name."), 400
-    overall = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
-    own = db.topic_target(conn, user["handle"], topic) if topic else None
-    target = own if own is not None else overall
 
-    # Both halves in one transaction (db.record_feedback). As two, a crash
-    # between them left the problem hidden and the target where it was --
-    # half of what the visitor asked for, with nothing on the page to say so.
-    # The stored spelling, not the typed one, so every row about this person
-    # names them the same way.
-    db.record_feedback(conn, user["handle"], problem_id, verdict,
-                       model.nudge_target(target, verdict), topic=topic)
+    # Hidden, and settled in the plans that hold it, in one transaction
+    # (db.record_feedback). The target does not move here: the plan's presses
+    # move it together when the plan ends (ADR 0027, new_plan). The stored
+    # spelling, not the typed one, so every row about this person names them
+    # the same way.
+    db.record_feedback(conn, user["handle"], problem_id, verdict)
     # Back to the list the press was made on.
     return redirect(url_for("results", handle=handle, topic=topic))
 
@@ -940,10 +934,50 @@ def new_plan(handle):
                                message="There is no topic by that name."), 400
     user = db.get_user(conn, handle)
     if user is not None:
+        # The plan's presses, together, move the list's target -- once, now
+        # that the plan is over (ADR 0027). Worked out from the plan as it
+        # stands; db.end_plan writes it only if this request is the one that
+        # ends the plan, so a double-click moves the target once.
+        found = db.active_plan(conn, user["handle"], topic or "")
+        move = next_move(conn, user, topic, [row["outcome"] for row in found[1]]) if found else None
         # The stored spelling: the plan was made under it. NOCASE would find
         # it either way; this keeps every row about a person naming them one way.
-        db.end_plan(conn, user["handle"], topic or "", int(plan_id))
+        db.end_plan(conn, user["handle"], topic or "", int(plan_id), move)
     return redirect(url_for("results", handle=handle, topic=topic))
+
+
+def list_target(conn, user, topic=None):
+    """Where one list's target stands, and its staircase's memory -- ADR 0027.
+
+    Returns {"target", "step", "direction", "own"}. For the overall list:
+    the visitor's own target once it has moved, else the product default.
+    target_chosen_at is what separates the two, because target_prob's own
+    default is 0.70, which is a number somebody could also reach (ADR 0021).
+    For a topic: its own row once its target has moved (ADR 0025); until
+    then it starts from wherever the overall target is, with a staircase of
+    its own that has not moved yet. `own` says which, for the page.
+    """
+    overall = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
+    if topic is None:
+        return {"target": overall, "step": user["target_step"],
+                "direction": user["target_direction"], "own": user["target_chosen_at"] is not None}
+    row = db.topic_target(conn, user["handle"], topic)
+    if row is None:
+        return {"target": overall, "step": None, "direction": None, "own": False}
+    return {"target": row["target_prob"], "step": row["step"],
+            "direction": row["direction"], "own": True}
+
+
+def next_move(conn, user, topic, outcomes):
+    """Where a list's target goes when a plan with these presses ends:
+    (target, step, direction) from model.step_target, or None if the presses
+    point nowhere and it stays -- ADR 0027. The page's "your next five will
+    aim at" and the end of the plan both ask this, so they cannot differ."""
+    direction = model.plan_direction(outcomes)
+    if direction is None:
+        return None
+    now = list_target(conn, user, topic)
+    return model.step_target(now["target"], now["step"], now["direction"], direction)
 
 
 @app.route("/progress/<int:job_id>/status")
@@ -1138,16 +1172,10 @@ def recommendation_view(conn, user, topic=None):
     if db.problemset_size(conn) == 0:
         return {"state": "not_ready", "topic": topic}
 
-    # The visitor's own target if they have ever pressed "too hard" or "too
-    # easy", and the product default if they have not (ADR 0021).
-    # target_chosen_at is what separates the two: target_prob's own default is
-    # 0.70, which is a number somebody could also choose. On a topic's list,
-    # that topic's own target once it has one (ADR 0025). This is the target
-    # the NEXT plan will aim at; the plan on screen keeps the one it was made
-    # with (ADR 0026).
-    overall = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
-    own = db.topic_target(conn, user["handle"], topic) if topic else None
-    target_now = own if own is not None else overall
+    # Where this list's target stands now (list_target): what a NEW plan is
+    # made at. The plan on screen keeps the one it was made with (ADR 0026).
+    standing = list_target(conn, user, topic)
+    target_now = standing["target"]
 
     # ADR 0026: the list's plan, if it has one -- the same five until the
     # visitor asks for the next -- else a new plan made from a fresh choice.
@@ -1181,6 +1209,11 @@ def recommendation_view(conn, user, topic=None):
 
     probabilities = [{"probability": row["probability"]} for row in rows]
     settled = sum(1 for row in rows if row["solved"] or row["outcome"])
+    # Where the next plan will aim if this one ended now: this plan's presses
+    # taken together, one step of the staircase (ADR 0027) -- the same
+    # next_move the end of the plan applies.
+    move = next_move(conn, user, topic, [row["outcome"] for row in rows])
+    next_target = move[0] if move else target_now
     baseline = model.current_baseline()
     return {
         "state": "ok",
@@ -1188,8 +1221,8 @@ def recommendation_view(conn, user, topic=None):
         # The topic this list is filtered to, None for the overall five, and
         # whether its target is its own or still the overall one (ADR 0025).
         "topic": topic,
-        "own_target": own is not None,
-        "overall_target": round(overall * 100),
+        "own_target": standing["own"] if topic else False,
+        "overall_target": round(list_target(conn, user)["target"] * 100),
         # A rating outside what the model was fitted on is answered, but as an
         # extrapolation, and the page says so -- see model.outside_range.
         "extrapolated": source == "topic" and model.outside_range(
@@ -1199,9 +1232,9 @@ def recommendation_view(conn, user, topic=None):
         "shown": shown,
         "computed": used,
         # What this plan aims at, and what the next one will: they differ once
-        # "too hard" or "too easy" has been pressed on it (ADR 0026).
+        # this plan's presses point one way (ADR 0026, 0027).
         "target": round(target * 100),
-        "next_target": round(target_now * 100),
+        "next_target": round(next_target * 100),
         # The guard rail's two notes, as they were when the plan was made: the
         # rating it looked the visitor up at when theirs is outside the data,
         # and whether it had to stand aside (model.guard_pool).

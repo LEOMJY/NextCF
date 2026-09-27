@@ -222,7 +222,11 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
           {/* The end of a plan, by asking only (ADR 0026) -- the template's
               form, naming the plan it ends. */}
           {recs.next_target !== recs.target && (
-            <p className="footnote">Your next five will aim at {recs.next_target}%.</p>
+            <p className="footnote">
+              Your next five will aim at {recs.next_target}%. The buttons move where the next
+              five aim, not the chances: those come from your own history, and change as your
+              solves arrive.
+            </p>
           )}
           <form className="plan-next" method="post" action={urls.plan}>
             <input type="hidden" name="plan" value={recs.plan.id} />

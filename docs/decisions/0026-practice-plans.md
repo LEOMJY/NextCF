@@ -124,3 +124,12 @@ list was offered the same day and not chosen.
 - **Two new tables**, `plans` and `plan_problems`, filled only on the server.
   Like everything else there, they survive only once the disk is attached
   (ADR 0017).
+
+## Amendment — 2026-09-28: how a plan's presses move the target
+
+"The target now moves for the next plan" is kept, and made exact by ADR
+0027. A press no longer moves the target when it is made. When a plan ends,
+its presses are counted together, "too easy" against "too hard", and the
+target takes one step of an adaptive staircase, in the same transaction
+that ends the plan. Solves are not counted; the model learns from them
+through the visitor's history.

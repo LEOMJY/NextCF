@@ -37,6 +37,7 @@ LEAKAGE RULES, which fail without an error message if broken:
 Usage, on the author's machine:
     .venv\\Scripts\\python.exe evaluate.py baseline
     .venv\\Scripts\\python.exe evaluate.py ladder
+    .venv\\Scripts\\python.exe evaluate.py offsets     how far off, per person
     .venv\\Scripts\\python.exe evaluate.py final
 """
 
@@ -490,6 +491,119 @@ def run_rolling(data, train, valid, config):
     print(f"\nmonthly refit is worth {frozen['total'] - rolling['total']:+.4f} on validation")
 
 
+# ------------------------------------------------- how far off, per person
+#
+# Added 2026-09-28 for ADR 0027. The "too hard" / "too easy" staircase needs a
+# first step, and the right size depends on how wrong the model usually is
+# about ONE person -- which section 9's log loss, an average over everybody,
+# does not say. This measures it on validation, with the same frozen fit and
+# fold-in as the ladder.
+
+def logit(p):
+    """Probability -> log-odds, clipped so 0 and 1 stay finite."""
+    p = min(max(p, 1e-6), 1 - 1e-6)
+    return math.log(p / (1 - p))
+
+
+def offset_of(zs, ys):
+    """One person's offset: roughly the shift in log-odds, added to every one
+    of their predictions, that would make them fit that person's outcomes.
+
+    `zs` are the model's log-odds for their attempts, `ys` what happened.
+    (solves - expected solves) / information -- one Newton step from zero.
+    Returns (offset, variance): the variance is how much of the offset could
+    be luck, one over the information in their attempts. Twenty coin-flip
+    attempts carry little; five hundred carry a lot.
+
+    One step, not a fit run to convergence, and on purpose. The first version
+    fitted each person exactly and took the variance at that fit. Checked on
+    made-up people with a known spread (tests/check_offsets.py), it found
+    less than half of it when people had 20 attempts: an extreme estimate
+    came with a large variance of its own, so real_spread discounted exactly
+    the people who carried the signal. Here the variance comes from the
+    model's probabilities alone, the same whatever the person did, and the
+    spread comes back within a tenth even at 20 attempts. What is given up is
+    a little accuracy for people far from the model, whose offset one step
+    understates -- a few percent at the sizes measured.
+    """
+    ps = [model.sigmoid(z) for z in zs]
+    information = sum(p * (1 - p) for p in ps)
+    return sum(y - p for y, p in zip(ys, ps)) / information, 1 / information
+
+
+def real_spread(estimates):
+    """How much people really differ, with the luck taken out.
+
+    Every person's offset is estimated with noise, so the offsets you SEE are
+    more spread out than the offsets people HAVE. This is DerSimonian-Laird,
+    the method meta-analyses use to combine studies of different sizes: weigh
+    each estimate by how precise it is, measure how much more they disagree
+    than their own noise explains, and call the excess the real spread, tau.
+    Returns (mean, tau), both in log-odds.
+    """
+    w = [1 / v for _, v in estimates]
+    total = sum(w)
+    mean = sum(wi * d for wi, (d, _) in zip(w, estimates)) / total
+    q = sum(wi * (d - mean) ** 2 for wi, (d, _) in zip(w, estimates))
+    tau2 = (q - (len(estimates) - 1)) / (total - sum(wi * wi for wi in w) / total)
+    return mean, math.sqrt(max(0.0, tau2))
+
+
+def as_points(d):
+    """A shift in log-odds, as percentage points at 50% -- the unit of the
+    target, so the answer reads directly as a staircase step."""
+    return 100 * (model.sigmoid(d) - 0.5)
+
+
+def run_offsets(data, train, valid, min_attempts=20):
+    """Section 9's model on validation, and how far off it is per person."""
+    log = lambda msg: print(msg, flush=True)
+    cfg = ROUND_THREE
+    m = model.TopicModel(cfg["groups"], cfg["lam"], extras=cfg["extras"])
+    ps = evaluate_model(m, data, train, valid, cfg["halflife"], log=log)
+    base, _ = baseline_predictions(data, train, valid)
+    print_report("round three, frozen, validation", report(data, valid, ps))
+
+    def spread_of(predictions, months=None, least=min_attempts):
+        """Each person's (offset, variance), for those with `least` attempts
+        in `months` (None: all of validation)."""
+        by_user = defaultdict(lambda: ([], []))
+        for i, p in zip(valid, predictions):
+            if months is None or data.month[i] in months:
+                by_user[data.u[i]][0].append(logit(p))
+                by_user[data.u[i]][1].append(data.y[i])
+        return {u: offset_of(zs, ys) for u, (zs, ys) in by_user.items() if len(ys) >= least}
+
+    # Normal around the mean with sd tau: the share of people off by more
+    # than x. From tau, not from each person's estimate -- those are pulled
+    # toward the mean by their own noise and would understate the tails.
+    def beyond(mean, tau, x):
+        cdf = lambda z: 0.5 * (1 + math.erf(z / math.sqrt(2)))
+        return (1 - cdf((x - mean) / tau)) + cdf((-x - mean) / tau)
+
+    print(f"\n{'':<24}{'people':>8}{'bias':>7}{'spread':>8}   off by more than 5 / 7.5 / 10 points")
+    for name, predictions in (("topic model", ps), ("rating-only baseline", base)):
+        est = spread_of(predictions)
+        mean, tau = real_spread(list(est.values()))
+        shares = "  ".join(f"{beyond(mean, tau, logit(0.5 + x / 100)):4.0%}" for x in (5, 7.5, 10))
+        print(f"{name:<24}{len(est):>8,}{as_points(mean):>+7.1f}{as_points(tau):>8.1f}   {shares}")
+
+    # Is an offset a trait? The luck in two halves of the same person's
+    # attempts is independent, so the covariance of their two estimates is
+    # the variance of the part that lasts.
+    # 15 attempts a quarter rather than 20: half the time, nearly as much to
+    # go on per attempt, and enough people left in both halves.
+    q3 = spread_of(ps, ("2025-07", "2025-08", "2025-09"), least=15)
+    q4 = spread_of(ps, ("2025-10", "2025-11", "2025-12"), least=15)
+    both = [u for u in q3 if u in q4]
+    a = [q3[u][0] for u in both]
+    b = [q4[u][0] for u in both]
+    ma, mb = sum(a) / len(a), sum(b) / len(b)
+    lasting = sum((x - ma) * (y - mb) for x, y in zip(a, b)) / (len(both) - 1)
+    print(f"\nthe part that lasts from one quarter to the next: "
+          f"{as_points(math.sqrt(max(lasting, 0.0))):.1f} points ({len(both):,} people in both)")
+
+
 # ---------------------------------------------------------------- the test
 
 # What each ladder chose on validation. Filled in from the ladders' output and
@@ -582,7 +696,7 @@ def run_final(data, train, valid, test):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("command", choices=("baseline", "ladder", "extras", "rolling", "final"))
+    parser.add_argument("command", choices=("baseline", "ladder", "extras", "rolling", "offsets", "final"))
     parser.add_argument("--db", default="dataset.db")
     parser.add_argument("--users", type=int, default=None,
                         help="keep only the first N users -- a quick run that "
@@ -625,6 +739,10 @@ def main():
         if config is None:
             raise SystemExit("record a ladder's choice first.")
         run_rolling(data, train, valid, config)
+        return
+
+    if args.command == "offsets":
+        run_offsets(data, train, valid)
         return
 
     if args.command == "final":

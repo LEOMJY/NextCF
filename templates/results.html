@@ -302,8 +302,17 @@
            the plan it ends, so a double-click cannot end the next one too
            (web.new_plan). A press moves the target for the NEXT plan, and
            the page says where that will be before the visitor asks for it. #}
+        {# ADR 0027: the presses in a plan move the target together, once,
+           when it ends -- and they move the aim, not the chances. Said,
+           because a visitor who calls a 50% problem too easy expects the
+           number to change, and it does not: the chances come from their
+           history, which a press does not add to and a solve does. #}
         {% if recs.next_target != recs.target %}
-          <p class="footnote">Your next five will aim at {{ recs.next_target }}%.</p>
+          <p class="footnote">
+            Your next five will aim at {{ recs.next_target }}%. The buttons move
+            where the next five aim, not the chances: those come from your own
+            history, and change as your solves arrive.
+          </p>
         {% endif %}
         <form class="plan-next" method="post" action="{{ url_for('new_plan', handle=handle) }}">
           <input type="hidden" name="plan" value="{{ recs.plan.id }}">

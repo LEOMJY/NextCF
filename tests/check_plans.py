@@ -105,8 +105,8 @@ def a_visitor(rating=1500):
             conn.execute("DELETE FROM dismissals WHERE handle = ?", (HANDLE,))
             conn.execute("DELETE FROM topic_targets WHERE handle = ?", (HANDLE,))
             conn.execute("DELETE FROM plans WHERE handle = ?", (HANDLE,))
-            conn.execute("UPDATE users SET target_prob = 0.70, target_chosen_at = NULL WHERE handle = ?",
-                         (HANDLE,))
+            conn.execute("UPDATE users SET target_prob = 0.70, target_chosen_at = NULL, "
+                         "target_step = NULL, target_direction = NULL WHERE handle = ?", (HANDLE,))
     finally:
         conn.close()
 
@@ -274,7 +274,7 @@ def a_plan_outlives_an_emptied_pool():
     try:
         every = [row[0] for row in conn.execute("SELECT id FROM problems WHERE in_problemset = 1")]
         for problem_id in every:
-            db.record_feedback(conn, HANDLE, problem_id, "too_hard", 0.55, keep=len(every))
+            db.record_feedback(conn, HANDLE, problem_id, "too_hard", keep=len(every))
     finally:
         conn.close()
     html = page()
@@ -444,7 +444,7 @@ def swapping_ends_it_and_the_next_aims_at_the_new_target():
     assert response.status_code == 302, response.status_code
     assert history()[0]["state"] == "swapped", history()
     second = the_plan()
-    assert second[0]["target"] == model.nudge_target(model.DEFAULT_TARGET, "too_hard"), \
+    assert second[0]["target"] == model.step_target(model.DEFAULT_TARGET, None, None, "easier")[0], \
         f"the next plan aims at {second[0]['target']}"
     assert first[0] not in [r["id"] for r in second[1]], "the pressed problem came back"
 
@@ -532,6 +532,118 @@ def a_topic_plan_is_ended_on_its_own_list():
     response = end("dp")
     assert response.headers["Location"].endswith("?topic=dp"), response.headers["Location"]
     assert history()[0]["list"] == "dp", history()
+
+
+# ------------------------------------------ the target moves when a plan ends
+def the_user():
+    conn = db.connect()
+    try:
+        return db.get_user(conn, HANDLE)
+    finally:
+        conn.close()
+
+
+def a_plans_presses_move_the_target_once_by_their_balance():
+    """ADR 0027: three "too easy" and one "too hard" in one plan are one
+    step harder, taken when the plan ends -- not three steps, and not before."""
+    a_visitor()
+    first = ids()
+    for problem, verdict in zip(first, ("too_easy", "too_easy", "too_easy", "too_hard")):
+        press(problem, verdict)
+    assert the_user()["target_chosen_at"] is None, "the target moved before the plan ended"
+    end()
+    user = the_user()
+    assert (user["target_prob"], user["target_step"], user["target_direction"]) == \
+        model.step_target(model.DEFAULT_TARGET, None, None, "harder"), dict(user)
+
+
+def a_plan_nobody_pressed_leaves_the_target():
+    """Solves teach the model through the visitor's history; they do not move
+    the target (devlog, 2026-09-28: one plan's results cannot tell a right
+    model from one 4 points off)."""
+    a_visitor()
+    first = ids()
+    for problem in first:
+        a_solve(problem, seconds_from_now=0)
+    end()
+    assert history()[0]["state"] == "completed", history()
+    assert the_user()["target_chosen_at"] is None, "a plan of solves moved the target"
+
+
+def the_staircase_grows_and_turns_across_plans():
+    """Two plans pointing harder, then one pointing easier: 2.5, then 3.75,
+    then back by half of that."""
+    a_visitor()
+    expected = (model.DEFAULT_TARGET, None, None)
+    for verdict, direction in (("too_easy", "harder"), ("too_easy", "harder"), ("too_hard", "easier")):
+        press(ids()[0], verdict)
+        end()
+        expected = model.step_target(*expected, direction)
+        user = the_user()
+        assert (user["target_prob"], user["target_step"], user["target_direction"]) == expected, \
+            (dict(user), expected)
+    assert abs(expected[1] - model.FIRST_STEP * model.GROWTH * model.SHRINK) < 1e-4, expected
+
+
+def the_page_says_what_the_end_will_do():
+    """The "next five will aim at" line and the move made at the plan's end
+    are one function (web.next_move); checked here as a visitor sees them."""
+    a_visitor()
+    first = ids()
+    press(first[0], "too_easy")
+    press(first[1], "too_easy")
+    said = flat(page())
+    end()
+    moved = round(the_user()["target_prob"] * 100)
+    assert f"Your next five will aim at {moved}%" in said, (moved, said[:300])
+    # And what the buttons do NOT do, which is the question that led here: a
+    # visitor who calls a 50% problem too easy expects the chance to change.
+    assert "move where the next five aim, not the chances" in said, "the page does not say what a press moves"
+
+
+def privacy_says_plans_are_kept():
+    page_text = " ".join(client.get("/privacy").get_data(as_text=True).split())
+    assert "practice plans" in page_text, "/privacy does not mention the plans"
+    assert "not stored" in page_text, "/privacy does not say solved is read, not kept"
+
+
+def each_list_keeps_its_own_staircase():
+    """The overall list's two steps harder do not make dp's first step big."""
+    a_visitor()
+    for _ in range(2):
+        press(ids()[0], "too_easy")
+        end()
+    press(ids("dp")[0], "too_easy", topic="dp")
+    end("dp")
+    conn = db.connect()
+    try:
+        row = db.topic_target(conn, HANDLE, "dp")
+    finally:
+        conn.close()
+    assert row["step"] == model.FIRST_STEP, f"dp's first step was {row['step']}"
+
+
+def a_failed_move_leaves_the_plan_running():
+    """Ending the plan and moving the target are one transaction: if the
+    move cannot be written, the plan is not ended either, and the visitor can
+    press again."""
+    a_visitor()
+    first = ids()
+    press(first[0], "too_easy")
+    plan_id = the_plan()[0]["id"]
+    conn = db.connect()
+    try:
+        with conn:
+            conn.execute("CREATE TRIGGER failing_write BEFORE UPDATE OF target_prob ON users "
+                         "BEGIN SELECT RAISE(ABORT, 'simulated failure'); END")
+        response = end(plan_id=plan_id)
+    finally:
+        with conn:
+            conn.execute("DROP TRIGGER IF EXISTS failing_write")
+        conn.close()
+    assert response.status_code == 500, response.status_code
+    assert the_plan()[0]["id"] == plan_id, "the plan ended though its move was never written"
+    assert the_user()["target_chosen_at"] is None, "the target moved"
 
 
 # ---------------------------------------------------------------- history
@@ -639,6 +751,16 @@ check("the page's button names its plan", the_page_s_button_names_its_plan)
 check("a week later, swapped problems may come back", a_week_later_they_may_come_back)
 check("the plan route refuses junk", the_plan_route_refuses_junk)
 check("a topic's plan is ended on its own list", a_topic_plan_is_ended_on_its_own_list)
+
+print("\nthe target moves when a plan ends")
+check("a plan's presses move the target once, by their balance",
+      a_plans_presses_move_the_target_once_by_their_balance)
+check("a plan nobody pressed leaves the target", a_plan_nobody_pressed_leaves_the_target)
+check("the staircase grows and turns across plans", the_staircase_grows_and_turns_across_plans)
+check("the page says what the end will do", the_page_says_what_the_end_will_do)
+check("each list keeps its own staircase", each_list_keeps_its_own_staircase)
+check("a failed move leaves the plan running", a_failed_move_leaves_the_plan_running)
+check("/privacy says plans are kept", privacy_says_plans_are_kept)
 
 print("\nhistory")
 check("no history until a plan ends", no_history_until_a_plan_ends)

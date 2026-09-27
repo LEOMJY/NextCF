@@ -201,7 +201,7 @@ because the landing page has a different job from the tool — see §7.1.
 | `/progress/<job>` | Show a long job making progress without lying about it | v0.2 |
 | `/progress/<job>/status` | The same job as one line, for a results page to keep current — ADR 0018 | v0.7 |
 | `POST /results/<handle>/sync` | Fetch this handle again because the visitor asked, then back to their page — ADR 0018 | v0.7 |
-| `POST /results/<handle>/feedback` | "Too hard" or "too easy" on one problem: hide it, move the target one step — ADR 0021 | v0.7 |
+| `POST /results/<handle>/feedback` | "Too hard" or "too easy" on one problem: hide it and mark it in its plan; the plan's presses move the target when it ends — ADR 0021, 0027 | v0.7 |
 | `POST /results/<handle>/restore` | Put back every problem this visitor has hidden — ADR 0021 | v0.7 |
 | `/results/<handle>` | Five problems, the probability on each, the topic breakdown | v0.1 crude, v0.4 real |
 | `/results/<handle>?topic=<tag>` | The same page, five problems in one topic, at that topic's own target — ADR 0025 | v0.8 |
@@ -287,6 +287,10 @@ users
                             only once the visitor has moved it (ADR 0021)
   target_chosen_at text   — when they last moved it; NULL means never,
                             which is what separates the two defaults
+  target_step    real     — the size of the target's last move, and
+  target_direction text   — its direction, "harder" or "easier": the
+                            staircase's memory (ADR 0027); both NULL until
+                            the target has moved
   first_seen     text     — ISO-8601 UTC
   last_synced    text     — ISO-8601 UTC; NULL until a sync completes
 
@@ -359,8 +363,10 @@ topic_targets                                           nextcf.db only
   target_prob    real     — that topic's difficulty target, moved by "too
                             hard" and "too easy" pressed on that topic's list
   chosen_at      text     — ISO-8601 UTC
-                            one row per (handle, topic), only once pressed;
-                            until then a topic starts from the overall target
+  step, direction         — that topic's staircase, as in users (ADR 0027)
+                            one row per (handle, topic), only once its target
+                            has moved; until then a topic starts from the
+                            overall target
                             (ADR 0025)
 
 plans                                                   nextcf.db only
@@ -746,7 +752,8 @@ Three things, each because the product needs it rather than because it decorates
 
 The target-probability control named above shipped on 2026-09-24, and not
 as a control: two words under each problem, "too hard" and "too easy",
-which hide that problem and move the visitor's target one step (ADR 0021).
+which hide that problem and, when its plan ends, move the visitor's target
+by an adaptive step (ADR 0021, 0027).
 A slider would have been more precise and less pressable; the complaint a
 visitor actually has is not a number.
 

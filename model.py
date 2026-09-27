@@ -88,17 +88,31 @@ EVENTS = ("first_try", "eventually")
 # always was.
 DEFAULT_TARGET = 0.50
 
-# One press of "too hard" or "too easy" moves the target this far along.
+# The target moves by an adaptive staircase, once per plan (ADR 0027).
 #
-# Five points of probability is not a round number chosen for looking tidy: on
-# the fitted baseline (ADR 0012, a = 0.2550, b = 0.1215 per 100 rating points)
-# 50% sits 210 rating points ABOVE the visitor and 55% sits 45 above, so one
-# press is worth about 165 rating points. Small enough that two presses are not
-# absurd, large enough that the five problems visibly change -- which they must,
-# or the button looks broken.
-TARGET_STEP = 0.05
+# Until 2026-09-28 every press moved it a fixed 5 points. Two things replaced
+# that. Plans (ADR 0026): several presses in one plan are all answers about
+# the same five, so they are counted together and move the target once, when
+# the plan ends. And a measurement: on validation, how far off the topic
+# model is about one person has a real spread of 4.1 points at 50% (devlog,
+# 2026-09-28) -- three people in four are within 5. A first step of 5 was
+# already bigger than the error it usually corrects.
+#
+# So: the first step is 2.5 points (about 80 rating points on the baseline).
+# Moving the same way again grows it by half, 2.5 -> 3.75 -> 5.6 -> 8.4, so
+# three plans cover what 95% of people are off by and a pure preference can
+# still get far quickly. Turning round halves it -- the answer is between the
+# last two places -- which is binary search when the judge is a person.
+FIRST_STEP = 0.025
+GROWTH = 1.5
+SHRINK = 0.5
+# A step never falls below one point, or a few reversals would leave it too
+# small to notice; nor rises above ten (about 330 rating points), so no single
+# plan can throw the target across the range.
+SMALLEST_STEP = 0.01
+LARGEST_STEP = 0.10
 
-# The ends of the ladder. 0.65 rather than 0.70 at the easy end is deliberate:
+# The ends of the range. 0.65 rather than 0.70 at the easy end is deliberate:
 # 0.70 is the value users.target_prob was born with, and leaving it unreachable
 # keeps "this number was never chosen by anybody" something the data can still
 # say on its own.
@@ -106,16 +120,43 @@ TARGET_EASIEST = 0.65
 TARGET_HARDEST = 0.30
 
 
-def nudge_target(target, verdict):
-    """Move one step along the ladder, and stay on it.
+def plan_direction(outcomes):
+    """Which way one plan's presses point: "harder", "easier" or None.
 
-    "too_hard" asks for easier problems, which is a HIGHER probability of
-    solving them -- the number goes up. That inversion is the one thing in
-    this feature somebody will get backwards, which is why it is one function
-    with a name and a check of its own rather than a sign in a route.
+    `outcomes` are its problems' presses -- "too_easy", "too_hard", or None
+    for a problem nobody pressed. Presses only, not solves: one plan's five
+    first attempts cannot tell a model that is right from one that is 4
+    points off (devlog, 2026-09-28), and the model already learns from solves
+    through the visitor's own history. Equal counts, or none, point nowhere.
     """
-    step = TARGET_STEP if verdict == "too_hard" else -TARGET_STEP
-    return round(min(TARGET_EASIEST, max(TARGET_HARDEST, target + step)), 2)
+    net = sum(1 if o == "too_easy" else -1 if o == "too_hard" else 0 for o in outcomes)
+    return "harder" if net > 0 else "easier" if net < 0 else None
+
+
+def step_target(target, step, last, direction):
+    """One step of the staircase. Returns (target, step, direction) after it.
+
+    `step` is the size of the last move and `last` its direction, both None
+    for a list whose target has never moved. `direction` is this plan's, from
+    plan_direction; None leaves everything as it was.
+
+    "Harder" means a LOWER chance of solving -- the number goes down. That
+    inversion is the one thing in this feature somebody will get backwards,
+    which is why it lives here, with a name and checks of its own, rather
+    than as a sign in a route.
+    """
+    if direction is None:
+        return target, step, last
+    if step is None or last is None:
+        step = FIRST_STEP
+    elif direction == last:
+        step = min(step * GROWTH, LARGEST_STEP)
+    else:
+        step = max(step * SHRINK, SMALLEST_STEP)
+    moved = target - step if direction == "harder" else target + step
+    # Rounded so the stored number is the one the page prints to a tenth of
+    # a point, not 0.47500000000000003.
+    return round(min(TARGET_EASIEST, max(TARGET_HARDEST, moved)), 4), round(step, 4), direction
 
 # Ratings are divided by this before they reach the curve, so that `b` reads
 # as "change in log-odds per 100 rating points" rather than per single point.
