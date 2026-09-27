@@ -201,6 +201,8 @@ because the landing page has a different job from the tool — see §7.1.
 | `POST /results/<handle>/feedback` | "Too hard" or "too easy" on one problem: hide it, move the target one step — ADR 0021 | v0.7 |
 | `POST /results/<handle>/restore` | Put back every problem this visitor has hidden — ADR 0021 | v0.7 |
 | `/results/<handle>` | Five problems, the probability on each, the topic breakdown | v0.1 crude, v0.4 real |
+| `/results/<handle>?topic=<tag>` | The same page, five problems in one topic, at that topic's own target — ADR 0025 | v0.8 |
+| `/results/<handle>/recommendations?topic=<tag>` | The five as data, for the topic chart to switch topics without reloading — ADR 0025 | v0.8 |
 | `/how` | How the model works, and the §9 number | v0.6 |
 | `/privacy` | What data is read, what is stored, how to have it removed | v0.7 |
 
@@ -259,12 +261,12 @@ not slipped in while coding.
 
 ## 6. Data
 
-Thirteen tables and one view. Everything else is computed on demand, not
+Fourteen tables and one view. Everything else is computed on demand, not
 stored, so there is only one copy of the truth. Both database files use the
 same schema (ADR 0007); the last four tables are filled only in `dataset.db`,
-by `collect.py`, and stay empty on the server. `visits`, `dismissals` and
-`recommendations` are the mirror image: filled only on the server, and empty
-in `dataset.db`.
+by `collect.py`, and stay empty on the server. `visits`, `dismissals`,
+`recommendations` and `topic_targets` are the mirror image: filled only on
+the server, and empty in `dataset.db`.
 
 ```
 users
@@ -332,10 +334,24 @@ recommendations                                         nextcf.db only
   source         text     — "topic" or "rating": which predictor chose it
   model          text     — topic_model.json's fitted_at; NULL for the baseline
   guarded        integer  — 1 if ADR 0023's guard rail held for this visitor
+                            (for a topic's list: for this problem)
+  topic          text     — the topic the list was filtered to, NULL for the
+                            overall five (ADR 0025): the two kinds of pick
+                            are judged apart
                             one row per (handle, problem), never updated; at
                             most 500 per handle. The outcome is not stored: it
                             is the first submission after shown_at, read from
                             submissions (ADR 0024)
+
+topic_targets                                           nextcf.db only
+  handle         text     — whose
+  tag            text     — which topic
+  target_prob    real     — that topic's difficulty target, moved by "too
+                            hard" and "too easy" pressed on that topic's list
+  chosen_at      text     — ISO-8601 UTC
+                            one row per (handle, topic), only once pressed;
+                            until then a topic starts from the overall target
+                            (ADR 0025)
 
 dismissals                                              nextcf.db only
   handle         text     — who pushed it away
@@ -492,7 +508,7 @@ history, so the count jumps from nothing to everything, and the page follows
 | Web framework | Flask | Smallest thing that works; large amount of beginner material |
 | Database | SQLite | A single file on disk. Nothing to install, nothing to run |
 | Pages | Jinja templates (ships with Flask) | Every page is rendered on the server first, so it works before and without any JavaScript — layer 1 in §7.1 |
-| Interactive parts | React components mounted into those pages, from v0.4. Vite builds them into one bundle on the author's machine; the built file is committed and served from this site, and the host never runs Node — ADR 0011 | Pieces that react to each other in the browser — a topic chart that filters a table, a target-probability control that re-ranks both, later the pet system — are where hand-written DOM updates tangle. Not the whole front end. See `docs/decisions/0008-react-islands.md` |
+| Interactive parts | React components mounted into those pages -- decided at v0.4, the first built at v0.8: the topic chart (ADR 0025). Vite builds them into one bundle on the author's machine; the built file is committed and served from this site, and the host never runs Node — ADR 0011 | Pieces that react to each other in the browser — a topic chart that filters a table, a target-probability control that re-ranks both, later the pet system — are where hand-written DOM updates tangle. Not the whole front end. See `docs/decisions/0008-react-islands.md` |
 | Styling | Own CSS built on design tokens. No framework, no build step | Promoted from "classless framework" — see §7.1. A framework gives a floor but also a recognisable look, and "does not read as templated" is now an explicit goal. Three pages of hand-written CSS is roughly 200 lines and is fully ours |
 | Charts | A server-rendered HTML table, with the bar drawn as a CSS gradient behind each row; taken over by a React component where the chart is interactive | No chart library, which is the part that matters. An earlier version of this row said SVG and said a template could not produce the breakdown; both were wrong, and a table reads on a screen reader, reflows at 320px, and is the markup ADR 0008 describes a component mounting onto — ADR 0001, amended 2026-09-15. SVG returns for geometry that is not rectangles, such as the calibration plot in §9 |
 | Background jobs | A worker thread plus the `jobs` table | Long work cannot happen inside a web request, and job state must survive a restart |
@@ -885,7 +901,7 @@ starts counting the day the disk is attached (ADR 0017).
 | v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
 | v0.6 | First real model, scored against the baseline; `/how`. **Done 09-19**: model 09-18, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh`; `/how` 09-19 | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts. **Done 09-26**: visits and `/privacy` (ADR 0017), the queue (ADR 0018), the checks in the repository (ADR 0019), the upkeep thread (ADR 0020), too hard / too easy (ADR 0021), errors and logs (ADR 0022). Two things carried, each by decision: the paid disk is bought before the first stranger arrives, not before then (ADR 0017), and component tests arrive with the first React component rather than before it (ADR 0011, amended) | early Nov |
-| v0.8 | Design polish pass and unhandled states — see §7.1 | early Nov |
+| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025) | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
 | v2.0 | See §11 | spring |
@@ -958,14 +974,24 @@ Known risk: art, animation and game feel have no natural stopping point, and
 this is more enjoyable to build than debugging a likelihood function. It needs
 a fixed slot, not an open-ended one.
 
-### Per-topic recommendations
+### Per-topic recommendations — moved to v0.8
+
+*Moved into v0.8 on 2026-09-26 by the author, with the spec changed first
+as §5 requires; the design is ADR 0025.* What made it worth moving: the
+audit of that day found the 38-row topic table was information nobody could
+act on, and the only thing a visitor could steer was difficulty. Choosing a
+topic answers both.
+
+What it is and is not. A visitor **chooses** a topic; the page never
+**recommends** one. "You are weak at trees" is the claim ADR 0014 measured at
++0.0002 and §3 refuses to make, and picking a topic for somebody would be
+making it.
 
 Pick a topic, get problems in that topic near the target probability. The
 model already predicts per problem, so this is a filter over the same numbers.
 The cost is the page, and the question of what happens when a topic has too
 few unsolved problems near the target. Proposed 2026-09-13 as where the 3D
-balloon interaction (§12) would lead. Not v1.0, where the results page shows
-five problems overall.
+balloon interaction (§12) would lead.
 
 ### Knowledge tracing
 
