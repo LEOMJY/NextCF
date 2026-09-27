@@ -122,6 +122,44 @@ def form_redirects_to_results():
 check("POST / sends the visitor to /results/<handle>", form_redirects_to_results)
 
 
+def what_people_paste_is_read_as_the_handle():
+    """Found by the audit of 2026-09-26: the quickest way to copy your handle
+    is to copy your profile's address, and pasting it answered "There is
+    nothing at this address". An @ in front, as chat apps write names, was
+    refused as "not a Codeforces handle"."""
+    for typed in ("https://codeforces.com/profile/tourist",
+                  "http://codeforces.com/profile/tourist/",
+                  "codeforces.com/profile/tourist",
+                  "https://m1.codeforces.com/profile/tourist?locale=ru",
+                  "@tourist",
+                  "  tourist  "):
+        response = client.post("/", data={"handle": typed})
+        assert response.status_code == 302, (typed, response.status_code)
+        assert response.headers["Location"].endswith("/results/tourist"), (typed, response.headers["Location"])
+
+
+def a_link_that_is_not_a_profile_is_left_alone():
+    """Only a profile address is read as a handle. Anything else goes through
+    as typed and is refused the usual way -- guessing would be worse."""
+    response = client.post("/", data={"handle": "https://codeforces.com/contest/1234"})
+    assert not response.headers.get("Location", "").endswith("/results/1234"), response.headers.get("Location")
+
+
+def the_box_takes_a_whole_profile_address():
+    """A browser cuts a paste to maxlength before anything is sent, so the
+    server-side reading above is worthless if the box truncates first."""
+    import re
+    html = client.get("/").get_data(as_text=True)
+    limit = int(re.search(r'name="handle"[^>]*maxlength="(\d+)"', html, re.S).group(1))
+    longest = len("https://m1.codeforces.com/profile/") + 24
+    assert limit >= longest, f"maxlength {limit} cuts a pasted profile address ({longest} characters)"
+
+
+check("a pasted profile address, or @handle, is read as the handle", what_people_paste_is_read_as_the_handle)
+check("the box takes a whole profile address", the_box_takes_a_whole_profile_address)
+check("a link that is not a profile is not guessed at", a_link_that_is_not_a_profile_is_left_alone)
+
+
 def unknown_handle_starts_a_sync():
     response = client.get("/results/alpha")
     assert response.status_code == 302, response.status_code

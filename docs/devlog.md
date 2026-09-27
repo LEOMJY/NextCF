@@ -4810,3 +4810,49 @@ Kotlin for it. 371 such problems are in the pool.
   55%" inside a paragraph, and the page jumps to the top.
 - Nothing on the results page explains why a 1000-rated problem and a
   2300-rated one both say 49%.
+
+---
+
+## 2026-09-26 (later that night) — The fixes that did not need the model
+
+The author read the audit and chose to fix, now, everything in it that
+does not touch the model.
+
+**No `*special` problems in the pool** (ADR 0010, amended). Kotlin Heroes,
+April Fools and the other rounds with rules of their own are left out by
+their tag. The model still learns from them; they are only never offered.
+
+**The same answer twice counts once** (ADR 0021, amended). The first
+design was a read-then-write, and the obvious argument for replacing it
+turned out to be wrong in an instructive way. A mutation that put the
+read-then-write back survived the concurrent check, twice. Two requests
+arriving at the same instant *could not* move the target twice, because
+the route computes the new target from what it read, and both read the
+same number. The double move needs the second request to arrive after the
+first has committed. That is the case the stored row stops, and the
+sequential check covers it. The survivor was equivalent, and the docstring
+that said otherwise is corrected.
+
+**A failed sync counts as a try** for the upkeep thread (ADR 0020,
+amended). A mutation that skipped a failed handle *for ever* survived the
+first check. Now a second check holds that the handle is tried again once
+its twenty hours pass.
+
+**A pasted profile address, or `@handle`, is read as the handle.** Writing
+the check turned up a second half nobody had seen. The box had
+`maxlength="24"`, and a browser cuts a paste to that before sending it. So
+even a perfect server would have received `https://codeforces.com/p`. The
+box now takes 100 characters, and a check reads the limit off the rendered
+page.
+
+**`/how` says what its calibration table is true of**: attempts people
+chose themselves. On the problems the site chooses, especially far above
+the user's rating, the model is likely too hopeful. Spec §8's fourth
+assumption now carries the audit's numbers.
+
+9 new checks. Ten mutations, each in a fresh copy of the repository: nine
+caught, one equivalent. 309 pass. The dataset tier was run as well, because
+a query changed: 311 pass, and `dataset.db`'s modification time is the same
+before and after.
+
+Still open, and the author's to decide: the model itself.

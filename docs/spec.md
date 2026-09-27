@@ -775,6 +775,14 @@ Written down because they are guesses, not facts, and should be revisited.
    most likely because people steer around their weak topics. Both are the
    selection this assumption named. Recommended problems are chosen FOR people,
    so they are the first data this project will have without it.
+   *Measured on the site's own picks, 2026-09-26, and it is the largest
+   effect found so far.* Run for 60 users, the recommender put 34% of its
+   picks 500 or more rating points above the user. For users under 1300 the
+   model gives a 2300-rated "difficult version" 51% and Watermelon (800) 38%,
+   because the hard version is attempted almost only by people who have
+   solved the easy one. The model is calibrated on attempts people chose, and
+   the site chooses for them. What to do about it is open (devlog,
+   2026-09-26).
 
 ## 9. How we will know it worked
 

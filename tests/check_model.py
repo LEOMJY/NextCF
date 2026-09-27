@@ -231,7 +231,22 @@ def the_pool_is_none_for_a_half_synced_user():
     assert db.recommendation_pool(conn, "u") is None
 
 
+def special_problems_are_not_in_the_pool():
+    """Found by the audit of 2026-09-26: 2199A was recommended at "1000", and
+    it is from Kotlin Heroes, where Codeforces accepts Kotlin and nothing
+    else. `*special` is the tag Codeforces puts on those, on April Fools
+    rounds and on other contests with rules of their own."""
+    conn = fresh_conn()
+    db.save_problemset(conn, [
+        api_problem(2199, "A", "Game", 1000, ["*special"]),
+        api_problem(2181, "A", "Alphabet City", 1300, ["math", "strings"])])
+    db.save_sync(conn, "u", 1500, [
+        submission(1, api_problem(9999, "A", "Something else", 800), "WRONG_ANSWER")])
+    assert pool_ids(conn, "u") == {"2181A"}, pool_ids(conn, "u")
+
+
 check("the pool leaves out what was solved, under either id", the_pool_leaves_out_what_was_solved_under_either_id)
+check("*special problems (Kotlin Heroes, April Fools) are not in the pool", special_problems_are_not_in_the_pool)
 check("a failed problem stays in the pool", a_failed_problem_stays_in_the_pool)
 check("unrated and unlisted problems are not in the pool", unrated_and_unlisted_problems_are_not_in_the_pool)
 check("the pool is None for a half-synced user (ADR 0004)", the_pool_is_none_for_a_half_synced_user)

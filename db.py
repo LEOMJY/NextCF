@@ -629,6 +629,15 @@ def recommendation_pool(conn, handle):
            -- problem somebody called too hard coming back on the next reload
            -- would read as not having listened.
            AND p.id NOT IN (SELECT problem_id FROM dismissals WHERE handle = ?)
+           -- Problems whose contest had rules of its own: Kotlin Heroes,
+           -- where Codeforces accepts Kotlin and nothing else; April Fools
+           -- rounds, whose answers are jokes; a few rounds with statements
+           -- in one language. Codeforces marks all of them "*special". The
+           -- audit of 2026-09-26 found a Kotlin-only problem recommended to
+           -- a C++ user as "rated 1000". Left out by tag rather than by
+           -- contest id, so a new round of the same kind is left out too
+           -- (ADR 0010, amended).
+           AND p.id NOT IN (SELECT problem_id FROM problem_tags WHERE tag = '*special')
         """,
         (handle, handle),
     ).fetchall()
@@ -781,6 +790,14 @@ def next_user_to_refresh(conn, seen_since, synced_before):
     process restarts several times a day on the free instance, so a plan kept
     in memory would either be repeated on every restart or lost with it;
     rows that are already on disk cannot forget.
+
+    A sync that FAILED since the cutoff counts as a try, too. Only a sync that
+    works moves last_synced, so a handle whose syncs keep failing -- renamed
+    on Codeforces, most likely -- stayed the oldest for ever: picked on every
+    tick, every thirty seconds, and nobody behind it was ever refreshed
+    (found by the audit of 2026-09-26). Now it waits the same twenty hours as
+    everybody else before it is tried again. The jobs rows already record the
+    failure, so nothing new is stored.
     """
     row = conn.execute(
         """
@@ -790,10 +807,13 @@ def next_user_to_refresh(conn, seen_since, synced_before):
            AND u.last_synced < ?
            AND u.handle IN (SELECT handle FROM visits
                              WHERE handle IS NOT NULL AND visited_at >= ?)
+           AND NOT EXISTS (SELECT 1 FROM jobs j
+                            WHERE j.kind = 'sync' AND j.target = u.handle
+                              AND j.state = 'failed' AND j.finished_at >= ?)
          ORDER BY u.last_synced
          LIMIT 1
         """,
-        (synced_before, seen_since),
+        (synced_before, seen_since, synced_before),
     ).fetchone()
     return row["handle"] if row is not None else None
 
@@ -878,29 +898,59 @@ def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KE
     half of what the visitor asked for, and nothing on the page to say so.
     Inside one `with conn:` the second statement failing rolls the first back.
 
-    INSERT OR REPLACE because a dismissal is one row per (person, problem):
-    pressing the other button later replaces the answer rather than keeping
-    both, since only the latest one is what they think. The timestamp on the
-    target is what tells a chosen 0.70 from the column's default 0.70 (ADR
-    0021).
+    The same answer about the same problem, said twice, counts once, and
+    returns False having changed nothing. Found by the audit of 2026-09-26: a
+    double-click sends the same POST twice, and each moved the target, so one
+    press went two steps. A different answer about the same problem still
+    counts -- that is somebody changing their mind -- and replaces the first,
+    since a dismissal is one row per (person, problem) and only the latest
+    answer is what they think.
+
+    A double-click arrives one of two ways, and both count once. One after
+    the other -- the second request reads the target after the first has
+    committed -- is the way that moved it twice, and the INSERT OR IGNORE
+    below stops it: the row is already there. Both at once -- both requests
+    read the target before either writes -- could not move it twice even
+    without that, because the route works out the new target from what it
+    read, so both write the same number. (A mutation replacing this with a
+    read-then-write was therefore not caught, and on inspection could not do
+    harm: it is equivalent. The first statement is a write all the same, so
+    that no reader has to work that out again.)
 
     Then only the newest `keep` dismissals for this handle survive, in the
     same transaction, so the table can never hold more than `keep` rows for
-    anybody -- not even for a moment another connection could see.
+    anybody -- not even for a moment another connection could see. The
+    timestamp on the target is what tells a chosen 0.70 from the column's
+    default 0.70 (ADR 0021).
+
+    What is still possible: two presses on two DIFFERENT problems at the same
+    instant, from two tabs, both read the target before either writes it, and
+    the target moves one step instead of two. Rare, harmless, and not worth
+    moving the target's arithmetic into this module to prevent.
     """
     now = utc_now()
     with conn:
+        # A different answer about this problem goes, so the insert below
+        # can tell "new or changed" from "said already".
         conn.execute(
+            "DELETE FROM dismissals WHERE handle = ? AND problem_id = ? AND reason != ?",
+            (handle, problem_id, reason),
+        )
+        cursor = conn.execute(
             """
-            INSERT OR REPLACE INTO dismissals (handle, problem_id, reason, dismissed_at)
+            INSERT OR IGNORE INTO dismissals (handle, problem_id, reason, dismissed_at)
                  VALUES (?, ?, ?, ?)
             """,
             (handle, problem_id, reason, now),
         )
-        # Newest by time, then by rowid for presses in the same second.
-        # INSERT OR REPLACE deletes and re-inserts, so pressing a problem
-        # again gives it a new rowid and makes it the newest -- which is right:
-        # it is the latest thing the visitor said.
+        if cursor.rowcount == 0:
+            # Said already, in these words. Nothing moves.
+            return False
+
+        # Newest by time, then by rowid for presses in the same second. A
+        # changed answer was deleted and inserted again, so it has a new
+        # rowid and is the newest -- which is right: it is the latest thing
+        # the visitor said.
         conn.execute(
             """
             DELETE FROM dismissals
@@ -916,6 +966,7 @@ def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KE
             "UPDATE users SET target_prob = ?, target_chosen_at = ? WHERE handle = ?",
             (target, now, handle),
         )
+    return True
 
 
 def problem_exists(conn, problem_id):

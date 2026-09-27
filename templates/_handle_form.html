@@ -13,13 +13,18 @@
 
      required, maxlength and autofocus are browser conveniences only. They
      are not validation -- anything can POST to this URL without ever loading
-     this page, which is why web.py checks the value again on arrival. #}
+     this page, which is why web.py checks the value again on arrival.
+
+     maxlength is 100, not 24, although no handle is longer than 24. A
+     browser cuts a PASTE to maxlength before anything is sent, so at 24 a
+     pasted profile address arrived as "https://codeforces.com/p" and
+     web.handle_from_input never saw the handle in it. #}
   <input
     type="text"
     id="handle"
     name="handle"
     required
-    maxlength="24"
+    maxlength="100"
     autofocus
     autocomplete="off"
     spellcheck="false"

@@ -350,6 +350,55 @@ def a_problem_that_does_not_exist_is_refused():
     assert the_user()["target_chosen_at"] is None, "a junk problem moved the target"
 
 
+# ------------------------------------------------------------- one press, once
+def saying_the_same_thing_twice_moves_the_target_once():
+    """Found by the audit of 2026-09-26: a double-click sends the same POST
+    twice, and each moved the target a step -- 65% to 55% for one press."""
+    a_visitor()
+    problem = shown_problems()[0]
+    press(problem, "too_easy")
+    once = the_user()["target_prob"]
+    press(problem, "too_easy")
+    assert the_user()["target_prob"] == once, \
+        f"the same answer twice moved the target to {the_user()['target_prob']}"
+
+
+def a_double_click_arriving_at_once_moves_the_target_once():
+    """Both requests in flight together, on two of the server's threads with
+    two connections. Holds even for a naive check-then-write, because both
+    requests read the target before either writes and so write the same
+    number (see db.record_feedback); kept because "two clicks at once, one
+    step" is the promise, whichever way the code keeps it."""
+    import threading
+    a_visitor()
+    problem = shown_problems()[0]
+    start = threading.Barrier(2)
+
+    def one_click():
+        start.wait()
+        web.app.test_client().post(f"/results/{HANDLE}/feedback",
+                                   data={"problem": problem, "verdict": "too_easy"})
+
+    clicks = [threading.Thread(target=one_click) for _ in range(2)]
+    for t in clicks:
+        t.start()
+    for t in clicks:
+        t.join()
+    expected = model.nudge_target(model.DEFAULT_TARGET, "too_easy")
+    assert the_user()["target_prob"] == expected, \
+        f"two clicks at once moved the target to {the_user()['target_prob']}, not {expected}"
+
+
+def changing_your_mind_still_counts():
+    """Too hard, then too easy on the same problem: two different answers,
+    so the target goes one way and back."""
+    a_visitor()
+    problem = shown_problems()[0]
+    press(problem, "too_hard")
+    press(problem, "too_easy")
+    assert the_user()["target_prob"] == model.DEFAULT_TARGET, the_user()["target_prob"]
+
+
 # ------------------------------------------------------------------ the cap
 def all_problem_ids():
     conn = db.connect()
@@ -558,6 +607,11 @@ check("a verdict that is not one of the two", a_verdict_that_is_not_one_of_the_t
 check("a problem that does not exist", a_problem_that_does_not_exist_is_refused)
 check("only a POST can say it", only_a_post_can_say_it)
 check("a junk handle is refused", a_junk_handle_is_refused)
+print("\none press, once")
+check("saying the same thing twice moves the target once", saying_the_same_thing_twice_moves_the_target_once)
+check("a double-click arriving at once moves the target once", a_double_click_arriving_at_once_moves_the_target_once)
+check("changing your mind still counts", changing_your_mind_still_counts)
+
 print("\nthe cap")
 check("a handle keeps only the latest fifty", a_handle_keeps_only_the_latest_fifty)
 check("pressing an old one again makes it the newest", pressing_an_old_one_again_makes_it_the_newest)

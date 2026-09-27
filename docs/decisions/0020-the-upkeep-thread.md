@@ -116,3 +116,22 @@ because the author asked for both and because the half that remains is what
   threads rather than three. One owner for "the problemset is current" is
   what removes the double fetch; two owners could not agree on when it had
   been done.
+
+## Amendment — 2026-09-26: a failed sync counts as a try
+
+Decision 2 refreshes the recent visitor with the oldest stored history. Only
+a sync that works moves `last_synced`, so a handle whose sync keeps failing
+stays the oldest for ever. A handle renamed on Codeforces fails every time.
+The audit of 2026-09-26 simulated it: five ticks refreshed the same dead
+handle five times, and nobody behind it was refreshed at all. That meant one
+wasted request every thirty seconds, for as long as the old handle's visit
+was recent. It could not happen on the free instance, where `visits` does
+not survive a restart. It would have started on the day the disk was
+attached.
+
+**A handle with a failed sync in the last twenty hours is not due**, the
+same twenty hours a sync that worked earns. The `jobs` table already records
+failures, so nothing new is stored. A Codeforces outage now costs at most
+one failed request per recent visitor per twenty hours. A handle that comes
+back is tried again once those twenty hours pass, and a check holds that
+too.

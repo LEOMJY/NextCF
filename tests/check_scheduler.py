@@ -220,6 +220,36 @@ def only_one_user_a_tick():
     assert len(queued()) == 1, queued()
 
 
+def fail_everything_queued():
+    """The worker ran, and every sync it ran failed."""
+    conn = db.connect()
+    try:
+        for row in conn.execute("SELECT id FROM jobs WHERE state IN ('pending', 'running')").fetchall():
+            db.claim_job(conn, row["id"])
+            db.finish_job(conn, row["id"], error="Codeforces rejected the request: not found",
+                          failure="rejected")
+    finally:
+        conn.close()
+
+
+def a_handle_that_keeps_failing_does_not_hold_the_line():
+    """Found by the audit of 2026-09-26. A handle whose sync fails -- renamed on
+    Codeforces, say -- keeps the oldest last_synced, because only a sync that
+    worked moves it. So it was picked on every tick, every thirty seconds, for
+    as long as its visit was recent, and nobody behind it was ever refreshed."""
+    reset()
+    seen("renamed_away", last_synced=db.utc_ago(40 * 3600), visited_at=DAYS_AGO_2)
+    seen("alice", last_synced=HOURS_AGO_30, visited_at=DAYS_AGO_2)
+    seen("bob", last_synced=HOURS_AGO_30, visited_at=DAYS_AGO_2)
+
+    refreshed = []
+    for _ in range(3):
+        refreshed += scheduler.tick()
+        fail_everything_queued()
+    assert refreshed.count("renamed_away") == 1, f"a failing handle was tried again: {refreshed}"
+    assert {"alice", "bob"} <= set(refreshed), f"the handles behind it waited: {refreshed}"
+
+
 # --------------------------------------------------------------- visitors first
 def nothing_is_queued_while_a_visitor_is_waiting():
     """The rule that keeps this from ever being in anybody's way."""
@@ -308,6 +338,30 @@ check("somebody who has not visited is left alone", somebody_who_has_not_visited
 check("a fresh history is left alone", a_history_that_is_already_fresh_is_left_alone)
 check("the oldest history goes first", the_oldest_history_goes_first)
 check("one user a tick, no more", only_one_user_a_tick)
+check("a handle that keeps failing does not hold the line", a_handle_that_keeps_failing_does_not_hold_the_line)
+
+
+def a_failure_is_forgotten_after_the_same_twenty_hours():
+    """Skipped for twenty hours, not for ever: a handle can come back -- a
+    Codeforces outage ends, a rename is undone -- and it waits exactly as
+    long as a history that worked. Added after a mutation that blocked a
+    failed handle for good survived the check above."""
+    reset()
+    seen("failed_long_ago", last_synced=db.utc_ago(40 * 3600), visited_at=DAYS_AGO_2)
+    conn = db.connect()
+    try:
+        job_id = db.create_job(conn, "sync", "failed_long_ago")
+        db.claim_job(conn, job_id)
+        db.finish_job(conn, job_id, error="Could not reach Codeforces: timed out", failure="unreachable")
+        with conn:
+            conn.execute("UPDATE jobs SET finished_at = ? WHERE id = ?",
+                         (db.utc_ago(scheduler.STALE_AFTER_SECONDS + 3600), job_id))
+    finally:
+        conn.close()
+    assert scheduler.tick() == ["failed_long_ago"], queued()
+
+
+check("a failure is forgotten after the same twenty hours", a_failure_is_forgotten_after_the_same_twenty_hours)
 
 print("\nvisitors first")
 check("nothing queued while a visitor waits", nothing_is_queued_while_a_visitor_is_waiting)

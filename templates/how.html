@@ -23,9 +23,10 @@
     <p>
       Every recommended problem carries one number: the chance that your
       <strong>first</strong> submission to it is accepted. The five shown are
-      the ones nearest 50% &mdash; hard enough to teach you something, and
-      still problems people at that level solve in the end about nine times in
-      ten.
+      the ones nearest 50% &mdash; or nearest wherever &ldquo;too hard&rdquo;
+      and &ldquo;too easy&rdquo; have moved it for you &mdash; hard enough to
+      teach you something, and still problems people at that level solve in
+      the end about nine times in ten.
     </p>
 
     <h2>Where it comes from</h2>
@@ -131,6 +132,22 @@
       twenty points at the low end. In the middle the model is about two
       points pessimistic: problems it called 50% were solved first time about
       52% of the time.
+    </p>
+    {# Added after the audit of 2026-09-26, which ran the recommender for 60
+       users and found a third of its picks 500 or more rating points above
+       the user (devlog, that date). The table above is true; what it is true
+       OF had not been said, and the difference is the product's main claim. #}
+    <p>
+      <strong>What that table does not show yet.</strong> Every attempt in it
+      was a problem somebody chose for themselves. People try a hard problem
+      when they already have a good chance at it &mdash; the hard version after
+      solving the easy one, or after reading how it is done &mdash; so on
+      problems far above your rating, those chances were learned from the
+      people best placed to solve them. The five this site picks are chosen
+      <em>for</em> you, not by you, and on those, especially well above your
+      rating, the model is likely too hopeful. That was found on this
+      site&rsquo;s own picks and is being worked on. How often recommended
+      problems really are solved can only be measured once people use them.
     </p>
 
     <h2>What it cannot know</h2>

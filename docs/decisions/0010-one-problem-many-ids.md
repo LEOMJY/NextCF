@@ -204,3 +204,19 @@ trade.
   The map adds a way to read them together; it does not merge them. A merge
   could not be undone, and the per-copy tag difference is the evidence that the
   map is working.
+
+## Amendment — 2026-09-26: no `*special` problems in the pool
+
+Decision 6 made the pool "problemset members with a rating". The audit of
+2026-09-26 found 2199A recommended to a C++ user as "rated 1000". It is from
+Kotlin Heroes: Episode 14, and Codeforces accepts only Kotlin for that
+contest. The pool held 371 problems of that kind. Codeforces tags them all
+`*special`: Kotlin Heroes, April Fools rounds (whose answers are jokes), and
+a few rounds with rules or statements of their own. In the audit's sample
+they made up 13 of 300 picks.
+
+**The pool now leaves out every problem tagged `*special`.** The rule is by
+tag, not by contest id, so the next round of that kind is left out without
+anyone updating a list. The model and the evaluation are unchanged. Those
+problems still teach the model about the users who attempted them, and they
+stay in §9's number. They are only never offered.

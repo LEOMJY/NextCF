@@ -65,6 +65,31 @@ log = logging.getLogger(__name__)
 # wrong it will be wrong by rejecting something valid, so keep it permissive.
 HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,24}$")
 
+# A Codeforces profile address, on the main site or a mirror (m1.codeforces.com
+# and the like), with or without the scheme, a trailing slash or a query. The
+# quickest way to copy your own handle is to copy this from the address bar.
+PROFILE_ADDRESS = re.compile(
+    r"^(?:https?://)?(?:[a-z0-9-]+\.)*codeforces\.com/profile/([^/?#\s]+)/?(?:[?#].*)?$",
+    re.IGNORECASE,
+)
+
+
+def handle_from_input(typed):
+    """What somebody typed into the handle box, read the way they meant it.
+
+    Found by the audit of 2026-09-26: a pasted profile address answered
+    "There is nothing at this address", and "@tourist" -- the way chat apps
+    write a name -- was refused. Both are unambiguous, so both are read as
+    the handle. Anything else is passed through as typed, including a
+    codeforces.com address that is not a profile: guessing a handle out of a
+    contest link would be worse than saying it is not one.
+    """
+    text = typed.strip()
+    match = PROFILE_ADDRESS.match(text)
+    if match:
+        return match.group(1)
+    return text.removeprefix("@")
+
 # How long a stored history counts as fresh. Since ADR 0018, opening a results
 # page older than this shows what is stored AND re-syncs behind it, rather
 # than making the visitor watch a queue first.
@@ -530,7 +555,7 @@ def index():
         # request.form holds the submitted fields, keyed by the `name`
         # attribute in the HTML. .get() rather than [] so a request without
         # that field is a normal empty answer instead of a 400 from Flask.
-        handle = request.form.get("handle", "").strip()
+        handle = handle_from_input(request.form.get("handle", ""))
 
         if not handle:
             # The form has `required` on it, but that is enforced by the

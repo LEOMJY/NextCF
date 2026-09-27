@@ -158,3 +158,16 @@ names whichever wall it has hit:
 The first takes priority, because it is the one that explains why the list
 did not change. "Misses" means outside `model.BAND`, so a list the model
 would call on target is never called a wall.
+
+## Amendment — 2026-09-26, later: the same answer twice counts once
+
+A double-click sends the same POST twice, and each one moved the target:
+65% to 55% for one press, measured in a browser. Now the same answer about
+the same problem counts once, and the second press changes nothing. A
+*different* answer about the same problem, "too hard" after "too easy",
+still counts, because that is somebody changing their mind. The first
+statement is a write, not a read-then-write. Two requests arriving at the
+same instant could not move the target twice anyway, because both work out
+the new target from the same value they read. The case that did move it
+twice was the second request arriving just after the first had committed,
+and the stored row is what stops that one.
