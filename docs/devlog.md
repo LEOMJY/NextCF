@@ -5155,3 +5155,28 @@ moves". Twenty-nine mutations, each in a fresh copy: all caught in the end.
 Clicked through in the browser at desktop and 375px: a plan across a
 sync, a press, a swap, a topic's plan through the component, the history,
 the continue box. 401 pass; the dataset tier 405.
+
+---
+
+## 2026-09-28 — The plans did not survive the night
+
+The author came back to the live site and the Past plans were gone, along
+with the plan, the targets and the hidden problems. No bug: the free Render
+instance spun down after 15 idle minutes, and a free instance keeps its
+files only while it runs. The live site no longer knew the handle at all
+and started a fresh sync.
+
+ADR 0017 predicted exactly this and deferred the paid disk until launch,
+because until then every row on the server would be the author's own test
+data. Practice plans (ADR 0026) break that reason. The author now uses the
+site to practise, and a plan's whole point is that it stays. So the
+question is open again, a month early.
+
+The price was checked again rather than quoted: Starter $7 a month plus a
+1 GB disk at $0.25, the same $7.25 as on 2026-09-22. Three options were set
+out: pay now; keep the free instance until launch and practise on a local
+copy; or a free hosted database, which ADR 0017 already turned down. The
+author has not decided yet.
+
+Until then, every push also wipes the live database, since a deploy starts
+a new instance.
