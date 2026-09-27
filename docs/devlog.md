@@ -4856,3 +4856,21 @@ a query changed: 311 pass, and `dataset.db`'s modification time is the same
 before and after.
 
 Still open, and the author's to decide: the model itself.
+
+### One candidate, measured before choosing
+
+The author's first idea was to leave out problems whose success rate is not
+real. Made concrete, that means offering a problem only if people near the
+visitor's rating have actually attempted it, using their rating at the
+time. Measured on the same 60 users:
+
+| offered only if at least this many attempters were within 200 of the user | pool, median | picks 500+ above | hard version without the easy one |
+|---|---|---|---|
+| no rule (today) | 10,536 | 35% | 18 |
+| 10 | 5,722 | 26% | 15 |
+| 30 | 3,278 | 18% | 15 |
+
+It helps, and it does not fix it. 2233E2's attempters were mostly rated
+1500–2100 at the time, so it passes the rule for most users. What made them
+succeed is something rating does not show: they had solved E1 first. The
+selection is on preparation, not only on level.
