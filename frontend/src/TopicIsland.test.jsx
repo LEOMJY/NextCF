@@ -16,18 +16,31 @@ const urls = {
   recommendations: '/results/somebody/recommendations',
   feedback: '/results/somebody/feedback',
   restore: '/results/somebody/restore',
+  plan: '/results/somebody/plan',
   how: '/how',
 }
 
 function problem(id, name, extra = {}) {
   return { id, name, rating: 1500, percent: 50, probability: 0.5, thin: false, guarded: true,
+           solved: false, outcome: null,
            url: `https://codeforces.com/problemset/problem/${id}`, ...extra }
 }
 
+// A list as web.recommendation_view returns it: a plan (ADR 0026) with
+// nothing done yet, aiming where the next one will, unless `extra` says not.
 function recs(topic, problems, extra = {}) {
+  const target = extra.target ?? 50
   return { state: 'ok', source: 'topic', topic, own_target: false, overall_target: 50,
-           target: 50, looked_up_at: null, unguarded: false, reach: null, at_end: null,
-           extrapolated: false, unrated: false, hidden: false, problems, ...extra }
+           target, next_target: target, looked_up_at: null, unguarded: false, reach: null,
+           at_end: null, extrapolated: false, unrated: false, hidden: false,
+           plan: { id: 7, started_at: '2026-09-27T10:00:00Z', size: problems.length,
+                   settled: 0, solved: 0, complete: false },
+           problems, ...extra }
+}
+
+// Draw `list` as the page's own first list, without choosing anything.
+function drawn(list) {
+  return render(<TopicIsland initial={{ ...initial, recs: list }} fetchImpl={answering({})} navigate={vi.fn()} />)
 }
 
 const initial = {
@@ -151,5 +164,52 @@ describe('the topic chart', () => {
     await screen.findByText('A DP Problem')
     expect(document.body.textContent).toContain('This is dp’s own target')
     expect(document.body.textContent).toContain('Aiming at 55%')
+  })
+})
+
+describe('a practice plan', () => {
+  it('a settled problem shows how, and only the rest keep their buttons', () => {
+    const { container } = drawn(recs(null, [
+      problem('1A', 'Solved One', { solved: true }),
+      problem('2A', 'Pressed One', { outcome: 'too_hard' }),
+      problem('3A', 'Open One'),
+    ], { plan: { id: 7, started_at: '2026-09-27T10:00:00Z', size: 3, settled: 2, solved: 1, complete: false } }))
+    const row = (name) => screen.getByText(name).closest('tr')
+    expect(row('Solved One').textContent).toContain('✓ solved')
+    expect(row('Pressed One').textContent).toContain('marked too hard')
+    expect(row('Solved One').className).toBe('settled')
+    expect(row('Open One').className).toBe('')
+    // One form of verdict buttons: the open row's.
+    expect(container.querySelectorAll('.verdict-form').length).toBe(1)
+    expect(row('Open One').querySelector('.verdict-form')).toBeTruthy()
+    expect(document.body.textContent).toContain('2 of 3 done, 1 solved')
+  })
+
+  it('swapping names the plan it ends, and the list it is on', () => {
+    const { container } = drawn(recs('dp', [problem('9A', 'A DP Problem')]))
+    const form = container.querySelector('.plan-next')
+    expect(form.getAttribute('action')).toBe('/results/somebody/plan')
+    expect(form.querySelector('input[name="plan"]').value).toBe('7')
+    expect(form.querySelector('input[name="topic"]').value).toBe('dp')
+    expect(screen.getByRole('button', { name: 'Swap the five' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Next five' })).toBeNull()
+  })
+
+  it('a finished plan offers the next five', () => {
+    drawn(recs(null, [problem('1A', 'Done One', { solved: true })],
+               { plan: { id: 8, started_at: '2026-09-27T10:00:00Z', size: 1, settled: 1, solved: 1, complete: true } }))
+    expect(screen.getByRole('button', { name: 'Next five' }).className).toBe('primary')
+    expect(document.body.textContent).not.toContain('ticked the next time')
+  })
+
+  it('says where the next plan will aim once a press has moved the target', () => {
+    drawn(recs(null, [problem('1A', 'One')], { target: 70, next_target: 65 }))
+    expect(document.body.textContent).toContain('Your next five will aim at 65%.')
+    expect(document.body.textContent).toContain('Aiming at 70%')
+  })
+
+  it('says nothing about the next plan while the target has not moved', () => {
+    drawn(recs(null, [problem('1A', 'One')]))
+    expect(document.body.textContent).not.toContain('Your next five')
   })
 })

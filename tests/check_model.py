@@ -398,6 +398,14 @@ def an_unrated_user_starts_from_the_chosen_rating_or_is_told_why():
     real = model.current_topic_model
     try:
         model.current_topic_model = lambda path=None: None
+        # The plan the model made keeps its five and its chances (ADR 0026).
+        # What is checked is the next plan, made without one.
+        conn = db.connect()
+        try:
+            with conn:
+                conn.execute("DELETE FROM plans WHERE handle = 'unrated'")
+        finally:
+            conn.close()
         html = client.get("/results/unrated").get_data(as_text=True)
         assert "no rating for unrated" in html, "without a model, the unrated sentence is missing"
         assert 'class="num chance"' not in html, "a probability was shown with no rating and no model"
@@ -446,8 +454,10 @@ def the_chance_is_the_only_new_accent():
         # "type here", which is its meaning; text drawn in it is the question.
         if re.search(r"(?<![\w-])color:\s*var\(--accent\)", body)
     })
+    # .plan-mark.solved is .verdict-ok's own meaning -- an accepted solve --
+    # on a practice plan's row (ADR 0026), not a new one.
     allowed = {".verdict-ok", ".chance", "a:hover", ".eyebrow", ".hero h1 .accent",
-               ".brand::before"}
+               ".brand::before", ".plan-mark.solved"}
     unexpected = [s for s in users if s not in allowed]
     assert not unexpected, f"new users of the accent colour: {unexpected}"
 

@@ -66,6 +66,9 @@
     // Never overwrite what is already there: on the error page the field
     // holds the handle that just failed, one keystroke from being fixed.
     if (!saved || input.value) return;
+    // The landing page offers "Continue as ..." for this handle instead
+    // (index.html), and the field is left for any other.
+    if (document.getElementById("continue")) return;
 
     input.value = saved;
     // Selected rather than just filled, so the first keystroke replaces it

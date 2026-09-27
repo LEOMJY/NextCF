@@ -206,6 +206,7 @@ because the landing page has a different job from the tool — see §7.1.
 | `/results/<handle>` | Five problems, the probability on each, the topic breakdown | v0.1 crude, v0.4 real |
 | `/results/<handle>?topic=<tag>` | The same page, five problems in one topic, at that topic's own target — ADR 0025 | v0.8 |
 | `/results/<handle>/recommendations?topic=<tag>` | The five as data, for the topic chart to switch topics without reloading — ADR 0025 | v0.8 |
+| `POST /results/<handle>/plan` | End this list's plan: "next five" when it is done, "swap the five" when it is not. The page makes the next plan when it is next shown — ADR 0026 | v0.8 |
 | `/how` | How the model works, and the §9 number | v0.6 |
 | `/privacy` | What data is read, what is stored, how to have it removed | v0.7 |
 
@@ -245,6 +246,12 @@ October. Anything added here must be argued for as a change to this document,
 not slipped in while coding.
 
 - No accounts, passwords, or login. A handle is the only identity.
+  *Reconsidered 2026-09-27 and kept for v1.0.* The author asked for a login
+  after comparing the incumbent's Training Lab. Its two jobs were separated.
+  Remembering who you are needs no account: the browser keeps the last
+  handle, and the landing page offers to continue as it. Proving that a
+  handle is yours does need one, and that is v1.5 (§11), where the pet
+  system needs it too.
 - No mobile app.
 - No running, judging, or sandboxing of code.
 - No social features — no friends, leaderboards, or comparison to others.
@@ -264,12 +271,12 @@ not slipped in while coding.
 
 ## 6. Data
 
-Fourteen tables and one view. Everything else is computed on demand, not
+Sixteen tables and one view. Everything else is computed on demand, not
 stored, so there is only one copy of the truth. Both database files use the
 same schema (ADR 0007); the last four tables are filled only in `dataset.db`,
 by `collect.py`, and stay empty on the server. `visits`, `dismissals`,
-`recommendations` and `topic_targets` are the mirror image: filled only on
-the server, and empty in `dataset.db`.
+`recommendations`, `topic_targets`, `plans` and `plan_problems` are the
+mirror image: filled only on the server, and empty in `dataset.db`.
 
 ```
 users
@@ -356,6 +363,35 @@ topic_targets                                           nextcf.db only
                             until then a topic starts from the overall target
                             (ADR 0025)
 
+plans                                                   nextcf.db only
+  id             integer
+  handle         text     — whose
+  list           text     — "" for the overall five, else the topic
+  started_at     text     — ISO-8601 UTC; the first time the list was shown
+  ended_at       text     — ISO-8601 UTC; NULL while active
+  state          text     — "active", "completed" (every problem settled
+                            when it ended) or "swapped" (ended early)
+  target         real     — what the plan aims at, fixed when it is made
+  source         text     — "topic" or "rating": which predictor chose it
+  rating         integer  — the rating the chooser used
+  shown          integer  — the rating Codeforces showed then; NULL if none
+  looked_up_at   integer  — the guard rail's clamped rating, if it was used
+  unguarded      integer  — 1 if the guard rail stood aside
+                            at most one active plan per (handle, list): a
+                            partial unique index (ADR 0026)
+
+plan_problems                                           nextcf.db only
+  plan_id        integer  — which plan; deleted with it
+  position       integer  — the order it was shown in
+  problem_id     text     — which problem, canonical id
+  probability    real     — the chance as computed when the plan was made
+  thin           integer  — 1 if it filled a small topic's list without the
+                            guard rail (ADR 0025)
+  outcome        text     — "too_hard" or "too_easy" once pressed; NULL
+                            otherwise. "Solved" is not stored: it is an
+                            accepted submission between started_at and
+                            ended_at, read from submissions
+
 dismissals                                              nextcf.db only
   handle         text     — who pushed it away
   problem_id     text     — which problem, canonical id (ADR 0010)
@@ -430,7 +466,11 @@ second copy in `sample_candidates` could disagree with it. `sample_strata`
 joins the two.
 
 Derived and deliberately not stored: per-topic skill estimates, solve
-probability predictions, recommendation lists. **Per-topic solve counts are
+probability predictions, recommendation lists — except a list's current
+plan (ADR 0026), which is stored because keeping it is the point: the five
+stay the same until the visitor asks for the next, so they cannot be
+recomputed on each view. What happened to them is still derived: "solved"
+is read from `submissions`, never written into the plan. **Per-topic solve counts are
 derived too** — `db.topic_breakdown()` is one `GROUP BY` over a user's
 submissions folded to canonical problems, 13 milliseconds for a 1,800-submission
 history, so there is nothing to keep in step and nothing to invalidate. The
@@ -904,7 +944,7 @@ starts counting the day the disk is attached (ADR 0017).
 | v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
 | v0.6 | First real model, scored against the baseline; `/how`. **Done 09-19**: model 09-18, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh`; `/how` 09-19 | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts. **Done 09-26**: visits and `/privacy` (ADR 0017), the queue (ADR 0018), the checks in the repository (ADR 0019), the upkeep thread (ADR 0020), too hard / too easy (ADR 0021), errors and logs (ADR 0022). Two things carried, each by decision: the paid disk is bought before the first stranger arrives, not before then (ADR 0017), and component tests arrive with the first React component rather than before it (ADR 0011, amended) | early Nov |
-| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025) | early Nov |
+| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025). **Practice plans**, added 2026-09-27: the five stay until they are done, with a history (ADR 0026) | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
 | v2.0 | See §11 | spring |
@@ -929,6 +969,30 @@ already exist, moved into the repository (ADR 0019).
 Recorded so they can be refused now and reconsidered later with real usage
 data. **None of these are v1.0.** Anything here that gets built early comes
 out of the time budget for §9, which is the point of the project.
+
+### Signing in with Codeforces — v1.5
+
+Asked for on 2026-09-27, after comparing the incumbent. It would make a
+visitor's plans and targets theirs alone. Today anybody who types a handle
+can press its buttons, which ADR 0021 accepted because there are no
+accounts. It would also let a returning visitor be recognised on any device,
+not only the browser that remembers them.
+
+How, when it comes: prove the handle by a Codeforces submission, a
+compilation error sent to a named problem within a minute and read back
+through the API. That is the incumbent's method, and it stores no password.
+The alternatives were weighed the same day. Email and password prove
+nothing about the handle and need a mail service. Google or GitHub sign-in
+proves nothing about the handle either, and Google is unreliable from
+mainland China (§7.1).
+
+What it costs, so it is not underestimated: a session (a token the browser
+keeps so the server knows it is you), a sessions table, signing out, CSRF
+protection on every form that changes something (so another site cannot
+submit one in your name), the verification flow and its API requests, and a
+/privacy rewritten around a second cookie. Roughly two full days, and
+security-sensitive throughout. Built with the pet system, which needs it
+for the same reason.
 
 ### Pet nurturing system — v1.5, spring
 

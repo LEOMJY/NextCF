@@ -427,6 +427,65 @@ CREATE TABLE IF NOT EXISTS recommendations (
 ) STRICT;
 
 
+-- Practice plans -- ADR 0026. The five a list shows are kept as that list's
+-- plan until the visitor asks for the next five, so they do not change under
+-- them: a sync ticks what they solved, a press settles one problem, and the
+-- target they moved applies to the next plan.
+--
+-- `list` is '' for the overall five, else the topic (ADR 0025): each list
+-- has its own plan, as it has its own target. Not NULL for the overall list,
+-- because a unique index treats every NULL as different from every other,
+-- and the index below exists to allow exactly one active plan per list.
+--
+-- The plan keeps what the page said when it was made -- its target, which
+-- predictor chose it, and the guard rail's two notes -- so it says the same
+-- thing on every visit. Whether a problem was SOLVED is never stored: it is
+-- read from submissions, like ADR 0024's outcomes, so it cannot disagree
+-- with the history.
+CREATE TABLE IF NOT EXISTS plans (
+    id            INTEGER PRIMARY KEY,
+    handle        TEXT    NOT NULL COLLATE NOCASE,
+    list          TEXT    NOT NULL DEFAULT '',
+    started_at    TEXT    NOT NULL,
+    ended_at      TEXT,
+    -- active; completed (every problem settled when it ended); swapped
+    -- (ended early by "swap the five").
+    state         TEXT    NOT NULL DEFAULT 'active'
+                          CHECK (state IN ('active', 'completed', 'swapped')),
+    target        REAL    NOT NULL,
+    source        TEXT    NOT NULL CHECK (source IN ('topic', 'rating')),
+    -- The ratings the chances were worked out at: the one the chooser used
+    -- (the computed one, for the topic model) and the one Codeforces showed,
+    -- NULL for somebody with none. Kept because a rating moves after every
+    -- contest, and the notes that explain a plan's chances -- "these use
+    -- 1250", "an extrapolation" -- must be about the rating that made them.
+    rating        INTEGER NOT NULL,
+    shown         INTEGER,
+    looked_up_at  INTEGER,
+    unguarded     INTEGER NOT NULL DEFAULT 0 CHECK (unguarded IN (0, 1))
+) STRICT;
+
+-- Two tabs opening one list at the same moment cannot make two plans: the
+-- second insert is refused and reads the first.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plans_one_active
+    ON plans(handle, list)
+    WHERE state = 'active';
+
+CREATE TABLE IF NOT EXISTS plan_problems (
+    plan_id       INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+    position      INTEGER NOT NULL,
+    problem_id    TEXT    NOT NULL REFERENCES problems(id),
+    -- As shown: the chance as computed, and whether it filled a small
+    -- topic's list without the guard rail (ADR 0025).
+    probability   REAL    NOT NULL,
+    thin          INTEGER NOT NULL DEFAULT 0 CHECK (thin IN (0, 1)),
+    -- Settled by a press. "Solved" is not here: see above.
+    outcome       TEXT    CHECK (outcome IN ('too_hard', 'too_easy')),
+    settled_at    TEXT,
+    PRIMARY KEY (plan_id, problem_id)
+) STRICT;
+
+
 -- A difficulty target per (handle, topic) -- ADR 0025. "Too hard" pressed on
 -- a topic's list moves that topic's target and nothing else, so a visitor can
 -- want easy dp and hard greedy. A row exists only once a topic's buttons

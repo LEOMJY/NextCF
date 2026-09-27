@@ -198,6 +198,12 @@ RESULTS_LIMIT = 10
 # list has to be filled up to it (ADR 0025).
 RECOMMENDED = 5
 
+# How long the problems of an ended plan sit out their list's next plans
+# (ADR 0026, web.choose_plan). A week: long enough that swapping again and
+# again brings new five rather than the last ones back, short enough that
+# nothing is hidden for good without the visitor having said so.
+PLAN_REST_SECONDS = 7 * 24 * 3600
+
 # Spec section 9's number, for /how: `evaluate.py final` on 2026-09-18, the
 # second look at the 2026 test set (ADR 0013's amendment), for the model that
 # ships. It is the same table as spec section 9, so change the two together --
@@ -692,6 +698,10 @@ def results(handle):
         # offer to put them back (ADR 0021).
         dismissed=dismissed,
         dismissals_kept=db.DISMISSALS_KEPT,
+        # Plans this visitor has finished or swapped, every list's, newest
+        # first (ADR 0026). Drawn by the template only: it is outside the
+        # island, and choosing a topic does not change it.
+        plans=db.plan_history(conn, user["handle"]),
         # Everything the live line needs, or None when nothing is running.
         # The line's wording lives in templates/_sync_line.html, which the
         # status endpoint below renders too, so the page and the updates it
@@ -727,6 +737,7 @@ def island_data(handle, recs, dismissed, topics, other_topics, totals):
             "recommendations": url_for("recommendations_data", handle=handle),
             "feedback": url_for("feedback", handle=handle),
             "restore": url_for("restore", handle=handle),
+            "plan": url_for("new_plan", handle=handle),
             "how": url_for("how"),
         },
     }
@@ -823,9 +834,10 @@ def feedback(handle):
     """"Too hard" or "too easy" on one recommendation -- ADR 0021.
 
     Two things happen, because the visitor is saying two things at once: that
-    problem goes away, and their difficulty target moves one step. Then back
-    to their page, which now shows five problems picked at the new target with
-    the dismissed one gone.
+    problem is settled, and their difficulty target moves one step. Then back
+    to their page, where the problem stays in the plan, marked, and the page
+    says what the next plan will aim at (ADR 0026) -- the plan on screen keeps
+    its five.
 
     POST and a redirect, like every other button here: a GET that changes
     something is followed by anything that walks the page, and a redirect is
@@ -896,6 +908,42 @@ def restore(handle):
     # Back to the list the visitor was on. Only used to build the address,
     # and url_for escapes it, so an unknown topic costs a 404 page at worst.
     return redirect(url_for("results", handle=handle, topic=request.form.get("topic") or None))
+
+
+@app.route("/results/<handle>/plan", methods=["POST"])
+def new_plan(handle):
+    """End this list's plan, so the page makes the next -- ADR 0026.
+
+    "Next five" when every problem is settled, "swap the five" when not: one
+    route, and db.end_plan records which it was. It does not choose the next
+    five itself. The results page does that when it finds no plan running,
+    the same way it does the first time, so there is one place a plan is
+    made.
+
+    POST and a redirect, like every button here. The form names the plan it
+    was drawn for, and only that plan ends (db.end_plan): a double-click's
+    second POST finds it already gone and changes nothing, instead of ending
+    the plan the first press made.
+    """
+    if not HANDLE_PATTERN.match(handle):
+        return render_template("error.html", handle=handle,
+                               message="That does not look like a Codeforces handle."), 404
+    # Anything can POST here, so both values are checked rather than trusted.
+    plan_id = request.form.get("plan", "")
+    if not plan_id.isdecimal():
+        return render_template("error.html", handle=handle,
+                               message="That is not a plan this site made."), 400
+    conn = get_db()
+    topic = request.form.get("topic") or None
+    if topic is not None and topic not in db.pool_topics(conn):
+        return render_template("error.html", handle=handle,
+                               message="There is no topic by that name."), 400
+    user = db.get_user(conn, handle)
+    if user is not None:
+        # The stored spelling: the plan was made under it. NOCASE would find
+        # it either way; this keeps every row about a person naming them one way.
+        db.end_plan(conn, user["handle"], topic or "", int(plan_id))
+    return redirect(url_for("results", handle=handle, topic=topic))
 
 
 @app.route("/progress/<int:job_id>/status")
@@ -1054,6 +1102,12 @@ def display_row(row):
 def recommendation_view(conn, user, topic=None):
     """Everything the recommendations section needs, or the reason there are none.
 
+    The five are the list's plan (ADR 0026): chosen once, the first time the
+    list is shown with no plan running (choose_plan), then kept -- the same
+    five on every visit, each ticked when a sync finds it solved or marked
+    when "too hard" or "too easy" is pressed, until the visitor asks for the
+    next five (new_plan).
+
     With `topic`, the five are that topic's (ADR 0025): the pool filtered to
     its tag, aimed at the topic's own target -- the overall one until
     "too hard" or "too easy" has been pressed on that topic's list -- and, in
@@ -1087,35 +1141,155 @@ def recommendation_view(conn, user, topic=None):
     # The visitor's own target if they have ever pressed "too hard" or "too
     # easy", and the product default if they have not (ADR 0021).
     # target_chosen_at is what separates the two: target_prob's own default is
-    # 0.70, which is a number somebody could also choose.
+    # 0.70, which is a number somebody could also choose. On a topic's list,
+    # that topic's own target once it has one (ADR 0025). This is the target
+    # the NEXT plan will aim at; the plan on screen keeps the one it was made
+    # with (ADR 0026).
     overall = user["target_prob"] if user["target_chosen_at"] else model.DEFAULT_TARGET
     own = db.topic_target(conn, user["handle"], topic) if topic else None
-    target = own if own is not None else overall
+    target_now = own if own is not None else overall
+
+    # ADR 0026: the list's plan, if it has one -- the same five until the
+    # visitor asks for the next -- else a new plan made from a fresh choice.
+    list_key = topic or ""
+    found = db.active_plan(conn, user["handle"], list_key)
+    if found is None:
+        # The topic model reads the rating Codeforces COMPUTES with, which
+        # for a new account's first six rated contests is more than its
+        # profile shows (model.HIDDEN_AFTER); the page says so when the two
+        # differ. The baseline keeps the shown one, as it was fitted on (ADR
+        # 0012). Somebody with no rating at all is served by the topic model
+        # from model.UNRATED_START, which rating_now returns for them.
+        rating = model.rating_now(conn, user["handle"], user["cf_rating"])
+        made = choose_plan(conn, user, topic, rating, target_now, unrated)
+        if "state" in made:
+            return made
+        found = db.create_plan(
+            conn, user["handle"], list_key, made["picks"],
+            target=target_now, source=made["source"],
+            # The rating the chooser used, and the one Codeforces showed.
+            rating=rating if made["source"] == "topic" else user["cf_rating"],
+            shown=user["cf_rating"],
+            looked_up_at=made["looked_up_at"], unguarded=made["unguarded"])
+    plan, rows = found
+    target = plan["target"]
+    source = plan["source"]
+    # Every note below about how the chances were worked out reads the plan's
+    # ratings, not today's: a contest in the middle of a plan moves the
+    # rating, and the five on screen were chosen at the old one.
+    used, shown = plan["rating"], plan["shown"]
+
+    probabilities = [{"probability": row["probability"]} for row in rows]
+    settled = sum(1 for row in rows if row["solved"] or row["outcome"])
+    baseline = model.current_baseline()
+    return {
+        "state": "ok",
+        "source": source,
+        # The topic this list is filtered to, None for the overall five, and
+        # whether its target is its own or still the overall one (ADR 0025).
+        "topic": topic,
+        "own_target": own is not None,
+        "overall_target": round(overall * 100),
+        # A rating outside what the model was fitted on is answered, but as an
+        # extrapolation, and the page says so -- see model.outside_range.
+        "extrapolated": source == "topic" and model.outside_range(
+            model.current_topic_model(), used),
+        "hidden": source == "topic" and shown is not None and used != shown,
+        "unrated": shown is None,
+        "shown": shown,
+        "computed": used,
+        # What this plan aims at, and what the next one will: they differ once
+        # "too hard" or "too easy" has been pressed on it (ADR 0026).
+        "target": round(target * 100),
+        "next_target": round(target_now * 100),
+        # The guard rail's two notes, as they were when the plan was made: the
+        # rating it looked the visitor up at when theirs is outside the data,
+        # and whether it had to stand aside (model.guard_pool).
+        "looked_up_at": plan["looked_up_at"],
+        "unguarded": bool(plan["unguarded"]),
+        # Whether the target can be reached at all, whether the ladder has
+        # run out, and whether the five are scattered -- about the five in
+        # this plan, at the target they were chosen for (target_limits).
+        **target_limits(probabilities, target),
+        # The rating the curve puts at exactly the target, for the baseline's
+        # sentence. Clamped to the problemset's real range: an 1100-rated user
+        # at 70% comes out at 613, and there are no problems below 800. int()
+        # because round(x, -2) on a float returns a float. The baseline never
+        # serves somebody unrated, who has no rating to put into the curve.
+        "centre": (max(800, int(round(model.rating_for_probability(shown, target), -2)))
+                   if shown is not None else None),
+        "event": baseline["event"],
+        # The plan itself (ADR 0026): when it began, and how far along it is.
+        # Complete when every problem is settled -- solved, or pressed.
+        "plan": {
+            # Which plan the "next five" button ends (new_plan).
+            "id": plan["id"],
+            "started_at": plan["started_at"],
+            "size": len(rows),
+            "settled": settled,
+            "solved": sum(1 for row in rows if row["solved"]),
+            "complete": settled == len(rows),
+        },
+        "problems": [
+            {
+                # The id goes to the page because the two buttons beside each
+                # row have to name the problem they are about (ADR 0021).
+                "id": row["id"],
+                "name": row["name"],
+                "rating": row["rating"],
+                # Whole percentages. The curve is fitted to three decimal
+                # places and is not that good; "71%" claims enough.
+                "percent": round(row["probability"] * 100),
+                # The chance as computed, for the record of what was shown
+                # (ADR 0024) -- the page prints only the whole percent.
+                "probability": row["probability"],
+                "url": (
+                    f"https://codeforces.com/problemset/problem/"
+                    f"{row['contest_id']}/{row['problem_index']}"
+                ),
+                # Filled into a small topic's list without the guard rail's
+                # evidence (ADR 0025); the row says so, and the record of
+                # what was shown marks it unguarded.
+                "thin": bool(row["thin"]),
+                "guarded": not row["thin"] and not plan["unguarded"],
+                # How it is settled (ADR 0026): solved, read from the history
+                # since the plan began, or the button that was pressed. None
+                # while it is still to do.
+                "solved": row["solved"],
+                "outcome": row["outcome"],
+            }
+            for row in rows
+        ],
+    }
+
+
+def choose_plan(conn, user, topic, rating, target, unrated):
+    """Choose the five a new plan will keep -- ADR 0026 -- or say why there
+    are none: {"state": "unrated" | "exhausted", "topic": ...}.
+
+    The choice is the one the page always made: the pool, less what is
+    solved and hidden (db.recommendation_pool); ADR 0023's guard rail; the
+    topic model's nearest to the target, or the rating-only baseline when
+    there is no model file (the page says which, in words). Returns
+    {"picks", "source", "looked_up_at", "unguarded"}, each pick carrying its
+    id, its chance and, in a small topic's list, "thin".
+    """
     pool = db.recommendation_pool(conn, user["handle"], topic)
 
-    # The topic model when topic_model.json exists, the rating-only baseline
-    # when it does not. Never silently: `source` goes to the page, which says
-    # in words which of the two chose these problems, because they are
-    # different claims -- one is about everybody at a rating, the other about
-    # this person.
-    #
-    # The topic model reads the rating Codeforces COMPUTES with, which for a
-    # new account's first six rated contests is more than its profile shows
-    # (model.HIDDEN_AFTER); the page says so when the two differ. The
-    # baseline keeps the shown one, as it was fitted on (ADR 0012).
-    #
-    # Somebody with no rating at all is served by the topic model from
-    # model.UNRATED_START, which rating_now returns for them; without the
-    # model file there is nothing to serve them from.
-    rating = model.rating_now(conn, user["handle"], user["cf_rating"])
+    # ADR 0026: what this list's recent plans held sits out this one -- a
+    # swap asks for different five, and the same five are otherwise still the
+    # nearest. For a while, not for good: they were set aside, not hidden,
+    # and "put back" knows nothing about them. A list with nothing else left
+    # gets them back rather than nothing.
+    resting = db.recently_planned(conn, user["handle"], topic or "",
+                                  db.utc_ago(PLAN_REST_SECONDS))
+    pool = [row for row in pool if row["id"] not in resting] or pool
 
     # ADR 0023: offer only what people near this visitor have actually tried,
-    # and a harder version only after the easier one. Neither rule changes a
-    # prediction; they keep the model from being asked where it has no
-    # evidence. `guard` says what the page should tell the visitor about it.
-    # On a topic's list, the easier-version rule looks at everything the
-    # visitor has not solved, not only this topic's problems: an easy version
-    # can carry different tags from its hard one (model.guard_pool).
+    # and a harder version only after the easier one. On a topic's list, the
+    # easier-version rule looks at everything the visitor has not solved, not
+    # only this topic's problems: an easy version can carry different tags
+    # from its hard one (model.guard_pool).
     unsolved = db.recommendation_pool(conn, user["handle"]) if topic else None
     pool, guard = model.guard_pool(pool, rating, fill=topic is not None, unsolved=unsolved)
 
@@ -1134,82 +1308,13 @@ def recommendation_view(conn, user, topic=None):
         return {"state": "unrated", "topic": topic}
     # A topic too small for five to pass the guard rail: the empty places,
     # and only those, from what did not pass -- marked, row by row.
-    thin = set()
     if topic and len(picks) < RECOMMENDED and guard["rest"]:
         extra, _ = choose_from(guard["rest"], RECOMMENDED - len(picks))
-        thin = {p["id"] for p in extra}
-        picks = picks + extra
+        picks = picks + [dict(pick, thin=True) for pick in extra]
     if not picks:
         return {"state": "exhausted", "topic": topic}
-
-    baseline = model.current_baseline()
-    return {
-        "state": "ok",
-        "source": source,
-        # The topic this list is filtered to, None for the overall five, and
-        # whether its target is its own or still the overall one (ADR 0025).
-        "topic": topic,
-        "own_target": own is not None,
-        "overall_target": round(overall * 100),
-        # A rating outside what the model was fitted on is answered, but as an
-        # extrapolation, and the page says so -- see model.outside_range.
-        "extrapolated": source == "topic" and model.outside_range(
-            model.current_topic_model(), rating),
-        "hidden": source == "topic" and not unrated and rating != user["cf_rating"],
-        "unrated": unrated,
-        "shown": user["cf_rating"],
-        "computed": rating,
-        "target": round(target * 100),
-        # The guard rail's two notes: the rating it looked the visitor up at
-        # when theirs is outside the data, and whether it had to stand aside
-        # because too few problems passed it (model.guard_pool).
-        "looked_up_at": guard["looked_up_at"],
-        "unguarded": guard["fallback"],
-        # Whether the target can be reached at all, and whether the ladder has
-        # run out -- see target_limits. Found on review: an 800-rated visitor
-        # pressing "too hard" a third time got the same five problems and no
-        # word why.
-        **target_limits(picks, target),
-        # The rating the curve puts at exactly the target, for the sentence
-        # that explains the list. Clamped to the problemset's real range:
-        # an 1100-rated user at 70% comes out at 613, and there are no
-        # problems below 800 to point at.
-        #
-        # int() because round(x, -2) on a float returns a float: 2800.0,
-        # which is what the first version printed on the page.
-        #
-        # Only the baseline's sentence uses it, and the baseline never serves
-        # somebody unrated -- who has no rating to put into the curve.
-        "centre": (max(800, int(round(model.rating_for_probability(user["cf_rating"], target), -2)))
-                   if not unrated else None),
-        "event": baseline["event"],
-        "problems": [
-            {
-                # The id goes to the page because the two buttons beside each
-                # row have to name the problem they are about (ADR 0021).
-                "id": pick["id"],
-                "name": pick["name"],
-                "rating": pick["rating"],
-                # Whole percentages. The curve is fitted to three decimal
-                # places and is not that good; "71%" claims enough.
-                "percent": round(pick["probability"] * 100),
-                # The chance as computed, for the record of what was shown
-                # (ADR 0024) -- the page prints only the whole percent.
-                "probability": pick["probability"],
-                "url": (
-                    f"https://codeforces.com/problemset/problem/"
-                    f"{pick['contest_id']}/{pick['problem_index']}"
-                ),
-                # Filled into a small topic's list without the guard rail's
-                # evidence (ADR 0025); the row says so, and the record of
-                # what was shown marks it unguarded.
-                "thin": pick["id"] in thin,
-                "guarded": pick["id"] not in thin and not guard["fallback"],
-            }
-            for pick in picks
-        ],
-    }
-
+    return {"picks": picks, "source": source,
+            "looked_up_at": guard["looked_up_at"], "unguarded": guard["fallback"]}
 
 def target_limits(picks, target):
     """Say when "too hard" or "too easy" can no longer change the list.

@@ -1013,6 +1013,21 @@ def record_feedback(conn, handle, problem_id, reason, target, keep=DISMISSALS_KE
                 """,
                 (handle, topic, target, now),
             )
+        # And the problem is settled in every active plan that holds it (ADR
+        # 0026): it stays on the page, marked, and the plan does not refill.
+        # Every plan, not only the list's: the hiding is global, so a problem
+        # in both the overall plan and a topic's would otherwise stay "to do"
+        # in the other one, with buttons that could no longer do anything --
+        # the INSERT above would find the row and return False. Same
+        # transaction, so the plans and the dismissal cannot disagree.
+        conn.execute(
+            """
+            UPDATE plan_problems SET outcome = ?, settled_at = ?
+             WHERE problem_id = ?
+               AND plan_id IN (SELECT id FROM plans WHERE handle = ? AND state = 'active')
+            """,
+            (reason, now, problem_id, handle),
+        )
     return True
 
 
@@ -1023,6 +1038,168 @@ def topic_target(conn, handle, tag):
         "SELECT target_prob FROM topic_targets WHERE handle = ? AND tag = ?", (handle, tag)
     ).fetchone()
     return row[0] if row is not None else None
+
+
+# ------------------------------------------------------------ practice plans
+#
+# ADR 0026. A list's five are kept as its plan until the visitor asks for the
+# next five. `list_key` is '' for the overall list, else the topic.
+
+def active_plan(conn, handle, list_key):
+    """This list's active plan and its problems, or None.
+
+    Returns (plan, rows). Each row carries what the page draws -- name,
+    rating, contest, index -- and `solved`, read from the history
+    (solved_since), never stored.
+    """
+    plan = conn.execute(
+        "SELECT * FROM plans WHERE handle = ? AND list = ? AND state = 'active'",
+        (handle, list_key),
+    ).fetchone()
+    if plan is None:
+        return None
+    return plan, plan_rows(conn, plan)
+
+
+def plan_rows(conn, plan):
+    """One plan's problems, in the order they were shown, each marked solved
+    or not."""
+    rows = conn.execute(
+        """
+        SELECT pp.problem_id AS id, pp.position, pp.probability, pp.thin, pp.outcome,
+               p.name, p.rating, p.contest_id, p.problem_index
+          FROM plan_problems pp
+          JOIN problems p ON p.id = pp.problem_id
+         WHERE pp.plan_id = ?
+         ORDER BY pp.position
+        """,
+        (plan["id"],),
+    ).fetchall()
+    solved = solved_since(conn, plan["handle"], [row["id"] for row in rows],
+                          plan["started_at"], plan["ended_at"])
+    return [dict(row, solved=row["id"] in solved) for row in rows]
+
+
+def solved_since(conn, handle, problem_ids, since, until=None):
+    """Which of these problems this handle had accepted between `since` and
+    `until` (None: up to now), under the canonical id (ADR 0010) -- solving
+    the Div. 2 copy of a planned Div. 1 problem is solving it."""
+    if not problem_ids:
+        return set()
+    marks = ", ".join("?" for _ in problem_ids)
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT COALESCE(a.canonical_id, s.problem_id)
+          FROM submissions s
+          LEFT JOIN problem_aliases a ON a.alias_id = s.problem_id
+         WHERE s.handle = ? AND s.verdict = 'OK'
+           AND s.submitted_at >= ?
+           AND (? IS NULL OR s.submitted_at <= ?)
+           AND COALESCE(a.canonical_id, s.problem_id) IN ({marks})
+        """,
+        (handle, since, until, until, *problem_ids),
+    ).fetchall()
+    return {row[0] for row in rows}
+
+
+def create_plan(conn, handle, list_key, picks, *, target, source, rating, shown,
+                looked_up_at, unguarded):
+    """Keep these picks as the list's plan, and return the list's active plan.
+
+    `picks` are dicts with "id", "probability" and, for a small topic's
+    filled rows, "thin". The rest is what the page says about them (see the
+    plans table): keyword-only, because six values in a row are easy to pass
+    in the wrong order and hard to spot when they are. If another request
+    made this list's plan a moment ago -- two tabs opening one page -- the
+    unique index refuses this insert and the one already made is returned,
+    so a visitor never has two.
+    """
+    now = utc_now()
+    with conn:
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO plans (handle, list, started_at, target, source, rating, shown,
+                                         looked_up_at, unguarded)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (handle, list_key, now, target, source, rating, shown, looked_up_at,
+             1 if unguarded else 0),
+        )
+        if cursor.rowcount == 1:
+            conn.executemany(
+                """
+                INSERT INTO plan_problems (plan_id, position, problem_id, probability, thin)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [(cursor.lastrowid, position, pick["id"], pick["probability"],
+                  1 if pick.get("thin") else 0)
+                 for position, pick in enumerate(picks)],
+            )
+    return active_plan(conn, handle, list_key)
+
+
+def end_plan(conn, handle, list_key, plan_id):
+    """End this list's active plan: "completed" if every problem was settled
+    -- solved, or pressed -- else "swapped". Returns the state it ended in,
+    or None if nothing was ended. The next page view makes the next.
+
+    `plan_id` is the plan the button was drawn for, and only that plan ends.
+    A double-click sends two POSTs; by the second, the page may already have
+    made the next plan, and without the id the second press would end that
+    one too -- a plan swapped before it was ever seen.
+    """
+    found = active_plan(conn, handle, list_key)
+    if found is None or found[0]["id"] != plan_id:
+        return None
+    plan, rows = found
+    state = "completed" if all(row["solved"] or row["outcome"] for row in rows) else "swapped"
+    with conn:
+        conn.execute(
+            "UPDATE plans SET state = ?, ended_at = ? WHERE id = ? AND state = 'active'",
+            (state, utc_now(), plan["id"]),
+        )
+    return state
+
+
+def recently_planned(conn, handle, list_key, since):
+    """The problems in this list's plans that ended at or after `since`.
+
+    What a new plan leaves out (web.choose_plan): without it, "swap the five"
+    gave back the same five -- nothing about them had changed, so they were
+    still the nearest to the target. Found by the plan checks the day plans
+    were built."""
+    return {row[0] for row in conn.execute(
+        """
+        SELECT pp.problem_id
+          FROM plan_problems pp
+          JOIN plans p ON p.id = pp.plan_id
+         WHERE p.handle = ? AND p.list = ? AND p.state != 'active' AND p.ended_at >= ?
+        """,
+        (handle, list_key, since),
+    )}
+
+
+def plan_history(conn, handle, limit=10):
+    """This handle's ended plans, newest first, each with how many of its
+    problems were solved while it ran and how many were settled at all."""
+    history = []
+    for plan in conn.execute(
+        """
+        SELECT * FROM plans WHERE handle = ? AND state != 'active'
+         ORDER BY started_at DESC, id DESC LIMIT ?
+        """,
+        (handle, limit),
+    ).fetchall():
+        rows = plan_rows(conn, plan)
+        history.append({
+            "started_at": plan["started_at"],
+            "list": plan["list"],
+            "state": plan["state"],
+            "size": len(rows),
+            "solved": sum(1 for row in rows if row["solved"]),
+            "settled": sum(1 for row in rows if row["solved"] or row["outcome"]),
+        })
+    return history
 
 
 def problem_exists(conn, problem_id):
@@ -1041,9 +1218,22 @@ def count_dismissals(conn, handle):
 
 
 def clear_dismissals(conn, handle):
-    """Put them all back, and say how many that was."""
+    """Put them all back, and say how many that was.
+
+    In the plans still running, a pressed problem goes back to "to do" (ADR
+    0026) -- this is the only undo for a press, since a settled row has no
+    buttons. Ended plans keep what was said while they ran: they are a record.
+    """
     with conn:
         cursor = conn.execute("DELETE FROM dismissals WHERE handle = ?", (handle,))
+        conn.execute(
+            """
+            UPDATE plan_problems SET outcome = NULL, settled_at = NULL
+             WHERE outcome IS NOT NULL
+               AND plan_id IN (SELECT id FROM plans WHERE handle = ? AND state = 'active')
+            """,
+            (handle,),
+        )
     return cursor.rowcount
 
 

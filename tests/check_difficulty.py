@@ -108,8 +108,36 @@ def a_visitor(rating=1500):
                 (HANDLE,),
             )
             conn.execute("DELETE FROM dismissals WHERE handle = ?", (HANDLE,))
+            # And no plan (ADR 0026): a plan outlives the page view that made
+            # it, so without this one check's five -- pressed, or all hidden --
+            # would be the next check's. Its problems go with it (CASCADE).
+            conn.execute("DELETE FROM plans WHERE handle = ?", (HANDLE,))
     finally:
         conn.close()
+
+
+def plan_ids():
+    """Every problem in the overall list's plan, settled or not, in order.
+    The page is viewed first, because that is what makes a plan when there
+    is none -- after a swap, for instance."""
+    client.get(f"/results/{HANDLE}")
+    conn = db.connect()
+    try:
+        found = db.active_plan(conn, HANDLE, "")
+        return [row["id"] for row in found[1]] if found else []
+    finally:
+        conn.close()
+
+
+def swap():
+    """Press "swap the five" (or "next five") on the overall list's plan."""
+    client.get(f"/results/{HANDLE}")
+    conn = db.connect()
+    try:
+        plan, _ = db.active_plan(conn, HANDLE, "")
+    finally:
+        conn.close()
+    return client.post(f"/results/{HANDLE}/plan", data={"plan": plan["id"]})
 
 
 def the_user():
@@ -192,6 +220,9 @@ def the_page_offers_both_buttons_on_every_problem():
 
 
 def too_hard_moves_the_target_and_says_so():
+    """The target moves at once, and the page says so at once -- as where the
+    NEXT plan will aim, since this plan keeps its five (ADR 0026). The next
+    plan is then chosen at it."""
     a_visitor()
     first = shown_problems()
     response = press(first[0], "too_hard")
@@ -202,7 +233,12 @@ def too_hard_moves_the_target_and_says_so():
     assert user["target_prob"] == expected, user["target_prob"]
     assert user["target_chosen_at"] is not None, "the choice was not recorded as one"
 
-    assert quotes_target(expected), "the page still quotes the old target"
+    html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
+    assert f"Your next five will aim at {round(expected * 100)}%" in html, \
+        "the page did not say where the next plan will aim"
+    assert quotes_target(model.DEFAULT_TARGET), "the plan on screen changed its target"
+    swap()
+    assert quotes_target(expected), "the next plan did not aim at the new target"
 
 
 def too_easy_moves_it_the_other_way():
@@ -212,14 +248,22 @@ def too_easy_moves_it_the_other_way():
 
 
 def the_problem_goes_away_and_stays_away():
+    """In the plan it was pressed in, it stays, marked and without buttons
+    (ADR 0026); in every plan after, it is not there at all."""
     a_visitor()
     first = shown_problems()
     press(first[0], "too_hard")
 
+    assert first[0] in plan_ids(), "the pressed problem left its plan"
     after = shown_problems()
-    assert first[0] not in after, "the problem came back on the next page"
-    again = shown_problems()
-    assert first[0] not in again, "it came back on a reload"
+    assert first[0] not in after, "the pressed problem still has its buttons"
+    assert "marked too hard" in client.get(f"/results/{HANDLE}").get_data(as_text=True), \
+        "the pressed problem is not marked"
+
+    swap()
+    assert first[0] not in plan_ids(), "the problem came back in the next plan"
+    swap()
+    assert first[0] not in plan_ids(), "it came back in the plan after that"
 
 
 def pressing_the_other_button_replaces_the_answer():
@@ -242,15 +286,20 @@ def pressing_the_other_button_replaces_the_answer():
     assert rows[0]["reason"] == "too_easy", rows[0]["reason"]
 
 
-def the_five_change_when_the_target_does():
-    """A button that visibly does nothing looks broken."""
+def the_plan_keeps_its_five_and_the_next_moves():
+    """A button that visibly does nothing looks broken -- which, since ADR
+    0026, is answered by the row being marked and the page naming the next
+    target, not by redrawing the list. The plan keeps its five; the next plan
+    is a different five, chosen at the moved target."""
     a_visitor()
-    before = set(shown_problems())
-    for problem in list(before)[:1]:
-        press(problem, "too_hard")
-    after = set(shown_problems())
-    assert after != before, "the list did not move"
-    assert len(after - before) >= 1, "nothing new arrived"
+    before = plan_ids()
+    assert len(before) == 5, before
+    press(before[0], "too_hard")
+    assert plan_ids() == before, "a press redrew the plan"
+    swap()
+    after = plan_ids()
+    assert len(after) == 5, after
+    assert set(after) != set(before), "the next plan is the same five"
 
 
 # ------------------------------------------------------------------ undoing
@@ -664,7 +713,7 @@ check("too hard moves the target, and the page says so", too_hard_moves_the_targ
 check("too easy moves it the other way", too_easy_moves_it_the_other_way)
 check("the problem goes away and stays away", the_problem_goes_away_and_stays_away)
 check("the other button replaces the answer", pressing_the_other_button_replaces_the_answer)
-check("the five change when the target does", the_five_change_when_the_target_does)
+check("the plan keeps its five; the next one moves", the_plan_keeps_its_five_and_the_next_moves)
 
 print("\nundoing")
 check("the page offers to put them back", the_page_offers_to_put_them_back)

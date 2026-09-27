@@ -305,6 +305,14 @@ def the_page_says_which_model_chose():
         assert "Rating only" not in html, "the baseline's sentence appeared with a model present"
         assert html.count('class="num chance"') == 5, html.count('class="num chance"')
         model.current_topic_model = lambda path=None: None
+        # The model's plan keeps its five and says who chose them (ADR 0026);
+        # the switch shows in the next plan, made without the model.
+        conn = db.connect()
+        try:
+            with conn:
+                conn.execute("DELETE FROM plans WHERE handle = 'visitor'")
+        finally:
+            conn.close()
         html = client.get("/results/visitor").get_data(as_text=True)
         assert "Rating only" in html, "no model, and the page did not say it fell back"
         assert "Chosen for you" not in html
@@ -343,6 +351,9 @@ def an_out_of_range_rating_is_told_so():
         fitted = a_fitted_model(conn)
         fitted["level_range"] = [-11.5, 8.7]
         conn.execute("UPDATE users SET cf_rating = 3528 WHERE handle = 'visitor'")
+        # A plan made at the old rating keeps saying what it said then (ADR
+        # 0026); the note is checked on a plan made at this one.
+        conn.execute("DELETE FROM plans WHERE handle = 'visitor'")
         conn.commit()
     finally:
         conn.close()

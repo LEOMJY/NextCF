@@ -309,6 +309,49 @@ main {
   padding: var(--s5) 0 var(--s4);
 }
 
+/* "Continue as <handle>" for a returning browser: the landing page's first
+   action for somebody who has been here, drawn like the form's button
+   because it is the same kind of thing -- the place to act. */
+.continue {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+  margin-bottom: var(--s3);
+}
+
+/* Its way out, for somebody else on this device: available, not asked
+   for -- the same underlined text as the form's own "use another handle". */
+.continue button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  font: 400 var(--text-small) / 1.2 var(--mono);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.continue button:hover {
+  color: var(--ink);
+}
+
+.continue a {
+  display: inline-block;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  border-radius: var(--radius);
+  font: 600 var(--text-body) / 1 var(--mono);
+  padding: 15px var(--s3);
+}
+
+.continue a:hover {
+  color: var(--accent-ink);
+  filter: brightness(0.92);
+}
+
 .eyebrow {
   color: var(--accent);
   font-size: var(--text-small);
@@ -688,6 +731,69 @@ tbody tr:hover td {
   color: var(--muted);
   font-size: var(--text-small);
   margin-top: var(--s1);
+}
+
+/* A practice plan's settled problems (ADR 0026). The row stays, so the plan
+   reads as a whole; its chance drops to the muted colour, because the accent
+   means "act here" (ADR 0006) and a settled row no longer asks. The mark sits
+   where the buttons were. "Solved" is the one mark in the accent: that is
+   the other half of its meaning, "this is good". */
+.rec-table tr.settled .chance {
+  color: var(--muted);
+}
+
+.plan-mark {
+  display: block;
+  margin-top: var(--s1);
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+
+.plan-mark.solved {
+  color: var(--accent);
+}
+
+/* "Next five" or "swap the five", under the plan. Swapping is the resync
+   button's kind of thing -- available, bordered, not asked for. "Next five",
+   once every problem is done, is the one place left to act, so it takes the
+   accent the landing page's button has. */
+.plan-next {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  margin-top: var(--s3);
+}
+
+.plan-next button {
+  background: none;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: 400 var(--text-small) / 1 var(--mono);
+  padding: var(--s1) var(--s2);
+  cursor: pointer;
+}
+
+.plan-next button:hover {
+  border-color: var(--muted);
+  background: var(--panel);
+}
+
+.plan-next button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.plan-next button.primary:hover {
+  background: var(--accent);
+  filter: brightness(0.92);
+}
+
+.plan-next .meta {
+  margin: 0;
 }
 
 /* Columns of figures line up only with tabular figures, and right alignment

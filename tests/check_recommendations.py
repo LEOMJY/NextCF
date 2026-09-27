@@ -94,6 +94,9 @@ def a_visitor(rating=1500):
         with conn:
             conn.execute("DELETE FROM recommendations")
             conn.execute("DELETE FROM dismissals")
+            # A plan outlives the view that made it (ADR 0026); each check
+            # starts without one.
+            conn.execute("DELETE FROM plans")
             conn.execute("UPDATE users SET target_prob = 0.70, target_chosen_at = NULL WHERE handle = ?",
                          (HANDLE,))
     finally:
@@ -158,9 +161,18 @@ def the_first_showing_is_kept():
 
 
 def what_a_press_brings_is_written_too():
+    """A press moves the target for the next plan (ADR 0026), so what it
+    brings arrives when the plan is swapped -- and is written down then, at
+    the target it was chosen for."""
     a_visitor()
     first = shown_on_the_page()
     client.post(f"/results/{HANDLE}/feedback", data={"problem": first[0], "verdict": "too_hard"})
+    conn = db.connect()
+    try:
+        plan, _ = db.active_plan(conn, HANDLE, "")
+    finally:
+        conn.close()
+    client.post(f"/results/{HANDLE}/plan", data={"plan": plan["id"]})
     second = shown_on_the_page()
     rows = recorded()
     assert set(first) | set(second) <= set(rows), "the new five were not recorded"

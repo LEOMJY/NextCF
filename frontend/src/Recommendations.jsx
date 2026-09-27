@@ -10,10 +10,12 @@
 const nbsp = ' '
 
 // One problem's row: the link, the "less evidence" note on a filled row,
-// the two verdict buttons as a real form, the rating and the chance.
+// then either how it was settled in the plan (ADR 0026) or the two verdict
+// buttons as a real form, the rating and the chance.
 function ProblemRow({ problem, topic, urls }) {
+  const settled = problem.solved || problem.outcome
   return (
-    <tr>
+    <tr className={settled ? 'settled' : undefined}>
       <td>
         <a href={problem.url}>{problem.name}</a>
         {problem.thin && (
@@ -21,14 +23,23 @@ function ProblemRow({ problem, topic, urls }) {
             few people near your rating have tried this one, so its chance rests on less evidence
           </span>
         )}
-        {/* A form and a POST, exactly as the template's: pressing reloads the
-            page on the same list, which is what the server redirects to. */}
-        <form className="verdict-form" method="post" action={urls.feedback}>
-          <input type="hidden" name="problem" value={problem.id} />
-          {topic && <input type="hidden" name="topic" value={topic} />}
-          <button type="submit" name="verdict" value="too_hard">too hard</button>
-          <button type="submit" name="verdict" value="too_easy">too easy</button>
-        </form>
+        {/* Solved wins over a press, as in the template. */}
+        {problem.solved ? (
+          <span className="plan-mark solved">✓ solved</span>
+        ) : problem.outcome ? (
+          <span className="plan-mark">
+            marked {problem.outcome === 'too_hard' ? 'too hard' : 'too easy'}
+          </span>
+        ) : (
+          // A form and a POST, exactly as the template's: pressing reloads
+          // the page on the same list, which is what the server redirects to.
+          <form className="verdict-form" method="post" action={urls.feedback}>
+            <input type="hidden" name="problem" value={problem.id} />
+            {topic && <input type="hidden" name="topic" value={topic} />}
+            <button type="submit" name="verdict" value="too_hard">too hard</button>
+            <button type="submit" name="verdict" value="too_easy">too easy</button>
+          </form>
+        )}
       </td>
       <td className="num rating">{problem.rating}</td>
       <td className="num chance">{problem.percent}%</td>
@@ -187,6 +198,13 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
       {recs.state === 'ok' ? (
         <>
           <Notes recs={recs} urls={urls} />
+          <p className="meta plan-progress">
+            Your plan since <time dateTime={recs.plan.started_at}>{recs.plan.started_at.slice(0, 10)}</time>:{' '}
+            {recs.plan.settled} of {recs.plan.size} done, {recs.plan.solved} solved.
+            {!recs.plan.complete && (
+              <> A problem you solve is ticked the next time this page updates from Codeforces.</>
+            )}
+          </p>
           <table className="rec-table">
             <thead>
               <tr>
@@ -201,6 +219,26 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
               ))}
             </tbody>
           </table>
+          {/* The end of a plan, by asking only (ADR 0026) -- the template's
+              form, naming the plan it ends. */}
+          {recs.next_target !== recs.target && (
+            <p className="footnote">Your next five will aim at {recs.next_target}%.</p>
+          )}
+          <form className="plan-next" method="post" action={urls.plan}>
+            <input type="hidden" name="plan" value={recs.plan.id} />
+            {recs.topic && <input type="hidden" name="topic" value={recs.topic} />}
+            {recs.plan.complete ? (
+              <>
+                <button type="submit" className="primary">Next five</button>
+                <span className="meta">All five done.</span>
+              </>
+            ) : (
+              <>
+                <button type="submit">Swap the five</button>
+                <span className="meta">ends this plan unfinished; it stays in your history</span>
+              </>
+            )}
+          </form>
         </>
       ) : (
         <Empty recs={recs} dismissed={dismissed} urls={urls} onChoose={onChoose} handle={handle} />

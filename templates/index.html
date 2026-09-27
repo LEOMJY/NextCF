@@ -8,6 +8,54 @@
      accent colour is on the headline and the button, and the spacing steps
      are the large ones. #}
   <div class="hero">
+    {# For a browser that has looked a handle up before: one press back to
+       that page, at the very top, where a phone shows it without scrolling
+       (spec section 5, reconsidered 2026-09-27: remembering a visitor needs
+       no account). Hidden until the script below finds a handle, so a first
+       visit, or a browser without script, sees the page as it always was.
+       The address is built from url_for with a placeholder, so the route is
+       never spelled out twice. #}
+    {# The handle form below stays empty while this is shown: this is the
+       way back for the handle this browser knows, and the form is for any
+       other. Both filled in with the same name was two bright buttons doing
+       one thing (_handle_form.html). #}
+    <p class="continue" id="continue" hidden>
+      <a id="continue-link" href="{{ url_for('results', handle='__HANDLE__') }}">
+        Continue as <strong id="continue-handle"></strong> &rarr;
+      </a>
+      <button type="button" id="continue-forget">Use another handle</button>
+    </p>
+    <script>
+      (function () {
+        var box = document.getElementById("continue");
+        var link = document.getElementById("continue-link");
+        var name = document.getElementById("continue-handle");
+        var forget = document.getElementById("continue-forget");
+        if (!box || !link || !name || !forget) return;
+        var saved = null;
+        try {
+          saved = localStorage.getItem("nextcf_handle");
+        } catch (e) {
+          return;
+        }
+        if (!saved) return;
+        link.href = link.getAttribute("href").replace("__HANDLE__", encodeURIComponent(saved));
+        name.textContent = saved;
+        box.hidden = false;
+
+        // Somebody else on this device, or a handle they no longer use:
+        // forget it here, and send them to the field.
+        forget.addEventListener("click", function () {
+          try {
+            localStorage.removeItem("nextcf_handle");
+          } catch (e) {}
+          box.hidden = true;
+          var input = document.getElementById("handle");
+          if (input) input.focus();
+        });
+      })();
+    </script>
+
     <p class="eyebrow">// measured, not guessed</p>
 
     <h1>Which Codeforces problem should you solve <span class="accent">next?</span></h1>

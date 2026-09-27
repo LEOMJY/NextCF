@@ -5082,3 +5082,76 @@ mutations, each in a fresh copy of the repository. For the component ones,
 the copy is linked to the real `node_modules` rather than copying 78 MB each
 time, and the real folder was confirmed intact before and after. All
 twenty were caught. 368 pass; the dataset tier 372.
+
+---
+
+## 2026-09-27 — Practice plans, and a handle the site remembers
+
+The author compared the incumbent's Training Lab and named two things this
+site lacked: the five it gave you were not kept anywhere, and a returning
+visitor typed their handle again. The spec came first. §5 kept "no
+accounts" for v1.0 on a separate argument: remembering who you are needs no
+account, and proving a handle is yours is v1.5 (§11). Then ADR 0026.
+
+### What the author decided
+
+The five on a page are a plan, made automatically the first time a list is
+shown. Each problem in it is settled once: solved (read from the synced
+history), or too hard, or too easy. A press moves the target for the next
+plan and leaves this one's five alone. A plan ends only when the visitor
+asks, by "next five" or "swap the five", and ended plans are listed. On the
+landing page, "Continue as <handle>" is one press back to the page this
+browser last looked up.
+
+### What the build decided, and why
+
+- **One plan per list**, the overall five and each topic's, as each already
+  has its own target. A partial unique index (a uniqueness rule that
+  applies only to rows matching a condition, here `state = 'active'`)
+  stops two tabs from making two plans at once.
+- **Solved is derived.** An accepted submission between the plan's start
+  and end, under the canonical id, read from `submissions`. Nothing to keep
+  in step with a rejudge.
+- **A plan keeps what it was made with:** each chance, the target, the
+  guard rail's notes, and the two ratings the chances were worked out at.
+
+### What the checks found
+
+- **"Swap the five" gave back the same five.** Nothing about them had
+  changed, so they were still the nearest to the target. Now what a list's
+  plans held in the last week sits out that list. Only the last plan would
+  alternate between two sets on repeated swaps, and for good would be
+  hiding without a way back. The week is a first choice.
+- **A press hid a problem everywhere but marked it in one plan only.** In
+  the other plan it stayed "to do", with buttons that did nothing, because
+  the same answer twice is ignored. A press now settles it in every running
+  plan.
+- **The notes read today's rating while the chances used the plan's.** A
+  contest mid-plan would have left "these chances use 1250" beside chances
+  worked out at another number. The plan now stores both ratings.
+- **A double-click on "swap" would end two plans:** the first press ends
+  one and the page makes the next, then the second press ends that. The
+  form now names the plan it ends.
+- **Two mutations survived at first**, and both showed a check asking the
+  wrong question. Choosing again on every view looked identical, because
+  the unique index refused each new plan and handed back the old one. It
+  was not identical: the chooser ran on every view, and a plan vanished
+  when its pool was hidden away. There are now checks for both. And a check
+  for "forgetting the handle hides the continue box" looked for an id the
+  page mentions in two places. It now looks for the line that hides it.
+
+### What only the browser found
+
+With a remembered handle, the landing page had two bright buttons doing one
+thing: "Continue as imnothackr" at the top, and the form below filled in
+with the same name. The form is now left empty while the continue box is
+shown, and the box has its own "Use another handle".
+
+### How it was checked
+
+28 plan checks and 5 new component tests; four older check files changed
+from "the five change on a press" to "the plan keeps its five, the next one
+moves". Twenty-nine mutations, each in a fresh copy: all caught in the end.
+Clicked through in the browser at desktop and 375px: a plan across a
+sync, a press, a swap, a topic's plan through the component, the history,
+the continue box. 401 pass; the dataset tier 405.

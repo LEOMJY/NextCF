@@ -226,6 +226,18 @@
           </p>
         {% endif %}
 
+        {# ADR 0026: these five are a plan, kept until the visitor asks for
+           the next. Said once, above the table, with how far along it is --
+           and how a solve gets ticked, because nothing on this page can see
+           Codeforces until it updates from it. #}
+        <p class="meta plan-progress">
+          Your plan since <time datetime="{{ recs.plan.started_at }}">{{ recs.plan.started_at[:10] }}</time>:
+          {{ recs.plan.settled }} of {{ recs.plan.size }} done, {{ recs.plan.solved }} solved.
+          {% if not recs.plan.complete %}
+            A problem you solve is ticked the next time this page updates from Codeforces.
+          {% endif %}
+        </p>
+
         <table class="rec-table">
           <thead>
             <tr>
@@ -236,7 +248,9 @@
           </thead>
           <tbody>
             {% for problem in recs.problems %}
-              <tr>
+              {# A settled row stays, marked (ADR 0026), and its chance goes
+                 quiet: the accent means "act here", and it no longer asks. #}
+              <tr{% if problem.solved or problem.outcome %} class="settled"{% endif %}>
                 <td>
                   <a href="{{ problem.url }}">{{ problem.name }}</a>
                   {# ADR 0025: a small topic's list is filled to five, and a
@@ -245,6 +259,15 @@
                   {% if problem.thin %}
                     <span class="thin-note">few people near your rating have tried this one, so its chance rests on less evidence</span>
                   {% endif %}
+                  {# Settled once (ADR 0026): solved, read from the history,
+                     wins over a press -- somebody who called it too hard and
+                     solved it anyway solved it. A settled row has no buttons;
+                     "put back" below is the undo for a press. #}
+                  {% if problem.solved %}
+                    <span class="plan-mark solved">&#10003; solved</span>
+                  {% elif problem.outcome %}
+                    <span class="plan-mark">marked {{ "too hard" if problem.outcome == "too_hard" else "too easy" }}</span>
+                  {% else %}
                   {# ADR 0021. Two words under the name rather than a fourth
                      column: at 375px a column of buttons squeezes the name,
                      which is the thing being chosen between.
@@ -262,6 +285,7 @@
                     <button type="submit" name="verdict" value="too_hard">too hard</button>
                     <button type="submit" name="verdict" value="too_easy">too easy</button>
                   </form>
+                  {% endif %}
                 </td>
                 <td class="num rating">{{ problem.rating }}</td>
                 {# The accent's defined meaning is "this is good, or this is
@@ -272,6 +296,26 @@
             {% endfor %}
           </tbody>
         </table>
+
+        {# The end of a plan (ADR 0026), and only by asking: "next five" once
+           every problem is done, "swap the five" before that. The form names
+           the plan it ends, so a double-click cannot end the next one too
+           (web.new_plan). A press moves the target for the NEXT plan, and
+           the page says where that will be before the visitor asks for it. #}
+        {% if recs.next_target != recs.target %}
+          <p class="footnote">Your next five will aim at {{ recs.next_target }}%.</p>
+        {% endif %}
+        <form class="plan-next" method="post" action="{{ url_for('new_plan', handle=handle) }}">
+          <input type="hidden" name="plan" value="{{ recs.plan.id }}">
+          {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
+          {% if recs.plan.complete %}
+            <button type="submit" class="primary">Next five</button>
+            <span class="meta">All five done.</span>
+          {% else %}
+            <button type="submit">Swap the five</button>
+            <span class="meta">ends this plan unfinished; it stays in your history</span>
+          {% endif %}
+        </form>
 
       {% elif recs.state == "unrated" %}
         <p class="meta">
@@ -458,6 +502,45 @@
     {# The data the component starts from: exactly what drew the page above
        (web.island_data). tojson escapes it for the inside of a script tag. #}
     <script type="application/json" id="topic-island-data">{{ island | tojson }}</script>
+
+    {# ADR 0026: the plans that have ended, every list's, newest first. Out
+       here rather than in the island: choosing a topic does not change it,
+       and it is drawn once, by the server. Each list's name goes back to
+       that list. #}
+    {% if plans %}
+      <section class="plans">
+        <h2>Past plans</h2>
+        {% if plans | length >= 10 %}
+          <p class="meta">The ten most recent.</p>
+        {% endif %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Began</th>
+                <th>List</th>
+                <th class="num">Solved</th>
+                <th>Ended</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for plan in plans %}
+                <tr>
+                  <td><time datetime="{{ plan.started_at }}">{{ plan.started_at[:10] }}</time></td>
+                  <td>
+                    <a href="{{ url_for('results', handle=handle, topic=plan.list or None) }}">{{ plan.list or "all topics" }}</a>
+                  </td>
+                  <td class="num">{{ plan.solved }}<span class="of">/{{ plan.size }}</span></td>
+                  <td>
+                    {% if plan.state == "completed" %}all done{% else %}swapped, {{ plan.settled }} done{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
 
     {# A real account with zero submissions is a valid answer, not an error, and
        an empty table with no explanation looks like a bug. #}
