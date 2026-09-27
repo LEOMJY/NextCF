@@ -29,6 +29,7 @@ Usage:
 import os
 import sqlite3
 import sys
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -991,6 +992,119 @@ def clear_dismissals(conn, handle):
     return cursor.rowcount
 
 
+# ------------------------------------------------------ what was recommended
+#
+# ADR 0024. The only data that can say whether the site's chances come true
+# on problems it chose -- which is what spec section 9's calibration asks and
+# what ADR 0023's guard rail cannot settle on its own.
+
+# How many recommendations one handle keeps. Past this, nothing new is
+# recorded for them. A person would take months to be shown 500 different
+# problems; a script pressing "too hard" in a loop would not, and this table,
+# like dismissals, must not be a way to fill the disk. Stopping rather than
+# pushing out the oldest, because the first recommendations a visitor saw
+# are the calibration sample, and the report is only honest if the rows it
+# reads are not the ones that survived a purge.
+RECOMMENDATIONS_KEPT = 500
+
+
+def record_recommendations(conn, handle, picks, target, source, model_version, guarded,
+                           keep=RECOMMENDATIONS_KEPT):
+    """Write down the problems this page is showing, the first time each is
+    shown. Returns how many rows were new.
+
+    `picks` are dicts with "id" and "probability" -- the chance as computed.
+    INSERT OR IGNORE, because a row is the FIRST showing: reloading the page,
+    or a later visit that shows the same problem at a slightly different
+    chance, must not overwrite what the visitor saw before they tried it.
+    """
+    now = utc_now()
+    with conn:
+        have = conn.execute(
+            "SELECT count(*) FROM recommendations WHERE handle = ?", (handle,)
+        ).fetchone()[0]
+        added = 0
+        for pick in picks:
+            if have + added >= keep:
+                break
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO recommendations
+                       (handle, problem_id, shown_at, probability, target, source, model, guarded)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (handle, pick["id"], now, pick["probability"], target, source,
+                 model_version, 1 if guarded else 0),
+            )
+            added += cursor.rowcount
+    return added
+
+
+def recommendation_calibration(conn, exclude_handles=(), bin_width=0.1):
+    """Of the problems the site recommended, how often was the visitor's first
+    submission accepted, against how often the site said it would be?
+
+    Only a first submission counts, as in the model (ADR 0013): a problem the
+    visitor had already tried before it was shown is left out, because
+    whatever happens next is not the event the chance was about. A problem
+    recommended but never tried says nothing about the chance either -- it
+    is counted, but not scored. Both are reported, so a reader can see how
+    much of what was shown the numbers rest on.
+
+    Submissions are read under the canonical id (ADR 0010): solving the Div. 2
+    copy of a recommended Div. 1 problem is solving it. A first submission
+    still being judged (verdict NULL) is not scored yet.
+
+    Returns {"shown", "tried_before", "tried", "bins": [(low, n, said, happened)]}.
+    """
+    handles = tuple(exclude_handles)
+    where, params = "", []
+    if handles:
+        where = f"WHERE r.handle NOT IN ({', '.join('?' for _ in handles)})"
+        params.extend(handles)
+    rows = conn.execute(
+        f"""
+        WITH attempts AS (
+            SELECT s.handle, COALESCE(a.canonical_id, s.problem_id) AS problem_id,
+                   s.submitted_at, s.verdict, s.id
+              FROM submissions s
+              LEFT JOIN problem_aliases a ON a.alias_id = s.problem_id
+        )
+        SELECT r.probability,
+               EXISTS (SELECT 1 FROM attempts t
+                        WHERE t.handle = r.handle AND t.problem_id = r.problem_id
+                          AND t.submitted_at < r.shown_at) AS tried_before,
+               (SELECT t.verdict FROM attempts t
+                 WHERE t.handle = r.handle AND t.problem_id = r.problem_id
+                   AND t.submitted_at >= r.shown_at
+                 ORDER BY t.submitted_at, t.id LIMIT 1) AS first_verdict
+          FROM recommendations r
+          {where}
+        """,
+        params,
+    ).fetchall()
+
+    bins = defaultdict(lambda: [0, 0.0, 0])
+    tried_before = tried = 0
+    for probability, before, verdict in rows:
+        if before:
+            tried_before += 1
+            continue
+        if verdict is None:
+            continue
+        tried += 1
+        low = min(int(probability / bin_width), int(1 / bin_width) - 1) * bin_width
+        bins[round(low, 2)][0] += 1
+        bins[round(low, 2)][1] += probability
+        bins[round(low, 2)][2] += verdict == "OK"
+    return {
+        "shown": len(rows),
+        "tried_before": tried_before,
+        "tried": tried,
+        "bins": [(low, n, said / n, ok / n) for low, (n, said, ok) in sorted(bins.items())],
+    }
+
+
 # ------------------------------------------------------------------- visits
 #
 # Spec section 9's second criterion -- 50 people who are not the author have
@@ -1537,6 +1651,18 @@ def main():
         print(f"  page views          {counts['visits']}, {counts['without_cookie']} from browsers keeping no cookie")
         if not AUTHOR_HANDLES and not AUTHOR_VISITORS:
             print("  (nobody is excluded yet: set NEXTCF_AUTHOR_HANDLES and NEXTCF_AUTHOR_VISITORS)")
+
+        # Section 9's second-order question, and ADR 0023's open one: on the
+        # problems the site CHOSE, did its chances come true? (ADR 0024)
+        live = recommendation_calibration(conn, AUTHOR_HANDLES)
+        print("\nrecommended problems, the author excluded (ADR 0024):")
+        print(f"  shown               {live['shown']}, of which {live['tried_before']} had been tried "
+              f"before they were shown (not scored)")
+        print(f"  tried afterwards    {live['tried']}, first submission judged")
+        if live["bins"]:
+            print(f"  {'site said':>11}{'happened':>10}{'tried':>7}")
+            for low, n, said, happened in live["bins"]:
+                print(f"  {said:>11.0%}{happened:>10.0%}{n:>7}")
     finally:
         conn.close()
 

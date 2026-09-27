@@ -110,7 +110,8 @@ without reading anything.
   that needs its own evaluation, because "users say this is hard" and "this
   problem is hard" are different claims and the first is selected by who
   pressed the button.
-- **Still open: recording what was recommended.** Until the site stores the
+- **Still open: recording what was recommended.** *(Answered 2026-09-26, ADR
+  0024: the `recommendations` table.)* Until the site stores the
   five it showed, it cannot say "you solved two of the five" and cannot answer
   §9's calibration question for problems it chose. That is the next piece, and
   the natural place for it is beside this table.

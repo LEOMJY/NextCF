@@ -649,6 +649,10 @@ def results(handle):
     # handle (section 9) -- a stored history, found and shown.
     shown_handle(user["handle"])
 
+    recs = recommendation_view(conn, user)
+    if recs["state"] == "ok":
+        record_shown(conn, user, recs)
+
     return render_template(
         "results.html",
         # The spelling Codeforces uses, not the one that was typed. The two
@@ -660,7 +664,7 @@ def results(handle):
         last_synced=user["last_synced"],
         topics=topic_rows(db.topic_breakdown(conn, handle)),
         totals=db.problem_totals(conn, handle),
-        recs=recommendation_view(conn, user),
+        recs=recs,
         # Older than the freshness window: the page says so rather than
         # letting the numbers pass for current.
         stale=stale,
@@ -676,6 +680,30 @@ def results(handle):
         state=active["state"] if active is not None else "pending",
         here=url_for("results", handle=handle),
     )
+
+
+def record_shown(conn, user, recs):
+    """Write down the five this page is about to show -- ADR 0024.
+
+    The first showing of each problem only (db.record_recommendations), with
+    the chance as computed and which fit of the model computed it, so that
+    once visitors have tried them the site can say how often its chances
+    came true on problems it chose.
+
+    Like record_visit, a failure here is logged and swallowed: the page is
+    worth more than the record of it.
+    """
+    fitted = model.current_topic_model() if recs["source"] == "topic" else None
+    try:
+        db.record_recommendations(
+            conn, user["handle"], recs["problems"],
+            target=recs["target"] / 100,
+            source=recs["source"],
+            model_version=fitted.get("fitted_at") if fitted else None,
+            guarded=not recs["unguarded"],
+        )
+    except sqlite3.Error as exc:
+        log.warning("could not record what %s showed: %s", request.url_rule.rule, exc)
 
 
 @app.route("/results/<handle>/sync", methods=["POST"])
@@ -1042,6 +1070,9 @@ def recommendation_view(conn, user):
                 # Whole percentages. The curve is fitted to three decimal
                 # places and is not that good; "71%" claims enough.
                 "percent": round(pick["probability"] * 100),
+                # The chance as computed, for the record of what was shown
+                # (ADR 0024) -- the page prints only the whole percent.
+                "probability": pick["probability"],
                 "url": (
                     f"https://codeforces.com/problemset/problem/"
                     f"{pick['contest_id']}/{pick['problem_index']}"

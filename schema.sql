@@ -381,6 +381,46 @@ CREATE TABLE IF NOT EXISTS dismissals (
 -- What is NOT here is the point: no IP address, no user agent, no referrer.
 -- Nothing stored here identifies anybody off this site, which is what keeps
 -- /privacy short enough to be read.
+-- What the site recommended, to whom, when, and at what chance -- ADR 0024.
+--
+-- The model is calibrated on attempts people chose; the site chooses for
+-- them, and whether its chances come true there cannot be learned from any
+-- other data (ADR 0023). This is that data. One row per (handle, problem),
+-- written the FIRST time the problem is shown and never changed: the chance
+-- a visitor was shown before they tried it is the claim being tested, and a
+-- later reload recomputing it would overwrite the evidence.
+--
+-- The outcome is not stored. It is the handle's first submission to that
+-- problem after `shown_at`, read from `submissions` when the report runs, so
+-- a re-sync fills it in and nothing has to be kept in step.
+--
+-- Not a foreign key to users, for visits' reason: it is a record that
+-- something happened, and outlives a cached history.
+CREATE TABLE IF NOT EXISTS recommendations (
+    handle       TEXT    NOT NULL COLLATE NOCASE,
+    problem_id   TEXT    NOT NULL REFERENCES problems(id),
+    shown_at     TEXT    NOT NULL,
+
+    -- The chance as computed, not the whole percent the page printed.
+    probability  REAL    NOT NULL CHECK (probability > 0 AND probability < 1),
+
+    -- What the visitor was aiming at, so a report can ask "at 50%" and "at
+    -- 65%" separately.
+    target       REAL    NOT NULL,
+
+    -- Which predictor chose it, and which fit of it: topic_model.json's
+    -- fitted_at, or NULL for the rating-only baseline. The monthly refit
+    -- makes a new model every month, and they are judged separately.
+    source       TEXT    NOT NULL CHECK (source IN ('topic', 'rating')),
+    model        TEXT,
+
+    -- 1 if ADR 0023's guard rail held, 0 if it stood aside for this visitor.
+    guarded      INTEGER NOT NULL CHECK (guarded IN (0, 1)),
+
+    PRIMARY KEY (handle, problem_id)
+) STRICT;
+
+
 CREATE TABLE IF NOT EXISTS visits (
     id          INTEGER PRIMARY KEY,
 

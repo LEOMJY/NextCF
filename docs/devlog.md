@@ -4987,3 +4987,33 @@ from the code rather than typed.
 
 11 new checks, and a dataset-tier check that `support.json` is still what
 `dataset.db` says. Ten mutations in fresh copies, all caught. 320 pass.
+
+---
+
+## 2026-09-26 (the last of it) — Writing down what was recommended
+
+ADR 0024, the third of the author's three steps. `recommendations` holds
+one row per (handle, problem), written the first time the problem is shown,
+with the chance as computed. Outcomes are read from `submissions` when the
+report runs: the first submission after the showing, with problems tried
+before the showing left out. The report is `python db.py`, next to the visit
+counts. `/privacy` says it exists. The page does not use it yet; the
+author's call is to wait for data first.
+
+It starts counting nothing until the disk is attached (ADR 0017). It is
+there so that the day strangers arrive is also the day the product's claim
+starts being measured on the problems it chose, which is the one place
+§9's number never looked.
+
+A mutation survived for a reason worth writing down. Breaking the alias fold
+in the report passed every check, because the checks' fixture never cleared
+a visitor's submissions. One check's accepted submission was still there
+for the next, and the alias check passed without reading the alias at all.
+The fixture now starts each check clean, and the mutation is caught. The
+bug was in the checks, not in the code. It is the same kind of failure as
+the shared working tree that gave a false pass on 2026-09-22 ("Counting
+visits, and a page that admits it"): state left over from one run, read by
+the next.
+
+10 new checks; ten mutations in fresh copies, all caught in the end. 330
+pass.

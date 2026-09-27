@@ -259,11 +259,12 @@ not slipped in while coding.
 
 ## 6. Data
 
-Twelve tables and one view. Everything else is computed on demand, not
+Thirteen tables and one view. Everything else is computed on demand, not
 stored, so there is only one copy of the truth. Both database files use the
 same schema (ADR 0007); the last four tables are filled only in `dataset.db`,
-by `collect.py`, and stay empty on the server. `visits` is the mirror image —
-filled only on the server, and empty in `dataset.db`.
+by `collect.py`, and stay empty on the server. `visits`, `dismissals` and
+`recommendations` are the mirror image: filled only on the server, and empty
+in `dataset.db`.
 
 ```
 users
@@ -321,6 +322,20 @@ jobs
                             "unreachable", "interrupted", "internal"; the
                             status code a failure is answered with is read
                             from this, never from the sentence (ADR 0022)
+
+recommendations                                         nextcf.db only
+  handle         text     — whose page it was shown on
+  problem_id     text     — which problem, canonical id
+  shown_at       text     — ISO-8601 UTC; the FIRST time it was shown
+  probability    real     — the chance as computed, not the printed percent
+  target         real     — what the visitor was aiming at then
+  source         text     — "topic" or "rating": which predictor chose it
+  model          text     — topic_model.json's fitted_at; NULL for the baseline
+  guarded        integer  — 1 if ADR 0023's guard rail held for this visitor
+                            one row per (handle, problem), never updated; at
+                            most 500 per handle. The outcome is not stored: it
+                            is the first submission after shown_at, read from
+                            submissions (ADR 0024)
 
 dismissals                                              nextcf.db only
   handle         text     — who pushed it away
@@ -852,6 +867,12 @@ and would come out of the time budget for the model.
 Second-order, once recommendations have been acted on: **calibration.** Of the
 problems recommended at 70%, roughly 70% should actually get solved. If the
 figure is 45%, the model is overconfident and the probabilities are wrong.
+*Since 2026-09-26 the data for it is recorded* (ADR 0024): every problem the
+site shows, the first time it shows it, with the chance it showed. `python
+db.py` prints the calibration table, author excluded. It is also the only
+measure of ADR 0023's open question: whether problems the site chose, well
+above a visitor's rating, really are as hard as the audit suggests. It
+starts counting the day the disk is attached (ADR 0017).
 
 ## 10. Milestones
 
