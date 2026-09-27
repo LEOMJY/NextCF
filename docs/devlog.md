@@ -5180,3 +5180,68 @@ author has not decided yet.
 
 Until then, every push also wipes the live database, since a deploy starts
 a new instance.
+
+---
+
+## 2026-09-28 — How far off is the model, per person?
+
+The author noticed that "too easy" moves the target but teaches the model
+nothing. A problem called too easy at 50% was really easier than 50% for
+them, yet the next plan's chances are on the same uncorrected scale. The
+discussion that followed designed an adaptive staircase for the target: one
+step per plan, growing ×1.5 while the evidence keeps pointing the same way,
+and first-try results voting alongside the buttons. The size of the first
+step depends on how wrong the model usually is about one person, so that
+was measured first rather than guessed.
+
+**Method.** Round three, fitted on train only (35 sweeps, 839 s), predicting
+validation (2025-07 to 2025-12) with the monthly fold-in, which reproduces
+the recorded 0.6010. For each user with at least 20 validation attempts,
+one number δ is fitted: a shift in log-odds that makes the model best fit
+their outcomes. A user's δ from a few dozen attempts wobbles by luck, so the
+real spread between people is separated from that noise the way a
+meta-analysis does it (DerSimonian–Laird). Results are in percentage points
+at 50%. dataset.db was opened read-only.
+
+| | topic model | rating-only baseline |
+|---|---|---|
+| users | 2,088 | 2,088 |
+| overall bias | +0.8 | +1.5 |
+| real spread between people (sd) | **4.1** | 9.4 |
+| off by more than 5 points | 24% | 60% |
+| off by more than 7.5 | 7% | 43% |
+| off by more than 10 | 2% | 29% |
+
+Restricted to attempts the model put at 30–70%, the spread is the same, 4.1.
+By rating band it is 3.4 to 4.9, and the bias grows from +0.1 at 1000–1199
+to +1.6 at 1800–1999: stronger users are slightly underestimated.
+
+**Persistence.** For 1,342 users with at least 15 attempts in each half, the
+covariance of their Q3 and Q4 estimates is the part of the offset that
+lasts: 3.2 points, 58% of the spread. The rest changes from one quarter to
+the next.
+
+### What it says
+
+- **The model is rarely far off about a person.** The fold-in, which reads
+  their own history, already removes most of what the baseline gets wrong
+  (9.4 → 4.1). So the author's intuition behind the smaller ×1.5 growth was
+  right, and more so than assumed: a first step of 5 points is already
+  larger than the typical real offset.
+- **One plan's first-try results cannot see a typical offset.** Five
+  attempts at 50% with the model exactly right are 5/5 or 0/5 by luck 6% of
+  the time, and at 4 or more, or 1 or fewer, 38% of the time. With the
+  person off by 4 points those become 7% and 38%: no difference. Even off by
+  15 points, 5/5 happens only 12% of the time. A staircase that steps on one
+  plan's results would mostly follow luck.
+- **So a "too easy" is usually not the model being wrong.** For three
+  people in four the model is within 5 points. A press is more often a
+  preference, or a judgement made by reading, than a correction.
+
+The caveat that applies to every number from this dataset: these attempts
+were chosen by the users themselves, and the site chooses for them
+(ADR 0023). Offsets on site-chosen problems may be larger. The
+recommendations record (ADR 0024) is where that can be checked, once the
+disk keeps it.
+
+The design questions this reopens are with the author.
