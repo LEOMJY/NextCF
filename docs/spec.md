@@ -85,6 +85,9 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
   baseline.json   the baseline's two fitted numbers, committed
   topic_model.json  the topic model's crowd part, 244 KB, committed; refit
                   monthly by `model.py fit-topic` from a re-collected dataset
+  support.json    how many people at each rating attempted each problem,
+                  470 KB, written by the same command: what may be offered
+                  at all (ADR 0023)
   evaluate.py     the harness — date split, fold-in scoring, §9's number
                   (ADR 0013)
   web.py          routes and pages
@@ -107,7 +110,7 @@ runs on the server, on `nextcf.db`. Both files use the same schema.
 
     monthly: collect.py refresh fetches the same 4000 again, oldest
     first (about 4.5 hours), then model.py fit-topic refits, and the
-    new topic_model.json is committed
+    new topic_model.json and support.json are committed
 
     model.py, evaluate.py  ←  [ dataset.db ]
   ─────────────────────────────────────────────────────

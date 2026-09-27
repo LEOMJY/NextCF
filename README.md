@@ -113,6 +113,7 @@ model.py             the rating-only baseline and the topic model; fits a visito
 evaluate.py          the evaluation harness behind spec §9's number — see docs/decisions/0013-evaluation-protocol.md
 baseline.json        the baseline's two fitted numbers
 topic_model.json     the topic model's crowd part, refitted monthly
+support.json         who attempted each problem, by rating: what may be offered — see docs/decisions/0023-guard-rails-on-what-is-offered.md
 static/style.css     the whole design system — see docs/decisions/0006-design-direction.md
 static/fonts/        IBM Plex Mono, served from this site, with its licence
 schema.sql           the tables and the view — see docs/spec.md §6

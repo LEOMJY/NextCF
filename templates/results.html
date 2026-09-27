@@ -84,7 +84,11 @@
              rated roughly 350 to 2,370 at the time of their attempts, and
              beyond that its numbers are a guess with the same confidence
              as its measurements -- unless the page says otherwise. #}
-          {% if recs.extrapolated %}
+          {# Not when the guard rail's note below is shown too: both began
+             "Your rating is outside...", and two sentences saying nearly the
+             same thing read as a page that does not know what it means.
+             That note carries this one's point instead. #}
+          {% if recs.extrapolated and not recs.looked_up_at %}
             <p class="footnote">
               Your rating is outside the range the model learned from, so these
               chances are an extrapolation and less reliable than they look.
@@ -126,6 +130,29 @@
               {{ recs.target }}% of the time.
             {%- endif %}
             Rating only, so everybody at your rating is shown these five.
+          </p>
+        {% endif %}
+
+        {# ADR 0023's guard rail, said when it bends. Problems are offered only
+           if people near the visitor's rating have tried them; a visitor
+           outside the ratings the data covers is looked up at its edge, and
+           a visitor who has solved nearly everything people near them tried
+           gets the rule lifted rather than an empty list. Either way the
+           page says which, because both change what the five mean. #}
+        {% if recs.looked_up_at %}
+          <p class="footnote">
+            Your rating is outside what the 4,000 users behind these numbers
+            were rated, so problems are chosen from ones people rated around
+            {{ recs.looked_up_at }} have actually tried
+            {%- if recs.extrapolated %}, and the chances are an extrapolation,
+            less reliable than they look{% endif %}.
+          </p>
+        {% endif %}
+        {% if recs.unguarded %}
+          <p class="footnote">
+            You have solved most of what people near your rating have tried,
+            so these include problems few of them attempted. The chances on
+            those rest on less evidence.
           </p>
         {% endif %}
 

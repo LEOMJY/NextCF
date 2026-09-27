@@ -4949,3 +4949,41 @@ Built as it stands, the rule would give a 2400-rated visitor an empty page.
 A visitor outside the data's range has to be looked up at the nearest
 rating that has support, and told so, which is what `level_range` already
 does for the model's straight lines.
+
+---
+
+## 2026-09-26 (still that night) — The guard rail, built
+
+ADR 0023. The author chose 30 attempters, the easier version first, and the
+nearest covered rating for visitors outside the data.
+
+`support.json` holds, for every problem, how many people attempted it at
+each rating (bins of 100, the rating Codeforces computed with at the time).
+It is 470 KB and covers ratings 800–2100. `model.py build-support` wrote it
+in a minute without refitting anything, and `fit-topic` writes it from now
+on, so the monthly refresh gains no step. `dataset.db`'s modification time
+was the same before and after.
+
+Through the site's own code, on the 60 users: picks 500+ above the user
+went from **35% to 20%**, later versions before the easier one from **19
+to 0**, and nobody fell back to the unguarded list. The estimate before
+building was 17%; the gap is the rating used, and 20% is the number that
+describes the site.
+
+In the browser, the 1491-rated visitor from the audit now gets five
+problems rated 1300–1900, where before it was 1000–2300. "Too hard" once
+moves the list to 900–1800, where before it brought 2400 and 2500. At 65%
+one 2300 still comes through. Looking at why showed the limit of the rule:
+classic hard problems such as 600E "Lomsat gelral" were attempted by 227
+people near 1491, because mid-rated people work through them from training
+lists. Support cannot tell a problem people studied from one they could
+solve cold. The remaining 20% is that, and only a record of what was
+recommended can measure it.
+
+For tourist, the page stacked two notes both beginning "Your rating is
+outside…": the model's level range, and now the guard rail's. They are one
+sentence when both apply. `/how` states the rule, with the threshold read
+from the code rather than typed.
+
+11 new checks, and a dataset-tier check that `support.json` is still what
+`dataset.db` says. Ten mutations in fresh copies, all caught. 320 pass.

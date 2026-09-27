@@ -518,6 +518,50 @@ def an_ordinary_page_says_neither():
     assert "Nothing left" not in html and "as the target goes" not in html, "a wall where there is none"
 
 
+# ---------------------------------------------- the guard rail, on the page
+def with_support(problem_bins, covered, fn):
+    """Run fn with support.json replaced by a small one about this file's
+    fake problemset (ADR 0023)."""
+    conn = db.connect()
+    try:
+        ids = [r[0] for r in conn.execute("SELECT id FROM problems WHERE in_problemset = 1")]
+    finally:
+        conn.close()
+    table = {}
+    for pid in ids:
+        bins = problem_bins(pid)
+        if bins:
+            lo = min(bins)
+            table[pid] = [lo] + [bins.get(b, 0) for b in range(lo, max(bins) + 1, model.SUPPORT_BIN)]
+    fake = {"covered": list(covered), "min_attempters": 2, "problems": table}
+    real = model.current_support
+    model.current_support = lambda: fake
+    try:
+        return fn()
+    finally:
+        model.current_support = real
+
+
+def outside_the_data_the_page_says_where_it_looked():
+    html = with_support(lambda pid: {1900: 5}, (800, 2000), lambda: at(2600, model.DEFAULT_TARGET))
+    text = " ".join(html.split())          # the template breaks lines mid-sentence
+    assert "people rated around 2000 have actually tried" in text, "the clamp went unsaid"
+    # One note, not two beginning "Your rating is outside": 2600 is also past
+    # the model's own level range, and that point rides in the same sentence.
+    assert text.count("Your rating is outside") == 1, "two notes saying nearly the same thing"
+
+
+def when_the_rule_stands_aside_the_page_says_so():
+    html = with_support(lambda pid: None, (800, 2000), lambda: at(1500, model.DEFAULT_TARGET))
+    assert "rec-table" in html, "no list at all"
+    assert "rest on less evidence" in html, "the fallback went unsaid"
+
+
+def an_ordinary_visitor_hears_nothing_about_it():
+    html = with_support(lambda pid: {1400: 3, 1500: 3}, (800, 2000), lambda: at(1500, model.DEFAULT_TARGET))
+    assert "actually tried" not in html and "less evidence" not in html, "a note where the rule held"
+
+
 def with_a_failing_write(trigger_sql, fn):
     """Run fn while one write the route makes is made to fail, the way a
     crash or a full disk would. A trigger in the file, so the web app's own
@@ -623,6 +667,11 @@ check("the ceiling is said", the_ceiling_is_said)
 check("the end of the ladder is said when the list is fine", the_end_of_the_ladder_is_said_when_the_list_is_fine)
 check("a near miss is not a wall", a_near_miss_is_not_a_wall)
 check("an ordinary page says neither", an_ordinary_page_says_neither)
+
+print("\nthe guard rail, on the page")
+check("outside the data, the page says where it looked", outside_the_data_the_page_says_where_it_looked)
+check("when the rule stands aside, the page says so", when_the_rule_stands_aside_the_page_says_so)
+check("an ordinary visitor hears nothing about it", an_ordinary_visitor_hears_nothing_about_it)
 
 print("\nwhen a write fails")
 check("half a verdict is never stored", half_a_verdict_is_never_stored)

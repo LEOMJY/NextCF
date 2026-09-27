@@ -870,6 +870,9 @@ def how():
         gain_baseline=ev["average"] - ev["baseline"],
         gain_model=ev["average"] - ev["model"],
         unrated_start=model.UNRATED_START,
+        # From the constant, so the page cannot describe a guard rail the
+        # code does not have (ADR 0023).
+        support_min=model.SUPPORT_MIN,
     )
 
 
@@ -976,6 +979,13 @@ def recommendation_view(conn, user):
     # model.UNRATED_START, which rating_now returns for them; without the
     # model file there is nothing to serve them from.
     rating = model.rating_now(conn, user["handle"], user["cf_rating"])
+
+    # ADR 0023: offer only what people near this visitor have actually tried,
+    # and a harder version only after the easier one. Neither rule changes a
+    # prediction; they keep the model from being asked where it has no
+    # evidence. `guard` says what the page should tell the visitor about it.
+    pool, guard = model.guard_pool(pool, rating)
+
     picks = model.topic_recommend(conn, user["handle"], rating, pool, target)
     source = "topic"
     if picks is None:
@@ -999,6 +1009,11 @@ def recommendation_view(conn, user):
         "shown": user["cf_rating"],
         "computed": rating,
         "target": round(target * 100),
+        # The guard rail's two notes: the rating it looked the visitor up at
+        # when theirs is outside the data, and whether it had to stand aside
+        # because too few problems passed it (model.guard_pool).
+        "looked_up_at": guard["looked_up_at"],
+        "unguarded": guard["fallback"],
         # Whether the target can be reached at all, and whether the ladder has
         # run out -- see target_limits. Found on review: an 800-rated visitor
         # pressing "too hard" a third time got the same five problems and no

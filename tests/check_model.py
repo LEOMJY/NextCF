@@ -252,6 +252,110 @@ check("unrated and unlisted problems are not in the pool", unrated_and_unlisted_
 check("the pool is None for a half-synced user (ADR 0004)", the_pool_is_none_for_a_half_synced_user)
 
 
+# ------------------------------------------ guard rails on what is offered
+#
+# ADR 0023. Two rules on the pool that change no prediction: a problem is
+# offered only if enough people near the visitor's rating attempted it, and a
+# later version waits for the easier one.
+
+def row(contest, index, rating=1500):
+    return {"id": f"{contest}{index}", "contest_id": contest, "problem_index": index,
+            "name": f"P{contest}{index}", "rating": rating}
+
+
+def a_support(problems, covered=(1000, 2000), need=2):
+    """support.json in miniature: {id: {rating bin: attempters}}."""
+    table = {}
+    for pid, bins in problems.items():
+        lo, hi = min(bins), max(bins)
+        table[pid] = [lo] + [bins.get(b, 0) for b in range(lo, hi + 1, model.SUPPORT_BIN)]
+    return {"covered": list(covered), "min_attempters": need, "problems": table}
+
+
+def attempters_near_counts_the_bins_within_200():
+    entry = [1200, 1, 2, 4, 8, 16]            # bins 1200, 1300, 1400, 1500, 1600
+    # near 1400: bins 1200..1500 (1200 <= r < 1600) -> 1+2+4+8
+    assert model.attempters_near(entry, 1400) == 15, model.attempters_near(entry, 1400)
+    assert model.attempters_near(entry, 1440) == 15, "not rounded to the nearest bin"
+    assert model.attempters_near(entry, 2400) == 0
+    assert model.attempters_near(entry, 600) == 0
+    assert model.attempters_near(None, 1400) == 0
+
+
+def support_is_built_from_the_rating_at_the_time():
+    data = model.Attempts()
+    data.problems = ["1A", "2B"]
+    for p, rating in ((0, 1450), (0, 1520), (0, 1560), (1, 900)):
+        data.p.append(p)
+        data.r.append((rating - 1500) / model.SCALE)
+        data.y.append(1)
+    built = model.build_support(data)
+    assert built["problems"]["1A"] == [1400, 1, 2], built["problems"]["1A"]
+    assert built["problems"]["2B"] == [900, 1], built["problems"]["2B"]
+    assert built["attempts"] == 4
+
+
+def a_problem_nobody_near_you_tried_is_not_offered():
+    pool = [row(1, "A"), row(2, "A"), row(3, "A"), row(4, "A"), row(5, "A"), row(6, "A")]
+    support = a_support({f"{c}A": {1500: 3} for c in range(1, 6)} | {"6A": {2500: 50}})
+    rows, notes = model.guard_pool(pool, 1500, support)
+    assert {r["id"] for r in rows} == {"1A", "2A", "3A", "4A", "5A"}, [r["id"] for r in rows]
+    assert notes == {"looked_up_at": None, "fallback": False}, notes
+
+
+def outside_the_data_the_nearest_covered_rating_is_used_and_said():
+    pool = [row(c, "A") for c in range(1, 6)]
+    support = a_support({f"{c}A": {1900: 3} for c in range(1, 6)}, covered=(800, 2000))
+    rows, notes = model.guard_pool(pool, 2600, support)
+    assert len(rows) == 5, "a visitor outside the data got nothing"
+    assert notes["looked_up_at"] == 2000, notes
+
+
+def too_few_left_falls_back_and_says_so():
+    """A strong visitor who has solved most of what people near them tried
+    still gets five problems."""
+    pool = [row(c, "A") for c in range(1, 8)]
+    support = a_support({"1A": {1500: 5}})
+    rows, notes = model.guard_pool(pool, 1500, support)
+    assert len(rows) == 7, len(rows)
+    assert notes["fallback"] is True, notes
+
+
+def a_later_version_waits_for_the_easier_one():
+    base = [row(c, "A") for c in range(10, 16)]
+    pool = base + [row(7, "E1"), row(7, "E2"), row(8, "C3"), row(8, "C2")]
+    ids = {r["id"] for r in model.guard_pool(pool, 1500, support={})[0]}
+    assert "7E2" not in ids, "E2 offered while E1 is unsolved"
+    assert "7E1" in ids, "the easier one itself was held back"
+    assert "8C3" not in ids and "8C2" in ids, ids
+
+
+def a_later_version_is_offered_once_the_easier_one_is_out_of_the_pool():
+    """Solved, or hidden by the visitor: either way, not in the pool."""
+    pool = [row(c, "A") for c in range(10, 16)] + [row(7, "E2")]
+    ids = {r["id"] for r in model.guard_pool(pool, 1500, support={})[0]}
+    assert "7E2" in ids, ids
+
+
+def an_index_without_a_letter_is_not_a_version():
+    """Contest 921 numbers its problems 01 to 14 (spec section 6)."""
+    pool = [row(921, "01"), row(921, "02")] + [row(c, "A") for c in range(10, 15)]
+    ids = {r["id"] for r in model.guard_pool(pool, 1500, support={})[0]}
+    assert {"92101", "92102"} <= ids, ids
+
+
+check("attempters near a rating are the bins within 200 of it", attempters_near_counts_the_bins_within_200)
+check("support is built from the rating at the time, per problem", support_is_built_from_the_rating_at_the_time)
+check("a problem nobody near you tried is not offered", a_problem_nobody_near_you_tried_is_not_offered)
+check("outside the data, the nearest covered rating is used, and said",
+      outside_the_data_the_nearest_covered_rating_is_used_and_said)
+check("too few left: the rule is not applied, and that is said", too_few_left_falls_back_and_says_so)
+check("a later version waits for the easier one", a_later_version_waits_for_the_easier_one)
+check("...and is offered once the easier one is out of the pool",
+      a_later_version_is_offered_once_the_easier_one_is_out_of_the_pool)
+check("an index without a letter is not a version", an_index_without_a_letter_is_not_a_version)
+
+
 # ------------------------------------------------------------- the page
 
 def seed_page(handle, rating):
@@ -367,6 +471,31 @@ def baseline_json_is_what_the_data_says():
 
 
 check("baseline.json is what dataset.db says today", baseline_json_is_what_the_data_says)
+
+
+def support_json_is_what_the_data_says():
+    """The same pattern as baseline.json: a committed file built from
+    dataset.db must still be what dataset.db says, or the guard rail is
+    describing a dataset nobody has any more (ADR 0023)."""
+    if not os.environ.get("NEXTCF_TESTS_DATASET"):
+        print("        (dataset tier not asked for -- skipped)")
+        return
+    if not Path("dataset.db").exists():
+        print("        (dataset.db absent -- skipped)")
+        return
+    import evaluate
+    stored = json.loads(Path("support.json").read_text(encoding="utf-8"))
+    conn = db.connect(Path("dataset.db"))
+    try:
+        fresh = model.build_support(evaluate.load(conn))
+    finally:
+        conn.close()
+    for key in ("bin", "near", "min_attempters", "covered", "attempts", "problems"):
+        assert fresh[key] == stored[key], f"support.json's {key} is not what the data says -- rebuild it"
+    print(f"        ({len(stored['problems']):,} problems, ratings {stored['covered']} covered, still current)")
+
+
+check("support.json is what dataset.db says today", support_json_is_what_the_data_says)
 
 shutil.rmtree(SCRATCH, ignore_errors=True)
 print(f"\n{passed} passed, {failed} failed")

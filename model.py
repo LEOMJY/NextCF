@@ -39,6 +39,7 @@ import bisect
 import functools
 import json
 import math
+import re
 import sys
 from array import array
 from collections import defaultdict
@@ -392,18 +393,33 @@ def main():
     fit.add_argument("--dry-run", action="store_true", help="print, do not write baseline.json")
     fit.add_argument("--db", default="dataset.db")
     sub.add_parser("fit-topic", help="fit evaluate.FINAL on all of dataset.db and write "
-                                     "topic_model.json")
+                                     "topic_model.json and support.json")
+    sub.add_parser("build-support", help="write support.json from dataset.db, without "
+                                         "refitting the model (ADR 0023)")
     args = parser.parse_args()
 
-    if args.command == "fit-topic":
+    if args.command in ("fit-topic", "build-support"):
         import evaluate
-        if evaluate.FINAL is None:
+        if args.command == "fit-topic" and evaluate.FINAL is None:
             raise SystemExit("evaluate.FINAL is not set: the configuration is chosen on "
                              "validation and scored on test before anything ships.")
-        result = fit_topic(evaluate.FINAL)
-        TOPIC_PATH.write_text(json.dumps(result, indent=1) + "\n", encoding="utf-8")
-        print(f"wrote {TOPIC_PATH.name}: {len(result['d']):,} problems, "
-              f"{len(result['tau'])} topics, from {result['attempts']:,} attempts")
+        conn = db.connect(HERE / "dataset.db")
+        try:
+            data = evaluate.load(conn)
+        finally:
+            conn.close()
+        if args.command == "fit-topic":
+            result = fit_topic(evaluate.FINAL, data)
+            TOPIC_PATH.write_text(json.dumps(result, indent=1) + "\n", encoding="utf-8")
+            print(f"wrote {TOPIC_PATH.name}: {len(result['d']):,} problems, "
+                  f"{len(result['tau'])} topics, from {result['attempts']:,} attempts")
+        # Written by the monthly refit too, from the same attempts, so the
+        # guard rail always describes the dataset the model was fitted on.
+        # One command for the month, not two to keep in step.
+        support = build_support(data)
+        SUPPORT_PATH.write_text(json.dumps(support, separators=(",", ":")) + "\n", encoding="utf-8")
+        print(f"wrote {SUPPORT_PATH.name}: {len(support['problems']):,} problems, "
+              f"ratings {support['covered'][0]}-{support['covered'][1]} covered")
         return
 
     conn = db.connect(Path(args.db))
@@ -1683,20 +1699,168 @@ def outside_range(fitted, rating):
     return not fitted["level_range"][0] <= level <= fitted["level_range"][1]
 
 
-def fit_topic(config):
-    """Fit `config` on ALL of dataset.db and return what topic_model.json holds.
+# ============================================ guard rails on what is offered
+#
+# ADR 0023. The model is calibrated on attempts people CHOSE (spec section 8,
+# assumption 4), and the site chooses for them. On the audit of 2026-09-26 a
+# third of its picks were 500 or more rating points above the user, because a
+# problem's own first-try record was learned from the people who chose to try
+# it -- the hard version from people who could, a 2300 from 1800s. A screen on
+# validation showed the error cannot be seen in data people chose, so it
+# cannot be fitted away; what can be done is to not offer a problem where the
+# model has no evidence about people like this visitor. Two rules, neither of
+# which changes a single prediction:
+#
+#   support         offered only if at least SUPPORT_MIN people rated within
+#                   SUPPORT_NEAR of the visitor actually attempted it
+#   easier first    a later version (E2, E3...) waits while an easier one of
+#                   the same contest is still in the visitor's pool
+#
+# Measured on 60 users (devlog 2026-09-26): picks 500+ above the user 35% ->
+# 17%, and later versions offered before the easier one 19 -> 0.
+
+SUPPORT_PATH = HERE / "support.json"
+
+# Ratings are counted in bins this wide; "near" is this far either side.
+SUPPORT_BIN = 100
+SUPPORT_NEAR = 200
+
+# How many attempters near the visitor a problem needs. Chosen by the author
+# between 30 and 60 on the measurement above: 60 cut far-above picks to 12%
+# but left visitors at 800 or 2000 about 960 candidates, thin once choose()
+# narrows to a band around the target.
+SUPPORT_MIN = 30
+
+# A rating counts as covered by the data if at least this many problems pass
+# the rule there. The dataset holds users rated 1000-1999, so nobody near 2400
+# attempted anything; a visitor outside the covered range is looked up at its
+# nearest edge, and the page says so -- the same idea as level_range.
+SUPPORT_COVERED_PROBLEMS = 1000
+
+# "E2", "C3", "F1": a letter, then a version number. Contest 921's "01".."14"
+# have no letter and are not versions.
+VERSION_INDEX = re.compile(r"^([A-Z]+)(\d+)$")
+
+
+def build_support(data):
+    """What support.json holds, from every first attempt in `data`.
+
+    For each problem, how many people attempted it at each rating, in bins of
+    SUPPORT_BIN: the rating Codeforces computed with AT THE TIME of the
+    attempt, which is what data.r records (the level the model reads), so
+    "people like you" means the same thing to the rule as to the model.
+    Stored densely from the problem's lowest bin to its highest:
+        "2233E2": [1100, 3, 0, 5, ...]   the first number is the lowest bin
+    """
+    counts = defaultdict(lambda: defaultdict(int))
+    for i in range(len(data)):
+        rating = 1500 + data.r[i] * SCALE
+        start = int(math.floor(rating / SUPPORT_BIN)) * SUPPORT_BIN
+        counts[data.problems[data.p[i]]][start] += 1
+
+    problems = {}
+    for pid in sorted(counts):
+        bins = counts[pid]
+        lo, hi = min(bins), max(bins)
+        problems[pid] = [lo] + [bins.get(b, 0) for b in range(lo, hi + 1, SUPPORT_BIN)]
+
+    covered = [r for r in range(0, 4001, SUPPORT_BIN)
+               if sum(attempters_near(entry, r) >= SUPPORT_MIN
+                      for entry in problems.values()) >= SUPPORT_COVERED_PROBLEMS]
+    return {
+        "bin": SUPPORT_BIN,
+        "near": SUPPORT_NEAR,
+        "min_attempters": SUPPORT_MIN,
+        "covered": [min(covered), max(covered)] if covered else None,
+        "problems": problems,
+        "attempts": len(data),
+        "built_at": db.utc_now(),
+    }
+
+
+def attempters_near(entry, rating):
+    """How many people rated within SUPPORT_NEAR of `rating` attempted this
+    problem. `entry` is one problem's row from support.json, or None."""
+    if not entry:
+        return 0
+    lo, counts = entry[0], entry[1:]
+    centre = round(rating / SUPPORT_BIN) * SUPPORT_BIN
+    first = (centre - SUPPORT_NEAR - lo) // SUPPORT_BIN
+    last = (centre + SUPPORT_NEAR - lo) // SUPPORT_BIN        # exclusive
+    return sum(counts[max(0, first):max(0, last)])
+
+
+@functools.cache
+def current_support(path=SUPPORT_PATH):
+    """support.json, or None if there is none. Read once, like the model."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+
+def guard_pool(pool, rating, support=None, count=5):
+    """The pool with the two rules applied, and what the page should say.
+
+    Returns (rows, notes). notes["looked_up_at"] is the rating the support
+    rule used when the visitor's own was outside the covered range, else
+    None; notes["fallback"] is True when the support rule would have left
+    fewer than `count` problems, and was not applied -- a strong visitor who
+    has solved most of what people near them have tried still gets a page.
+
+    The easier-first rule works on the pool itself. The pool is what this
+    visitor has NOT solved, so "an easier version is still in the pool" is
+    "they have not solved it yet". An easier version they hid themselves is
+    not in the pool, so the harder one may be offered, which is right: they
+    have said what they think of the easy one.
+    """
+    support = current_support() if support is None else support
+    notes = {"looked_up_at": None, "fallback": False}
+
+    waiting = set()
+    for row in pool:
+        match = VERSION_INDEX.match(row["problem_index"] or "")
+        if match:
+            waiting.add((row["contest_id"], match.group(1), int(match.group(2))))
+
+    def waits_for_easier(row):
+        match = VERSION_INDEX.match(row["problem_index"] or "")
+        if not match:
+            return False
+        letter, n = match.group(1), int(match.group(2))
+        return any((row["contest_id"], letter, k) in waiting for k in range(1, n))
+
+    rows = [row for row in pool if not waits_for_easier(row)]
+    if len(rows) < count:
+        rows = list(pool)
+
+    if not support or not support.get("covered"):
+        return rows, notes
+    lo, hi = support["covered"]
+    lookup = min(max(rating, lo), hi)
+    if lookup != rating:
+        notes["looked_up_at"] = int(lookup)
+    entries = support["problems"]
+    supported = [row for row in rows
+                 if attempters_near(entries.get(row["id"]), lookup) >= support["min_attempters"]]
+    if len(supported) < count:
+        notes["fallback"] = True
+        return rows, notes
+    return supported, notes
+
+
+def fit_topic(config, data):
+    """Fit `config` on ALL of `data` and return what topic_model.json holds.
+
+    `data` is evaluate.load() of dataset.db, loaded by the caller, which
+    builds support.json from the same attempts.
 
     Everything, not the training period: the choices were made on validation
     and scored once on test (ADR 0013); what ships is the same model fitted
     on every attempt there is, because the newest attempts are the most like
     the visitors it will meet.
     """
-    import evaluate
-    conn = db.connect(HERE / "dataset.db")
-    try:
-        data = evaluate.load(conn)
-    finally:
-        conn.close()
     m = TopicModel(config["groups"], config["lam"], extras=config.get("extras", ()))
     m.fit(data, list(range(len(data))), log=lambda msg: print(msg, flush=True))
     return export_fitted(m, data, config.get("halflife"))
