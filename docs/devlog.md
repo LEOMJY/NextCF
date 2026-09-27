@@ -4874,3 +4874,78 @@ It helps, and it does not fix it. 2233E2's attempters were mostly rated
 1500–2100 at the time, so it passes the rule for most users. What made them
 succeed is something rating does not show: they had solved E1 first. The
 selection is on preparation, not only on level.
+
+*Corrected the same night by the screen below: that last explanation was
+only partly right.*
+
+---
+
+## 2026-09-26 (night) — The screen that said no, and why that settles it
+
+The author chose three steps for the model: screen a new input, add a guard
+rail, then record what is recommended. This entry covers the first.
+
+The candidate was "solved the easier version first". It is observable, so
+unlike the bias itself it could be measured. The method is ADR 0015's.
+Round three is fitted on train and frozen at the start of validation; it
+reproduced **0.6010** exactly, as ADR 0015 recorded. The candidate columns
+are stacked on its predictions, fitted on 2025-07..09 and judged on
+2025-10..12, against the same stack without them as the control. The test
+set was not touched.
+
+| | 2025-10..12 | gain |
+|---|---|---|
+| control (recalibration only) | 0.5976 | |
+| + later version, easier solved first | 0.5976 | 0.0000 |
+| + other problems of the same contest solved before | 0.5970 | +0.0006 |
+
+It does not go in. The reason matters more than the number:
+
+| validation attempts on a later version (E2, E3, ...) | attempts | happened | round three said |
+|---|---|---|---|
+| the easier one NOT solved first | 1,121 | 40.1% | 41.0% |
+| the easier one solved first | 1,880 | 43.2% | 39.2% |
+
+**On attempts people chose, the model is already right, even for those who
+skipped E1.** They succeed 40% of the time because they are exactly the
+people who judged that they could. The selection is not on any one thing a
+column could record. It is on the choosing itself. So the bias the audit
+found cannot be measured from offline data, let alone fixed with it; ADR
+0015 said this in one sentence, and now there is a number behind it. The
+same-contest column's +0.0006 is the size level × topic had in ADR 0015's
+screen before it got worse in the full model, and it does nothing for
+recommendations, so it is parked.
+
+### The guard rail, measured before it is built
+
+On the same 60 users, with two rules that do not change a single prediction:
+offer a problem only if enough people near the visitor's rating attempted
+it ("support"), and never offer a later version before the easier one is
+solved.
+
+| support near the user | easier version first | 500+ above | later version without the easier one | spread of the five |
+|---|---|---|---|---|
+| — | — | 35% | 19 | 950 |
+| — | yes | 36% | 0 | 1,000 |
+| 30 | yes | 17% | 0 | 750 |
+| 60 | yes | 12% | 0 | 700 |
+
+The version rule on its own removes its 19 problems, and the model simply
+fills the slots with other problems far above. Support does the work on
+level.
+
+It has a hole. The dataset holds users rated 1000–1999, so almost nobody
+near 2400 attempted anything:
+
+| visitor rating | problems with 30+ attempters near them | 60+ |
+|---|---|---|
+| 800 | 1,494 | 963 |
+| 1500 | 4,082 | 2,650 |
+| 2000 | 2,274 | 968 |
+| 2200 | 371 | 4 |
+| 2400 | 0 | 0 |
+
+Built as it stands, the rule would give a 2400-rated visitor an empty page.
+A visitor outside the data's range has to be looked up at the nearest
+rating that has support, and told so, which is what `level_range` already
+does for the model's straight lines.
