@@ -209,7 +209,7 @@ def the_first_view_makes_a_plan_of_five():
     five = ids()
     assert len(five) == 5, five
     html = page()
-    assert "Your plan since" in flat(html), "the page does not say it is a plan"
+    assert "Your plan, started just now" in flat(html), "the page does not say it is a plan"
     assert "0 of 5 done, 0 solved" in flat(html), "no progress line"
 
 
@@ -646,6 +646,187 @@ def a_failed_move_leaves_the_plan_running():
     assert the_user()["target_chosen_at"] is None, "the target moved"
 
 
+# ------------------------------------------------------ skip, and undo one
+def undo(problem_id, topic=None):
+    data = {"problem": problem_id}
+    if topic:
+        data["topic"] = topic
+    return client.post(f"/results/{HANDLE}/undo", data=data)
+
+
+def hidden():
+    conn = db.connect()
+    try:
+        return {r[0]: r[1] for r in conn.execute(
+            "SELECT problem_id, reason FROM dismissals WHERE handle = ?", (HANDLE,))}
+    finally:
+        conn.close()
+
+
+def a_skip_settles_without_a_vote():
+    """ADR 0028: three skips and one "too easy" are one vote, harder -- the
+    skips say the visitor did not want those problems, nothing about how
+    hard the next five should be."""
+    a_visitor()
+    first = ids()
+    for problem in first[:3]:
+        press(problem, "skip")
+    press(first[3], "too_easy")
+    html = page()
+    assert html.count("skipped") >= 3, "the skipped rows are not marked"
+    assert "4 of 5 done" in flat(html), flat(html)[:300]
+    end()
+    user = the_user()
+    assert (user["target_prob"], user["target_step"], user["target_direction"]) == \
+        model.step_target(model.DEFAULT_TARGET, None, None, "harder"), dict(user)
+    assert model.plan_direction(["skip", "skip", None]) is None, "skips voted"
+
+
+def a_skipped_problem_is_hidden_and_can_be_put_back():
+    a_visitor()
+    first = ids()
+    press(first[0], "skip")
+    assert hidden() == {first[0]: "skip"}, hidden()
+    end()
+    assert first[0] not in ids(), "a skipped problem came back in the next plan"
+    assert "Put back the 1 problem I hid" in page(), "put back does not count the skip"
+
+
+def undo_takes_back_one_answer_only():
+    """A slip on one row: that row goes back to "to do" and its problem is
+    no longer hidden; the other answers in the plan stand, and still vote."""
+    a_visitor()
+    first = ids()
+    press(first[0], "too_hard")
+    press(first[1], "too_easy")
+    response = undo(first[0])
+    assert response.status_code == 302, response.status_code
+    assert hidden() == {first[1]: "too_easy"}, hidden()
+    html = page()
+    assert f'class="verdict-form"' in html and first[0] in \
+        __import__("re").findall(r'class="verdict-form".*?name="problem" value="([^"]+)"', html, __import__("re").S), \
+        "the undone row did not get its buttons back"
+    assert "marked too easy" in html, "undo took back the other answer too"
+    end()
+    assert the_user()["target_direction"] == "harder", "the undone answer still voted"
+
+
+def undo_leaves_ended_plans_alone():
+    """Like put back: an ended plan is a record of what was said."""
+    a_visitor()
+    first = ids()
+    press(first[0], "too_hard")
+    ended = the_plan()[0]["id"]
+    end()
+    undo(first[0])
+    assert outcome(ended, first[0]) == "too_hard", "undo rewrote an ended plan"
+    assert first[0] not in hidden(), "undo did not un-hide the problem"
+
+
+def undo_on_a_topic_list_comes_back_to_it():
+    a_visitor()
+    dp = ids("dp")
+    press(dp[0], "skip", topic="dp")
+    response = undo(dp[0], topic="dp")
+    assert response.headers["Location"].endswith("?topic=dp"), response.headers["Location"]
+
+
+def undo_refuses_junk():
+    a_visitor()
+    first = ids()
+    assert client.post("/results/!!!/undo", data={"problem": first[0]}).status_code == 404
+    assert undo("9999ZZ").status_code == 404
+    assert client.post(f"/results/{HANDLE}/undo", data={}).status_code == 404
+    assert undo(first[0], topic="nonsense").status_code == 400
+    assert client.get(f"/results/{HANDLE}/undo").status_code == 405
+
+
+def a_marked_row_offers_undo():
+    a_visitor()
+    first = ids()
+    press(first[0], "skip")
+    html = page()
+    import re
+    # The form AND a button in it: a mutation that removed only the button
+    # left a form nobody could submit, and a check that looked for the form
+    # alone passed it.
+    form = re.search(rf'action="/results/{HANDLE}/undo">(.*?)</form>', html, re.S)
+    assert form, "no undo on the marked row"
+    assert '<button type="submit">undo</button>' in form.group(1), "the undo form has no button"
+    assert 'name="verdict" value="skip"' in html, "no skip on the rows still to do"
+
+
+# ---------------------------------------------------------- the small things
+def times_are_said_in_words():
+    """web.ago: the words on the page instead of the database's timestamp."""
+    import datetime
+    now = datetime.datetime(2026, 9, 28, 12, 0, 0, tzinfo=datetime.UTC)
+    cases = {
+        "2026-09-28T11:59:30Z": "just now",
+        "2026-09-28T12:00:05Z": "just now",
+        "2026-09-28T11:59:00Z": "1 minute ago",
+        "2026-09-28T11:05:00Z": "55 minutes ago",
+        "2026-09-28T10:00:00Z": "2 hours ago",
+        "2026-09-27T11:00:00Z": "yesterday",
+        "2026-09-25T12:00:00Z": "3 days ago",
+        "2026-09-07T12:00:00Z": "3 weeks ago",
+        "2026-06-28T12:00:00Z": "3 months ago",
+        "2024-09-28T12:00:00Z": "2 years ago",
+    }
+    for stamp, words in cases.items():
+        assert web.ago(stamp, now) == words, (stamp, web.ago(stamp, now), words)
+
+
+def the_page_says_when_in_words():
+    a_visitor()
+    ids()
+    html = page()
+    assert "last synced" in html and 'title="' in html
+    assert "Z</time>" not in html, "a raw timestamp is still printed in a <time>"
+
+
+def crawlers_are_kept_off_the_pages_that_do_things():
+    response = client.get("/robots.txt")
+    assert response.status_code == 200 and response.mimetype == "text/plain", response
+    text = response.get_data(as_text=True)
+    assert "Disallow: /results/" in text and "Disallow: /progress/" in text, text
+    assert "Disallow: /\n" not in text, "the whole site is closed to crawlers"
+
+
+def the_icon_is_served_and_its_old_address_redirects():
+    html = client.get("/").get_data(as_text=True)
+    assert 'rel="icon"' in html and "favicon.svg" in html, "no icon linked"
+    assert client.get("/static/favicon.svg").status_code == 200
+    response = client.get("/favicon.ico")
+    assert response.status_code == 301 and response.headers["Location"].endswith("/static/favicon.svg"), \
+        (response.status_code, response.headers.get("Location"))
+
+
+def the_buttons_are_targets_a_finger_can_hit():
+    """Measured 2026-09-28 at phone width: the words that steer the
+    difficulty were 16 pixels tall. On a touch screen they are 44, and every
+    one of them is in the rule; for a mouse, 24 without moving the layout."""
+    import re
+    css = Path("static/style.css").read_text(encoding="utf-8")
+    coarse = css.split("@media (pointer: coarse)", 1)[1].split("\n}\n", 1)[0]
+    for selector in (".verdict-form button", ".restore button", ".plan-mark button",
+                     ".plan-next button", ".continue button"):
+        assert selector in coarse, f"{selector} is not in the touch-screen rule"
+    assert "min-height: 44px" in coarse, "no 44-pixel height on a touch screen"
+    fine = re.search(r"\.verdict-form button,\s*\.restore button,\s*\.plan-mark button \{(.*?)\}", css, re.S)
+    assert fine and "padding-top: 4px" in fine.group(1) and "margin-top: -4px" in fine.group(1), \
+        "the 24-pixel target for a mouse is gone"
+
+
+def the_landing_page_does_not_scroll_past_the_continue_box():
+    """Found at phone width: an autofocus attribute scrolled the offer to
+    continue off the screen. The field is focused by script, and only when
+    there is no offer above it."""
+    html = client.get("/").get_data(as_text=True)
+    assert "autofocus" not in html.split("<form", 1)[1].split("</form>", 1)[0], "the field still has autofocus"
+    assert "if (!resume || resume.hidden) input.focus();" in html, "the field is never focused"
+
+
 # ---------------------------------------------------------------- history
 def no_history_until_a_plan_ends():
     a_visitor()
@@ -761,6 +942,24 @@ check("the page says what the end will do", the_page_says_what_the_end_will_do)
 check("each list keeps its own staircase", each_list_keeps_its_own_staircase)
 check("a failed move leaves the plan running", a_failed_move_leaves_the_plan_running)
 check("/privacy says plans are kept", privacy_says_plans_are_kept)
+
+print("\nskip, and undo one")
+check("a skip settles without a vote", a_skip_settles_without_a_vote)
+check("a skipped problem is hidden, and can be put back", a_skipped_problem_is_hidden_and_can_be_put_back)
+check("undo takes back one answer only", undo_takes_back_one_answer_only)
+check("undo leaves ended plans alone", undo_leaves_ended_plans_alone)
+check("undo on a topic list comes back to it", undo_on_a_topic_list_comes_back_to_it)
+check("undo refuses junk", undo_refuses_junk)
+check("a marked row offers undo, the rest offer skip", a_marked_row_offers_undo)
+
+print("\nthe small things")
+check("times are said in words", times_are_said_in_words)
+check("the page says when, in words", the_page_says_when_in_words)
+check("crawlers are kept off the pages that do things", crawlers_are_kept_off_the_pages_that_do_things)
+check("the icon is served, and its old address redirects", the_icon_is_served_and_its_old_address_redirects)
+check("the buttons are targets a finger can hit", the_buttons_are_targets_a_finger_can_hit)
+check("the landing page does not scroll past the continue box",
+      the_landing_page_does_not_scroll_past_the_continue_box)
 
 print("\nhistory")
 check("no history until a plan ends", no_history_until_a_plan_ends)

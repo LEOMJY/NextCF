@@ -173,6 +173,14 @@ the new target from the same value they read. The case that did move it
 twice was the second request arriving just after the first had committed,
 and the stored row is what stops that one.
 
+## Amendment — 2026-09-28, later: skip, and undo one answer
+
+ADR 0028. A third word under each problem, "skip", hides it without a vote
+on the target: not wanting a problem is not a judgement of its difficulty.
+Each marked row gets "undo", which takes back that answer alone, where "put
+back" could only take back all of them at once. The words are now targets a
+finger can hit: 24 pixels at least, 44 on a touch screen.
+
 ## Amendment — 2026-09-28: the target moves per plan, by a staircase
 
 Superseded in part by ADR 0027. A press still hides the problem, and still

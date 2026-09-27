@@ -27,6 +27,10 @@
     {# url_for('static', ...) rather than a hardcoded "/static/style.css":
        Flask knows where it serves static files from, and this follows it. #}
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {# The tab's icon. Without one every page view was followed by a request
+       for /favicon.ico, answered 404 and logged as one -- noise in the log
+       that exists to say how often anything fails (ADR 0022). #}
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 
     {# A hole for whatever one page needs in the head and the others do not.
        The progress page puts its own reload instruction here. #}

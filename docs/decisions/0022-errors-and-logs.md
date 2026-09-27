@@ -146,3 +146,13 @@ inside the loop that reads.
   page polls every 2 to 10 seconds. A crowd of ten waiting visitors is a few
   lines a second. That is fine at this scale, and it is the first thing to
   quieten if it stops being fine.
+
+## Amendment — 2026-09-28: the common refusal in words, and one fewer false 404
+
+A handle Codeforces does not know now reads "Codeforces has no user called
+… Check the spelling." instead of the API's own sentence, and its retry
+button says "Look … up again", for an account made or renamed a moment ago,
+rather than blaming Codeforces for a bad minute. Other refusals keep
+Codeforces' explanation. And every page view was followed by a request for
+`/favicon.ico`, answered 404 and logged as one. The site now has an icon,
+and the old address redirects to it, so the log's 404s are real ones.

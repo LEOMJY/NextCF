@@ -143,7 +143,10 @@ def a_rejected_handle_is_404():
     assert response.status_code == 404, response.status_code
     html = response.get_data(as_text=True)
     assert styled(html) and "no such user" in html, "the reason is not on the page"
-    assert "Try err_rejected again" in html, "no way past the memory"
+    # Worded for the cause: a handle Codeforces does not know is not
+    # having a bad minute (templates/error.html).
+    assert "Look err_rejected up again" in html, "no way past the memory"
+    assert "bad minute" not in html, "blamed Codeforces for a handle it does not know"
     assert "Retry-After" not in response.headers, "a 404 does not ask to be retried"
     # The job's own page is about the job, which exists.
     assert client.get(f"/progress/{job_id}").status_code == 200

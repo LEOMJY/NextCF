@@ -155,8 +155,17 @@ def run_sync(handle, job_id):
             # does not exist, and api_client has already dug the real
             # explanation out of the error body. The explanation names the
             # handle, so it goes to the jobs row and not to the log.
-            db.finish_job(conn, job_id, error=f"Codeforces rejected the request: {exc}",
-                          failure="rejected")
+            #
+            # The common case in words a visitor would use. Until 2026-09-28
+            # every refusal read "Codeforces rejected the request: handle:
+            # User with handle ... not found" -- the API's own sentence, for
+            # what is almost always a typo. Anything else keeps Codeforces'
+            # explanation, since this site cannot word what it does not know.
+            if "not found" in str(exc):
+                error = f"Codeforces has no user called {handle}. Check the spelling."
+            else:
+                error = f"Codeforces would not look up {handle}: {exc}"
+            db.finish_job(conn, job_id, error=error, failure="rejected")
             log.info("job %d: rejected by Codeforces, %.1fs", job_id, time.monotonic() - started)
 
         except urllib.error.URLError as exc:

@@ -250,6 +250,58 @@ def _migrate(conn):
             conn.execute("ALTER TABLE topic_targets ADD COLUMN direction TEXT "
                          "CHECK (direction IN ('harder', 'easier'))")
 
+    # ADR 0028: "skip" as a third answer, in the two CHECKs that list the
+    # answers. The first migration here that is not ADD COLUMN: SQLite cannot
+    # change a table's CHECK, so the table is REBUILT -- a new one made to
+    # the new definition, every row copied in, the old one dropped, the new
+    # one renamed into its place -- in one transaction, so a failure leaves
+    # the old table as it was. Both tables only refer to others; nothing
+    # refers to them, so dropping one breaks no foreign key. The definitions
+    # below must match schema.sql's; tests/check_db.py builds a table the
+    # old way, migrates it, and holds the result to the new rules.
+    rebuilds = {
+        "dismissals": """
+            CREATE TABLE dismissals_new (
+                handle       TEXT NOT NULL COLLATE NOCASE
+                                  REFERENCES users(handle) ON DELETE CASCADE,
+                problem_id   TEXT NOT NULL REFERENCES problems(id),
+                reason       TEXT NOT NULL CHECK (reason IN ('too_hard', 'too_easy', 'skip')),
+                dismissed_at TEXT NOT NULL,
+                PRIMARY KEY (handle, problem_id)
+            ) STRICT""",
+        "plan_problems": """
+            CREATE TABLE plan_problems_new (
+                plan_id       INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+                position      INTEGER NOT NULL,
+                problem_id    TEXT    NOT NULL REFERENCES problems(id),
+                probability   REAL    NOT NULL,
+                thin          INTEGER NOT NULL DEFAULT 0 CHECK (thin IN (0, 1)),
+                outcome       TEXT    CHECK (outcome IN ('too_hard', 'too_easy', 'skip')),
+                settled_at    TEXT,
+                PRIMARY KEY (plan_id, problem_id)
+            ) STRICT""",
+    }
+    for table, create in rebuilds.items():
+        sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ).fetchone()[0]
+        if "'skip'" in sql:
+            continue
+        # BEGIN by hand: sqlite3 opens a transaction on its own only before
+        # INSERT, UPDATE or DELETE, so under a plain `with conn:` the CREATE
+        # would commit by itself, and a failure after it would leave a
+        # half-made dismissals_new behind to break the next attempt.
+        conn.execute("BEGIN")
+        try:
+            conn.execute(create)
+            conn.execute(f"INSERT INTO {table}_new SELECT * FROM {table}")
+            conn.execute(f"DROP TABLE {table}")
+            conn.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+
     # ADR 0010. ALTER TABLE ... ADD COLUMN is metadata only: SQLite records the
     # new column and its default and does not touch a single row, so this
     # returns instantly on a 680 MB file. NOT NULL is allowed here precisely
@@ -941,7 +993,9 @@ DISMISSALS_KEPT = 50
 
 
 def record_feedback(conn, handle, problem_id, reason, keep=DISMISSALS_KEPT):
-    """"Too hard" or "too easy": hide the problem, and settle it in the plans.
+    """"Too hard", "too easy" or "skip": hide the problem, and settle it in
+    the plans. The three differ only in what the plan's end makes of them:
+    the first two vote on the target, "skip" does not (ADR 0028).
 
     The target is NOT moved here any more (ADR 0027). Every press in one plan
     is an answer about the same five, so they are counted together when the
@@ -1014,6 +1068,32 @@ def record_feedback(conn, handle, problem_id, reason, keep=DISMISSALS_KEPT):
         )
     return True
 
+
+
+def undo_feedback(conn, handle, problem_id):
+    """Take back one answer -- "too hard", "too easy" or "skip" -- about one
+    problem (ADR 0028). Returns whether there was one to take back.
+
+    The problem is un-hidden, and goes back to "to do" in the plans still
+    running, so it counts for nothing when they end. Ended plans keep what
+    was said while they ran, as "put back" leaves them (clear_dismissals).
+    Until this existed, a slip of the finger on a phone could only be undone
+    by putting back EVERY hidden problem -- and every other answer in the
+    running plans with it.
+    """
+    with conn:
+        cursor = conn.execute(
+            "DELETE FROM dismissals WHERE handle = ? AND problem_id = ?", (handle, problem_id)
+        )
+        conn.execute(
+            """
+            UPDATE plan_problems SET outcome = NULL, settled_at = NULL
+             WHERE problem_id = ?
+               AND plan_id IN (SELECT id FROM plans WHERE handle = ? AND state = 'active')
+            """,
+            (problem_id, handle),
+        )
+    return cursor.rowcount > 0
 
 
 def topic_target(conn, handle, tag):

@@ -142,7 +142,8 @@ def unknown_handle_fails_and_writes_nothing():
     fake = FakeCodeforces(exists=False)
     job, user = synced(fake, "nobody_by_this_name")
     assert job["state"] == "failed", f"job state {job['state']!r}"
-    assert "not found" in (job["error"] or ""), f"the job's error does not carry Codeforces' reason: {job['error']!r}"
+    assert "no user called nobody_by_this_name" in (job["error"] or ""), \
+        f"the job's error does not say the handle is unknown: {job['error']!r}"
     assert user is None, "a user row was written for a handle that does not exist"
     assert fake.requests == ["user.status"], f"it carried on after the refusal: {fake.requests}"
 
@@ -164,7 +165,10 @@ def each_failure_is_closed_with_its_cause():
     """ADR 0022: the web app answers each cause with a different status code,
     so the cause is stored as a word, not left to be read out of a sentence."""
     cases = [
-        (RuntimeError("handle: User with handle x not found"), "rejected", "rejected"),
+        (RuntimeError("handle: User with handle x not found"), "rejected", "no user called"),
+        # A refusal that is not "not found" keeps Codeforces' own words.
+        (RuntimeError("handles: Field should contain between 3 and 24 characters"), "rejected",
+         "Field should contain"),
         (urllib.error.URLError("timed out"), "unreachable", "Could not reach"),
         (KeyError("result"), "internal", "our side"),
     ]

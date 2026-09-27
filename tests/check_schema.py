@@ -238,5 +238,26 @@ def join_reads_back():
 
 check("join across all three tables reads back (inserted as 'Tourist')", join_reads_back)
 
+
+def the_three_answers_and_no_other():
+    """ADR 0028: "skip" is an answer, in both places the answers are listed;
+    anything else is still refused."""
+    conn = fresh()
+    seed(conn)
+    conn.execute("INSERT INTO dismissals VALUES ('tourist', '1234A', 'skip', '2026-09-28T00:00:00Z')")
+    rejects(conn, "UPDATE dismissals SET reason = 'maybe'")
+    conn.execute(
+        "INSERT INTO plans (handle, started_at, target, source, rating) "
+        "VALUES ('tourist', '2026-09-28T00:00:00Z', 0.5, 'topic', 1500)"
+    )
+    conn.execute(
+        "INSERT INTO plan_problems (plan_id, position, problem_id, probability, outcome) "
+        "VALUES (1, 0, '1234A', 0.5, 'skip')"
+    )
+    rejects(conn, "UPDATE plan_problems SET outcome = 'maybe'")
+
+
+check("skip is an answer, and nothing else new is", the_three_answers_and_no_other)
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

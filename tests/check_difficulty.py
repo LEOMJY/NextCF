@@ -153,7 +153,9 @@ def shown_problems():
     """The ids of the five problems the page is offering."""
     html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
     import re
-    return re.findall(r'name="problem" value="([^"]+)"', html)
+    # Inside a verdict form only: a marked row's undo form carries the same
+    # hidden field (ADR 0028).
+    return re.findall(r'class="verdict-form".*?name="problem" value="([^"]+)"', html, re.S)
 
 
 def quotes_target(target):

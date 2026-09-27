@@ -16,6 +16,7 @@ const urls = {
   recommendations: '/results/somebody/recommendations',
   feedback: '/results/somebody/feedback',
   restore: '/results/somebody/restore',
+  undo: '/results/somebody/undo',
   plan: '/results/somebody/plan',
   how: '/how',
 }
@@ -33,8 +34,8 @@ function recs(topic, problems, extra = {}) {
   return { state: 'ok', source: 'topic', topic, own_target: false, overall_target: 50,
            target, next_target: target, looked_up_at: null, unguarded: false, reach: null,
            at_end: null, extrapolated: false, unrated: false, hidden: false,
-           plan: { id: 7, started_at: '2026-09-27T10:00:00Z', size: problems.length,
-                   settled: 0, solved: 0, complete: false },
+           plan: { id: 7, started_at: '2026-09-27T10:00:00Z', started_ago: 'just now',
+                   size: problems.length, settled: 0, solved: 0, complete: false },
            problems, ...extra }
 }
 
@@ -206,6 +207,26 @@ describe('a practice plan', () => {
     drawn(recs(null, [problem('1A', 'One')], { target: 70, next_target: 65 }))
     expect(document.body.textContent).toContain('Your next five will aim at 65%.')
     expect(document.body.textContent).toContain('Aiming at 70%')
+  })
+
+  it('a marked row can take back its answer alone, and says which it was', () => {
+    const { container } = drawn(recs(null, [
+      problem('1A', 'Pressed One', { outcome: 'too_hard' }),
+      problem('2A', 'Skipped One', { outcome: 'skip' }),
+      problem('3A', 'Open One'),
+    ]))
+    const row = (name) => screen.getByText(name).closest('tr')
+    const undo = row('Pressed One').querySelector('form')
+    expect(undo.getAttribute('action')).toBe('/results/somebody/undo')
+    expect(undo.querySelector('input[name="problem"]').value).toBe('1A')
+    expect(row('Skipped One').textContent).toContain('skipped')
+    expect(row('Open One').querySelector('button[value="skip"]')).toBeTruthy()
+    expect(container.querySelectorAll('.verdict-form').length).toBe(1)
+  })
+
+  it('says when the plan began, in words', () => {
+    drawn(recs(null, [problem('1A', 'One')]))
+    expect(document.body.textContent).toContain('Your plan, started just now:')
   })
 
   it('says nothing about the next plan while the target has not moved', () => {

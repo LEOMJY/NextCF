@@ -342,9 +342,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_active_per_target
 
 
 -- Problems a visitor has said no to, and why -- ADR 0021. "Too hard" and
--- "too easy" are the only two answers, because they are the two the site can
--- act on: each one hides that problem and moves this user's difficulty target
--- one step.
+-- "too easy" hide the problem and, when its plan ends, move the target (ADR
+-- 0027). "Skip" (ADR 0028) hides it and says nothing about difficulty: not
+-- wanting a problem -- read the editorial, dislike interactive problems -- is
+-- not a vote on how hard the next five should be.
 --
 -- Stored rather than kept for the page, for the obvious reason: a problem the
 -- visitor has just pushed away must not come back on the next reload. It is
@@ -358,7 +359,7 @@ CREATE TABLE IF NOT EXISTS dismissals (
     handle       TEXT NOT NULL COLLATE NOCASE
                       REFERENCES users(handle) ON DELETE CASCADE,
     problem_id   TEXT NOT NULL REFERENCES problems(id),
-    reason       TEXT NOT NULL CHECK (reason IN ('too_hard', 'too_easy')),
+    reason       TEXT NOT NULL CHECK (reason IN ('too_hard', 'too_easy', 'skip')),
     dismissed_at TEXT NOT NULL,
 
     -- One row per (person, problem): pressing the other button later replaces
@@ -486,8 +487,9 @@ CREATE TABLE IF NOT EXISTS plan_problems (
     -- topic's list without the guard rail (ADR 0025).
     probability   REAL    NOT NULL,
     thin          INTEGER NOT NULL DEFAULT 0 CHECK (thin IN (0, 1)),
-    -- Settled by a press. "Solved" is not here: see above.
-    outcome       TEXT    CHECK (outcome IN ('too_hard', 'too_easy')),
+    -- Settled by a press. "Solved" is not here: see above. 'skip' settles
+    -- the problem without a vote on the target (ADR 0028).
+    outcome       TEXT    CHECK (outcome IN ('too_hard', 'too_easy', 'skip')),
     settled_at    TEXT,
     PRIMARY KEY (plan_id, problem_id)
 ) STRICT;

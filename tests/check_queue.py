@@ -456,7 +456,7 @@ def the_remembered_failure_offers_a_way_past_it():
     clear_jobs()
     a_failed_job("nosuchuser42qq")
     html = client.get("/results/nosuchuser42qq").get_data(as_text=True)
-    assert "Try nosuchuser42qq again" in html, "no way past the remembered failure"
+    assert "Look nosuchuser42qq up again" in html, "no way past the remembered failure"
 
     response = client.post("/results/nosuchuser42qq/sync")
     assert response.status_code == 302, response.status_code

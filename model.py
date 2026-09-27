@@ -123,8 +123,10 @@ TARGET_HARDEST = 0.30
 def plan_direction(outcomes):
     """Which way one plan's presses point: "harder", "easier" or None.
 
-    `outcomes` are its problems' presses -- "too_easy", "too_hard", or None
-    for a problem nobody pressed. Presses only, not solves: one plan's five
+    `outcomes` are its problems' presses -- "too_easy", "too_hard", "skip",
+    or None for a problem nobody pressed. "skip" is not a vote: it says the
+    visitor did not want that problem, not that it was the wrong difficulty
+    (ADR 0028). Presses only, not solves: one plan's five
     first attempts cannot tell a model that is right from one that is 4
     points off (devlog, 2026-09-28), and the model already learns from solves
     through the visitor's own history. Equal counts, or none, point nowhere.

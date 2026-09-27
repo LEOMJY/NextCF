@@ -115,7 +115,7 @@ def recorded():
 def shown_on_the_page():
     import re
     html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
-    return re.findall(r'name="problem" value="([^"]+)"', html)
+    return re.findall(r'class="verdict-form".*?name="problem" value="([^"]+)"', html, re.S)
 
 
 a_problemset()

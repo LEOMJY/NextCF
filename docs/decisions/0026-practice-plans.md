@@ -133,3 +133,11 @@ its presses are counted together, "too easy" against "too hard", and the
 target takes one step of an adaptive staircase, in the same transaction
 that ends the plan. Solves are not counted; the model learns from them
 through the visitor's history.
+
+## Amendment — 2026-09-28, later: skip, and undo one answer
+
+ADR 0028. "Skip" settles a problem like the other two answers and is not
+counted when the plan ends. A marked row has one button, "undo", which
+returns it to "to do" in the plans still running; ended plans keep what was
+said, as with "put back". "Skip, and save for later" was among the
+alternatives above; skip is now built, and "save for later" still is not.

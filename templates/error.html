@@ -10,10 +10,10 @@
   <div class="tool">
     <h1>That did not work</h1>
 
-    {# The message is written by web.py. For a bad handle it is Codeforces'
-       own explanation, e.g. "handle: User with handle nosuchuser42qq not
-       found"; for a failed sync it is whatever sync.py recorded. Saying what
-       went wrong, in words, is the entire point of this page. #}
+    {# The message is written by web.py, or for a failed sync by sync.py --
+       "Codeforces has no user called nosuchuser42qq" for the common case,
+       Codeforces' own explanation for anything else. Saying what went
+       wrong, in words, is the entire point of this page. #}
     <div class="notice">
       <p role="alert"><code>{{ message }}</code></p>
     </div>
@@ -24,10 +24,19 @@
        was having a bad minute, so the visitor gets a button that ignores the
        memory. Same form and POST as the results page's -- one way to ask for
        a sync, not two. #}
+    {# Worded by the cause (ADR 0022). A handle Codeforces does not know is
+       not having a bad minute, and saying so sent people to press a button
+       that could only say the same thing again. It stays, for the account
+       made or renamed a moment ago; the field below is the usual way out. #}
     {% if retry and handle %}
       <form class="resync" method="post" action="{{ url_for('resync', handle=handle) }}">
-        <button type="submit">Try {{ handle }} again</button>
-        <span class="meta">in case it was Codeforces having a bad minute</span>
+        {% if failure == "rejected" %}
+          <button type="submit">Look {{ handle }} up again</button>
+          <span class="meta">if the account was made or renamed a moment ago</span>
+        {% else %}
+          <button type="submit">Try {{ handle }} again</button>
+          <span class="meta">in case it was Codeforces having a bad minute</span>
+        {% endif %}
       </form>
     {% endif %}
 

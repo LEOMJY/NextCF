@@ -753,6 +753,81 @@ tbody tr:hover td {
   color: var(--accent);
 }
 
+/* "undo" beside what was pressed (ADR 0028): the same underlined muted
+   word as the buttons it takes back, a step away from the words it undoes. */
+.plan-mark button {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-left: var(--s1);
+  color: var(--muted);
+  font: 400 var(--text-small) / 1.2 var(--mono);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.plan-mark button:hover {
+  color: var(--ink);
+}
+
+/* SOMEWHERE A FINGER CAN LAND. The small underlined words above were 16
+   pixels tall -- measured 2026-09-28 at phone width -- and the smallest a
+   target should be is 24 by 24 for any pointer (WCAG 2.2, 2.5.8) and about
+   44 for a finger. They are also, since ADR 0027, what steers the
+   difficulty, so a slip costs something.
+
+   For a mouse: 24 pixels of target, with the padding taken back out of the
+   layout by an equal negative margin, so nothing on the page moves. */
+.verdict-form button,
+.restore button,
+.plan-mark button {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  margin-top: -4px;
+  margin-bottom: -4px;
+}
+
+/* A topic's name is its link, and the row around it is the target: an
+   invisible box stretched over the cell's padding, so "dp" is 37 pixels
+   tall to a pointer and exactly as it was to the eye. */
+.topic-name a {
+  position: relative;
+}
+
+.topic-name a::after {
+  content: "";
+  position: absolute;
+  inset: -10px -4px;
+}
+
+/* For a finger (a touch screen reports its pointer as coarse): real room,
+   44 pixels, taken in the layout rather than borrowed from the rows around
+   -- borrowed room would overlap the problem name above and steal its
+   taps. The rows grow a little on a phone; they do not on a desktop. */
+@media (pointer: coarse) {
+  .verdict-form button,
+  .restore button,
+  .plan-mark button,
+  .remembered button,
+  .continue button,
+  .plan-next button,
+  .resync button {
+    min-height: 44px;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  .verdict-form button,
+  .plan-mark button {
+    min-width: 44px;
+  }
+
+  .verdict-form {
+    margin-top: 0;
+  }
+}
+
 /* "Next five" or "swap the five", under the plan. Swapping is the resync
    button's kind of thing -- available, bordered, not asked for. "Next five",
    once every problem is done, is the one place left to act, so it takes the

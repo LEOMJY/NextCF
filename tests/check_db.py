@@ -646,6 +646,88 @@ def an_old_jobs_table_gains_the_cause():
 check("an old jobs table gains the cause column, keeping its rows", an_old_jobs_table_gains_the_cause)
 
 
+def old_answer_tables_are_rebuilt_for_skip():
+    """ADR 0028's migration, the first that rebuilds a table: dismissals and
+    plan_problems as they were until 2026-09-28, each with a row, brought up
+    to the new CHECK -- rows kept, "skip" accepted, nothing else new
+    accepted, no half-made table left behind, and harmless run twice."""
+    path = fresh_path()
+    db.init_db(path)
+    conn = db.connect(path)
+    try:
+        seed(conn)
+        with conn:
+            conn.execute("DROP TABLE dismissals")
+            conn.execute("DROP TABLE plan_problems")
+            conn.execute(
+                """
+                CREATE TABLE dismissals (
+                    handle TEXT NOT NULL COLLATE NOCASE REFERENCES users(handle) ON DELETE CASCADE,
+                    problem_id TEXT NOT NULL REFERENCES problems(id),
+                    reason TEXT NOT NULL CHECK (reason IN ('too_hard', 'too_easy')),
+                    dismissed_at TEXT NOT NULL,
+                    PRIMARY KEY (handle, problem_id)
+                ) STRICT
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE plan_problems (
+                    plan_id INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+                    position INTEGER NOT NULL,
+                    problem_id TEXT NOT NULL REFERENCES problems(id),
+                    probability REAL NOT NULL,
+                    thin INTEGER NOT NULL DEFAULT 0 CHECK (thin IN (0, 1)),
+                    outcome TEXT CHECK (outcome IN ('too_hard', 'too_easy')),
+                    settled_at TEXT,
+                    PRIMARY KEY (plan_id, problem_id)
+                ) STRICT
+                """
+            )
+            problem = conn.execute("SELECT id FROM problems LIMIT 1").fetchone()[0]
+            conn.execute("INSERT INTO dismissals VALUES ('tourist', ?, 'too_hard', '2026-09-27T00:00:00Z')",
+                         (problem,))
+            conn.execute(
+                "INSERT INTO plans (handle, started_at, target, source, rating) "
+                "VALUES ('tourist', '2026-09-27T00:00:00Z', 0.5, 'topic', 1500)"
+            )
+            conn.execute("INSERT INTO plan_problems (plan_id, position, problem_id, probability, outcome) "
+                         "VALUES (1, 0, ?, 0.5, 'too_easy')", (problem,))
+    finally:
+        conn.close()
+
+    db.init_db(path)
+    db.init_db(path)            # twice: the migration must be idempotent
+
+    conn = db.connect(path)
+    try:
+        assert conn.execute("SELECT reason FROM dismissals").fetchall()[0][0] == "too_hard", "a row was lost"
+        assert conn.execute("SELECT outcome FROM plan_problems").fetchall()[0][0] == "too_easy", "a row was lost"
+        with conn:
+            conn.execute("UPDATE dismissals SET reason = 'skip'")
+            conn.execute("UPDATE plan_problems SET outcome = 'skip'")
+        for sql in ("UPDATE dismissals SET reason = 'maybe'", "UPDATE plan_problems SET outcome = 'maybe'"):
+            try:
+                with conn:
+                    conn.execute(sql)
+            except sqlite3.IntegrityError:
+                pass
+            else:
+                raise AssertionError(f"accepted after the rebuild: {sql}")
+        left = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE name LIKE '%_new'")]
+        assert not left, f"a half-made table was left behind: {left}"
+        # The foreign keys survived the rebuild: a plan's problems still go
+        # with it.
+        with conn:
+            conn.execute("DELETE FROM plans")
+        assert conn.execute("SELECT count(*) FROM plan_problems").fetchone()[0] == 0, "CASCADE lost"
+    finally:
+        conn.close()
+
+
+check("old answer tables are rebuilt for skip, keeping their rows", old_answer_tables_are_rebuilt_for_skip)
+
+
 def job_record_survives_a_failed_sync():
     """ADR 0004: the failure record must outlive the rollback that caused it."""
     path = synced_db()

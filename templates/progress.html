@@ -58,7 +58,7 @@
     </p>
 
     <p class="meta">
-      Sync {{ job.id }}, started {{ job.started_at }}. This address is safe to
+      Sync {{ job.id }}, started <time datetime="{{ job.started_at }}" title="{{ job.started_at }}">{{ job.started_at | ago }}</time>. This address is safe to
       reload or to share.
     </p>
   </div>

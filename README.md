@@ -11,11 +11,14 @@ you something, and chosen from a model that is measured, not guessed.
 
 ---
 
-## Status: v0.7 done — ready for strangers, except the paid disk; v0.8 next
+## Status: v0.8 in progress — ready for strangers, except the paid disk
 
 | | |
 |---|---|
-| Works now | Enter a handle; the history is fetched in the background, then shown with a breakdown by topic and five recommended problems. "Too hard" or "too easy" on any of them hides it and moves the difficulty for you |
+| Works now | Enter a handle; the history is fetched in the background, then shown with a breakdown by topic and five recommended problems — overall, or in any one topic ([ADR 0025](docs/decisions/0025-problems-by-topic.md)) |
+| Practice plans | The five are kept as a plan until you ask for the next: a solve is ticked from your history, "too hard", "too easy" or "skip" marks a problem, one tap undoes a mark, and past plans are listed ([ADR 0026](docs/decisions/0026-practice-plans.md), [ADR 0028](docs/decisions/0028-skip-and-undo.md)) |
+| Difficulty that adapts | When a plan ends, its "too hard" and "too easy" move where the next five aim — a small step first, larger while you keep pressing the same way, smaller when you turn back ([ADR 0027](docs/decisions/0027-target-staircase.md)) |
+| Remembers you | The browser keeps the last handle, and the landing page offers to continue as it; no accounts |
 | Built to be used at once by many | Syncs run one at a time, and a waiting visitor sees their place in the queue and a countdown; a returning visitor sees their page at once while it refreshes behind them ([ADR 0018](docs/decisions/0018-one-sync-at-a-time.md)) |
 | Built to be left running | A background thread keeps the problem list current and refreshes recent visitors when nobody is waiting ([ADR 0020](docs/decisions/0020-the-upkeep-thread.md)); every failure answers with a status code for its cause, on the site's own page, and is logged without the handle it was about ([ADR 0022](docs/decisions/0022-errors-and-logs.md)) |
 | The model | A logistic model of a first submission being accepted, learned from 4,000 other users: the problem's own record, its topics, the user's rating, their recent practice — [ADR 0014](docs/decisions/0014-topic-model.md), [ADR 0015](docs/decisions/0015-practice-history-and-computed-rating.md) |

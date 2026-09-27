@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The header's mark (style.css, .brand::before): a "$" in the accent on
+       the page's own canvas. The colours are the tokens --bg and --accent,
+       written out because an icon cannot read the stylesheet. -->
+  <rect width="32" height="32" rx="6" fill="#0b0d10"/>
+  <text x="16" y="24" text-anchor="middle" fill="#7cf03d"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-size="24" font-weight="700">$</text>
+</svg>

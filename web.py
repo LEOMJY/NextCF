@@ -509,7 +509,8 @@ def remembered_failure(handle, job):
     """
     status = FAILURE_STATUS.get(job["failure"], 500)
     response = app.make_response((
-        render_template("error.html", handle=handle, message=job["error"], retry=True),
+        render_template("error.html", handle=handle, message=job["error"], retry=True,
+                        failure=job["failure"]),
         status,
     ))
     if status == 503:
@@ -737,6 +738,7 @@ def island_data(handle, recs, dismissed, topics, other_topics, totals):
             "recommendations": url_for("recommendations_data", handle=handle),
             "feedback": url_for("feedback", handle=handle),
             "restore": url_for("restore", handle=handle),
+            "undo": url_for("undo", handle=handle),
             "plan": url_for("new_plan", handle=handle),
             "how": url_for("how"),
         },
@@ -848,7 +850,9 @@ def feedback(handle):
 
     verdict = request.form.get("verdict", "")
     problem_id = request.form.get("problem", "")
-    if verdict not in ("too_hard", "too_easy") or not problem_id:
+    # "skip" since ADR 0028: hidden and settled like the other two, with no
+    # vote on the target when the plan ends.
+    if verdict not in ("too_hard", "too_easy", "skip") or not problem_id:
         # Anything can POST here, so the value is checked rather than trusted.
         return render_template("error.html", handle=handle,
                                message="That is not something you can say about a problem."), 400
@@ -883,6 +887,34 @@ def feedback(handle):
     # the same way.
     db.record_feedback(conn, user["handle"], problem_id, verdict)
     # Back to the list the press was made on.
+    return redirect(url_for("results", handle=handle, topic=topic))
+
+
+@app.route("/results/<handle>/undo", methods=["POST"])
+def undo(handle):
+    """Take back one answer about one problem -- ADR 0028.
+
+    The "undo" beside a marked row. The problem comes back, and goes back
+    to "to do" in the plans still running (db.undo_feedback); nothing else
+    changes. "Put back" below the list is still there for everything at
+    once. POST and a redirect, like every button here: anything can POST,
+    so the handle, the problem and the topic are all checked.
+    """
+    if not HANDLE_PATTERN.match(handle):
+        return render_template("error.html", handle=handle,
+                               message="That does not look like a Codeforces handle."), 404
+    problem_id = request.form.get("problem", "")
+    conn = get_db()
+    if not problem_id or not db.problem_exists(conn, problem_id):
+        return render_template("error.html", handle=handle,
+                               message="That problem is not one this site knows about."), 404
+    topic = request.form.get("topic") or None
+    if topic is not None and topic not in db.pool_topics(conn):
+        return render_template("error.html", handle=handle,
+                               message="There is no topic by that name."), 400
+    user = db.get_user(conn, handle)
+    if user is not None:
+        db.undo_feedback(conn, user["handle"], problem_id)
     return redirect(url_for("results", handle=handle, topic=topic))
 
 
@@ -1040,6 +1072,7 @@ def progress(job_id):
             # A sync that failed is worth one more try on demand: the reason
             # may have been Codeforces rather than the handle.
             retry=True,
+            failure=job["failure"],
         )
 
     # Where this visitor is in the queue, which is a count rather than an
@@ -1079,6 +1112,32 @@ def how():
     )
 
 
+@app.route("/favicon.ico")
+def favicon():
+    """The icon's old address, which browsers and bots still ask for on their
+    own: sent on to the real one, instead of a 404 in the log for every
+    visit (templates/base.html links the real one directly)."""
+    return redirect(url_for("static", filename="favicon.svg"), code=301)
+
+
+# What crawlers are asked to leave alone. The results and progress pages
+# DO things when opened: a results page makes a practice plan for each list
+# it is asked for (ADR 0026), and records what it showed (ADR 0024). One
+# public link to somebody's page, followed by a crawler through its thirty-
+# odd topic links, would make thirty plans nobody asked for and put a
+# hundred-odd "showings" nobody saw into the calibration record. The pages
+# a crawler should read -- the landing page, /how, /privacy -- stay open.
+ROBOTS = """User-agent: *
+Disallow: /results/
+Disallow: /progress/
+"""
+
+
+@app.route("/robots.txt")
+def robots():
+    return app.response_class(ROBOTS, mimetype="text/plain")
+
+
 @app.route("/privacy")
 def privacy():
     """What this site reads, what it keeps, and how to have it removed.
@@ -1097,6 +1156,45 @@ def privacy():
         cookie_days=VISITOR_COOKIE_DAYS,
         fresh_minutes=FRESH_FOR_SECONDS // 60,
     )
+
+
+@app.template_filter("ago")
+def ago(stamp, now=None):
+    """How long ago a timestamp was, in words: "just now", "5 minutes ago",
+    "yesterday", "3 weeks ago".
+
+    Pages say this rather than the timestamp itself (2026-09-28). A raw
+    "2026-09-27T17:51:51Z" is the database's format, not a reader's, and it
+    is in UTC: for somebody in China, eight hours ahead, a date near midnight
+    is the wrong day. Worded here, by the server, so the page, the topic
+    component and a page without script all say the same thing. The exact
+    instant stays in each <time> element's datetime attribute and title.
+
+    A template filter: `{{ last_synced | ago }}` in Jinja calls this.
+    """
+    now = now or datetime.datetime.now(datetime.UTC)
+    seconds = (now - datetime.datetime.fromisoformat(stamp)).total_seconds()
+
+    def count(n, unit):
+        return f"{n} {unit}{'' if n == 1 else 's'} ago"
+
+    # A stamp a moment in the future -- two clocks a second apart -- is now.
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return count(int(seconds // 60), "minute")
+    if seconds < 86400:
+        return count(int(seconds // 3600), "hour")
+    days = int(seconds // 86400)
+    if days == 1:
+        return "yesterday"
+    if days < 14:
+        return count(days, "day")
+    if days < 60:
+        return count(days // 7, "week")
+    if days < 365:
+        return count(days // 30, "month")
+    return count(days // 365, "year")
 
 
 def display_row(row):
@@ -1258,6 +1356,8 @@ def recommendation_view(conn, user, topic=None):
             # Which plan the "next five" button ends (new_plan).
             "id": plan["id"],
             "started_at": plan["started_at"],
+            # In words, worded here so the component need not (ago).
+            "started_ago": ago(plan["started_at"]),
             "size": len(rows),
             "settled": settled,
             "solved": sum(1 for row in rows if row["solved"]),

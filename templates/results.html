@@ -13,12 +13,12 @@
   <div class="tool">
     <h1>{{ handle }}</h1>
 
-    {# <time> is the element for a machine-readable instant, and it is what
-       keeps the timestamp from being broken across two lines -- ISO-8601
-       has no spaces, so a browser breaks it at the hyphens instead. #}
+    {# <time> is the element for a machine-readable instant. The words are
+       web.ago's -- "5 minutes ago" -- and the exact instant is in datetime
+       for machines and in title for anybody who hovers. #}
     <p class="meta">
       {{ total }} submissions, last synced
-      <time datetime="{{ last_synced }}">{{ last_synced }}</time>.
+      <time datetime="{{ last_synced }}" title="{{ last_synced }}">{{ last_synced | ago }}</time>.
     </p>
 
     {# ADR 0018, amended: a visitor who has been here before never waits for a
@@ -104,8 +104,8 @@
                 This is {{ recs.topic }}&rsquo;s own target: &ldquo;too hard&rdquo;
                 and &ldquo;too easy&rdquo; here move it, and nothing else.
               {% else %}
-                The same as your overall target, until you press &ldquo;too
-                hard&rdquo; or &ldquo;too easy&rdquo; here: then
+                The same as your overall target, until a plan here ends with
+                &ldquo;too hard&rdquo; or &ldquo;too easy&rdquo; pressed: then
                 {{ recs.topic }} keeps a target of its own.
               {% endif %}
             </p>
@@ -231,7 +231,7 @@
            and how a solve gets ticked, because nothing on this page can see
            Codeforces until it updates from it. #}
         <p class="meta plan-progress">
-          Your plan since <time datetime="{{ recs.plan.started_at }}">{{ recs.plan.started_at[:10] }}</time>:
+          Your plan, started <time datetime="{{ recs.plan.started_at }}" title="{{ recs.plan.started_at }}">{{ recs.plan.started_ago }}</time>:
           {{ recs.plan.settled }} of {{ recs.plan.size }} done, {{ recs.plan.solved }} solved.
           {% if not recs.plan.complete %}
             A problem you solve is ticked the next time this page updates from Codeforces.
@@ -261,21 +261,28 @@
                   {% endif %}
                   {# Settled once (ADR 0026): solved, read from the history,
                      wins over a press -- somebody who called it too hard and
-                     solved it anyway solved it. A settled row has no buttons;
-                     "put back" below is the undo for a press. #}
+                     solved it anyway solved it. A pressed row keeps one
+                     button, "undo", which takes back that answer alone (ADR
+                     0028); "put back" below still takes back all of them. #}
                   {% if problem.solved %}
                     <span class="plan-mark solved">&#10003; solved</span>
                   {% elif problem.outcome %}
-                    <span class="plan-mark">marked {{ "too hard" if problem.outcome == "too_hard" else "too easy" }}</span>
+                    <form class="plan-mark" method="post" action="{{ url_for('undo', handle=handle) }}">
+                      {{ {"too_hard": "marked too hard", "too_easy": "marked too easy", "skip": "skipped"}[problem.outcome] }}
+                      <input type="hidden" name="problem" value="{{ problem.id }}">
+                      {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
+                      <button type="submit">undo</button>
+                    </form>
                   {% else %}
-                  {# ADR 0021. Two words under the name rather than a fourth
+                  {# ADR 0021. Words under the name rather than a fourth
                      column: at 375px a column of buttons squeezes the name,
                      which is the thing being chosen between.
 
                      A form and a POST, like every other button here. The
-                     verdict rides on the button itself -- two submits, one
-                     name, two values -- so this needs no JavaScript and works
-                     the same with scripting off. #}
+                     verdict rides on the button itself -- three submits, one
+                     name, three values -- so this needs no JavaScript and
+                     works the same with scripting off. "skip" is the one
+                     that says nothing about difficulty (ADR 0028). #}
                   <form class="verdict-form" method="post"
                         action="{{ url_for('feedback', handle=handle) }}">
                     <input type="hidden" name="problem" value="{{ problem.id }}">
@@ -284,6 +291,7 @@
                     {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
                     <button type="submit" name="verdict" value="too_hard">too hard</button>
                     <button type="submit" name="verdict" value="too_easy">too easy</button>
+                    <button type="submit" name="verdict" value="skip">skip</button>
                   </form>
                   {% endif %}
                 </td>
@@ -535,7 +543,7 @@
             <tbody>
               {% for plan in plans %}
                 <tr>
-                  <td><time datetime="{{ plan.started_at }}">{{ plan.started_at[:10] }}</time></td>
+                  <td><time datetime="{{ plan.started_at }}" title="{{ plan.started_at }}">{{ plan.started_at | ago }}</time></td>
                   <td>
                     <a href="{{ url_for('results', handle=handle, topic=plan.list or None) }}">{{ plan.list or "all topics" }}</a>
                   </td>

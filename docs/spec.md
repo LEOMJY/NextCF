@@ -207,6 +207,8 @@ because the landing page has a different job from the tool — see §7.1.
 | `/results/<handle>?topic=<tag>` | The same page, five problems in one topic, at that topic's own target — ADR 0025 | v0.8 |
 | `/results/<handle>/recommendations?topic=<tag>` | The five as data, for the topic chart to switch topics without reloading — ADR 0025 | v0.8 |
 | `POST /results/<handle>/plan` | End this list's plan: "next five" when it is done, "swap the five" when it is not. The page makes the next plan when it is next shown — ADR 0026 | v0.8 |
+| `POST /results/<handle>/undo` | Take back one answer about one problem — ADR 0028 | v0.8 |
+| `/robots.txt` | Asks crawlers to leave `/results/` and `/progress/` alone: opening those pages makes plans and records showings | v0.8 |
 | `/how` | How the model works, and the §9 number | v0.6 |
 | `/privacy` | What data is read, what is stored, how to have it removed | v0.7 |
 
@@ -393,7 +395,7 @@ plan_problems                                           nextcf.db only
   probability    real     — the chance as computed when the plan was made
   thin           integer  — 1 if it filled a small topic's list without the
                             guard rail (ADR 0025)
-  outcome        text     — "too_hard" or "too_easy" once pressed; NULL
+  outcome        text     — "too_hard", "too_easy" or "skip" once pressed; NULL
                             otherwise. "Solved" is not stored: it is an
                             accepted submission between started_at and
                             ended_at, read from submissions
@@ -401,7 +403,8 @@ plan_problems                                           nextcf.db only
 dismissals                                              nextcf.db only
   handle         text     — who pushed it away
   problem_id     text     — which problem, canonical id (ADR 0010)
-  reason         text     — "too_hard" or "too_easy"; nothing else
+  reason         text     — "too_hard", "too_easy" or "skip" (ADR 0028);
+                            nothing else
   dismissed_at   text     — ISO-8601 UTC
                             one row per (handle, problem): the later
                             answer replaces the earlier one; at most 50

@@ -121,7 +121,9 @@ def page(topic=None):
 
 
 def shown(html):
-    return re.findall(r'name="problem" value="([^"]+)"', html)
+    # Problems still offered: inside a verdict form. A marked row carries
+    # the same hidden field in its undo form (ADR 0028).
+    return re.findall(r'class="verdict-form".*?name="problem" value="([^"]+)"', html, re.S)
 
 
 def tags_of(pid):

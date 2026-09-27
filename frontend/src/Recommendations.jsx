@@ -9,6 +9,9 @@
 
 const nbsp = ' '
 
+// How a pressed row says what was pressed -- the template's words.
+const MARKED = { too_hard: 'marked too hard', too_easy: 'marked too easy', skip: 'skipped' }
+
 // One problem's row: the link, the "less evidence" note on a filled row,
 // then either how it was settled in the plan (ADR 0026) or the two verdict
 // buttons as a real form, the rating and the chance.
@@ -23,13 +26,17 @@ function ProblemRow({ problem, topic, urls }) {
             few people near your rating have tried this one, so its chance rests on less evidence
           </span>
         )}
-        {/* Solved wins over a press, as in the template. */}
+        {/* Solved wins over a press, as in the template; a pressed row keeps
+            one button, "undo", for that answer alone (ADR 0028). */}
         {problem.solved ? (
           <span className="plan-mark solved">✓ solved</span>
         ) : problem.outcome ? (
-          <span className="plan-mark">
-            marked {problem.outcome === 'too_hard' ? 'too hard' : 'too easy'}
-          </span>
+          <form className="plan-mark" method="post" action={urls.undo}>
+            {MARKED[problem.outcome]}{' '}
+            <input type="hidden" name="problem" value={problem.id} />
+            {topic && <input type="hidden" name="topic" value={topic} />}
+            <button type="submit">undo</button>
+          </form>
         ) : (
           // A form and a POST, exactly as the template's: pressing reloads
           // the page on the same list, which is what the server redirects to.
@@ -38,6 +45,7 @@ function ProblemRow({ problem, topic, urls }) {
             {topic && <input type="hidden" name="topic" value={topic} />}
             <button type="submit" name="verdict" value="too_hard">too hard</button>
             <button type="submit" name="verdict" value="too_easy">too easy</button>
+            <button type="submit" name="verdict" value="skip">skip</button>
           </form>
         )}
       </td>
@@ -64,7 +72,7 @@ function Notes({ recs, urls }) {
             <p className="footnote">
               {recs.own_target
                 ? <>This is {recs.topic}’s own target: “too hard” and “too easy” here move it, and nothing else.</>
-                : <>The same as your overall target, until you press “too hard” or “too easy” here: then {recs.topic} keeps a target of its own.</>}
+                : <>The same as your overall target, until a plan here ends with “too hard” or “too easy” pressed: then {recs.topic} keeps a target of its own.</>}
             </p>
           )}
           {recs.extrapolated && !recs.looked_up_at && (
@@ -199,7 +207,8 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
         <>
           <Notes recs={recs} urls={urls} />
           <p className="meta plan-progress">
-            Your plan since <time dateTime={recs.plan.started_at}>{recs.plan.started_at.slice(0, 10)}</time>:{' '}
+            Your plan, started{' '}
+            <time dateTime={recs.plan.started_at} title={recs.plan.started_at}>{recs.plan.started_ago}</time>:{' '}
             {recs.plan.settled} of {recs.plan.size} done, {recs.plan.solved} solved.
             {!recs.plan.complete && (
               <> A problem you solve is ticked the next time this page updates from Codeforces.</>

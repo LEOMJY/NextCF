@@ -5329,3 +5329,76 @@ instant both work out their move from the same plan before either writes,
 so both would write the same numbers. The test stays, and its docstring now
 says what it does and does not do, as `record_feedback`'s did after the
 same kind of survivor on 2026-09-26.
+
+---
+
+## 2026-09-28, evening — A review of the site, and what it found
+
+The author asked for a check of the whole site: bugs, and anything
+unfriendly. It was done by clicking through the pages at desktop and phone
+width, reading the log, and measuring what could be measured. The author
+chose what to fix now: everything below except the paid disk, which waits.
+
+### Found, and fixed
+
+- **The continue button was scrolled off the screen on a phone.** The
+  handle field had `autofocus`, so the landing page opened 409 pixels down,
+  at the field, with "Continue as …" above the top of the screen. That broke
+  the feature built the day before to save a returning visitor from
+  retyping. The field is now focused by script, and only when there is no
+  offer to continue above it.
+- **A sentence made false by the staircase.** A topic's page said pressing
+  the buttons would give the topic a target of its own. Since ADR 0027 that
+  happens when the plan ends.
+- **A 404 in the log for every page view.** No icon, so every browser asked
+  for `/favicon.ico` and got a 404, logged as one, in the log that exists to
+  say how often anything fails (ADR 0022). There is an icon now: the
+  header's "$" in the accent. The old address redirects to it.
+- **No robots.txt.** Opening a results page makes a plan and records what it
+  showed. One public link, followed by a crawler through thirty-odd topic
+  links, would have made thirty plans and a hundred-odd "showings" in the
+  calibration record. `/results/` and `/progress/` are now closed to
+  crawlers; the landing page, `/how` and `/privacy` stay open.
+- **The most common error read like an API response.** A typo gave
+  "Codeforces rejected the request: handle: User with handle … not found",
+  and a button suggesting Codeforces was having a bad minute. It now says
+  "Codeforces has no user called …. Check the spelling.", and the button
+  offers to look again in case the account was made or renamed a moment ago.
+- **The buttons were 16 pixels tall.** Measured at phone width, including
+  the words that now steer the difficulty. They are 24 pixels for a mouse,
+  with the layout unchanged, and 44 on a touch screen, where the rows grow a
+  little. A topic's link covers its whole row.
+- **Times were printed as the database stores them.** "last synced
+  2026-09-27T17:51:51Z" is now "last synced 16 minutes ago". The same goes
+  for the plan, the history and the progress page. The words are made by
+  the server, so the component says the same, and the exact time is kept in
+  each `<time>` element for machines and on hover.
+- **The README still described v0.7.**
+
+### Built, by the author's choice (ADR 0028)
+
+- **Skip**, a third word under each problem. It hides the problem without a
+  vote on the target: not wanting a problem is not a judgement of its
+  difficulty.
+- **Undo on each marked row**, for one answer. Until now a slip could only
+  be taken back with "put back", all at once, clearing every other answer in
+  the running plans with it.
+
+Skip needed the first migration that rebuilds a table. The answers are
+listed in a `CHECK`, and SQLite cannot change one, so `dismissals` and
+`plan_problems` are made again to the new definition, their rows copied in,
+in one explicit transaction. One thing learned writing it: Python's sqlite3
+opens a transaction by itself only before INSERT, UPDATE or DELETE, so under
+a plain `with conn:` the CREATE would have committed alone. A failure after
+it would have left a half-made table to break the next start. A check
+builds the old tables with rows in them, migrates twice, and holds the
+result to the new rules.
+
+### How it was checked
+
+New checks for every item above, and a CSS check that the touch-screen rule
+covers every button. 434 pass, and the dataset tier 438, with dataset.db
+untouched. Twenty-three mutations, each in a fresh copy: twenty-two caught
+at first. The survivor removed the undo button but left its form, and the
+check looked only for the form. The check now looks for the button, and
+catches it.

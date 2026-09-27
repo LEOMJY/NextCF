@@ -11,9 +11,15 @@
   {# name="handle" is the key this value arrives under in request.form.
      Without a name attribute the field is not submitted at all.
 
-     required, maxlength and autofocus are browser conveniences only. They
-     are not validation -- anything can POST to this URL without ever loading
-     this page, which is why web.py checks the value again on arrival.
+     required and maxlength are browser conveniences only. They are not
+     validation -- anything can POST to this URL without ever loading this
+     page, which is why web.py checks the value again on arrival.
+
+     No autofocus attribute: the script below focuses the field instead,
+     except when the landing page is offering "Continue as ..." above it.
+     Found 2026-09-28 at phone width: autofocus scrolled the page 409 pixels
+     down to the field, and the continue button -- the one thing a returning
+     visitor came for -- was off the top of the screen.
 
      maxlength is 100, not 24, although no handle is longer than 24. A
      browser cuts a PASTE to maxlength before anything is sent, so at 24 a
@@ -25,7 +31,6 @@
     name="handle"
     required
     maxlength="100"
-    autofocus
     autocomplete="off"
     spellcheck="false"
     placeholder="tourist"
@@ -56,6 +61,12 @@
     var note = document.getElementById("remembered");
     var forget = document.getElementById("forget-handle");
     if (!input || !note || !forget) return;
+
+    // The field is where to start -- unless the landing page is offering to
+    // continue as a remembered handle, which it draws above this form before
+    // this script runs. Focusing the field then scrolls that offer away.
+    var resume = document.getElementById("continue");
+    if (!resume || resume.hidden) input.focus();
 
     var saved = null;
     try {
