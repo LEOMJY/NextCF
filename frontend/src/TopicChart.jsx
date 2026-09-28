@@ -66,29 +66,40 @@ export default function TopicChart({ topics, otherTopics, totals, current, urls,
               ))}
             </tbody>
           </table>
-          <p className="footnote">
-            A problem carries about three tags and counts under each, so the Solved column adds
-            to more than the {totals.solved} problems solved
-            {totals.solved_untagged
-              ? `, and ${totals.solved_untagged} solved ${totals.solved_untagged === 1 ? 'problem has' : 'problems have'} no tags at all and appear in no row`
-              : ''}
-            . Average rating covers the rated problems solved in each topic; topics differ in how
-            hard their problems are for everybody, so the averages are not yet comparable between
-            rows.
-          </p>
+          {/* Folded, as in the template (review of 2026-09-28): the answer
+              to a question most visitors never ask, one press away. */}
+          <details className="footnote">
+            <summary>Why Solved adds up to more than {totals.solved}</summary>
+            <p>
+              A problem carries about three tags and counts under each, so the Solved column adds
+              to more than the {totals.solved} problems solved
+              {totals.solved_untagged
+                ? `, and ${totals.solved_untagged} solved ${totals.solved_untagged === 1 ? 'problem has' : 'problems have'} no tags at all and appear in no row`
+                : ''}
+              . Average rating covers the rated problems solved in each topic; topics differ in how
+              hard their problems are for everybody, so the averages are not yet comparable between
+              rows.
+            </p>
+          </details>
         </>
       )}
 
+      {/* Folded too, and open when the topic on screen is one of these, so
+          its link, marked as the current page, is not hidden. `open` is
+          only the starting state: React leaves a fold the visitor opened or
+          closed alone until `current` changes. */}
       {otherTopics.length > 0 && (
-        <p className="meta other-topics">
-          Not practised yet:{' '}
-          {otherTopics.map((tag, i) => (
-            <span key={tag}>
-              <TopicLink tag={tag} current={current} urls={urls} onChoose={onChoose} />
-              {i < otherTopics.length - 1 ? ', ' : ''}
-            </span>
-          ))}
-        </p>
+        <details className="meta other-topics" open={otherTopics.includes(current)}>
+          <summary>Not practised yet: {otherTopics.length} topic{otherTopics.length > 1 ? 's' : ''}</summary>
+          <p>
+            {otherTopics.map((tag, i) => (
+              <span key={tag}>
+                <TopicLink tag={tag} current={current} urls={urls} onChoose={onChoose} />
+                {i < otherTopics.length - 1 ? ', ' : ''}
+              </span>
+            ))}
+          </p>
+        </details>
       )}
     </section>
   )

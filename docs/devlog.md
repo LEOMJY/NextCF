@@ -5505,3 +5505,99 @@ Clicked through at 375px and 1280px: a first visit; a handle typed, and one
 pasted as a profile address, through the progress page; a link that must
 not be remembered; a note that does not match; `#next` into the progress
 page; and skip, undo and put back, each landing where it should.
+
+---
+
+## 2026-09-28, later still — The results page trimmed, and the field under the headline
+
+The author took three more things from the review's list: the results page
+made quieter, the accessibility items, and the landing page's handle field.
+The rest of the landing page waits for the design direction (spec §12).
+
+### The results page
+
+The rule now: **one line above the five, everything that explains them
+under the table.** The line is the target and how far the plan has got,
+"Aiming at 52% · 0 of 5 done, 0 solved · plan started 6 hours ago", in ink
+rather than grey because it is the sentence read on every visit. Under the
+table, in one group: what the two columns are, then whatever bends the
+numbers (outside the model's range, no rating yet, a topic with few
+problems), then where the next plan will aim, then "swap the five".
+
+Measured before and after, first problem's top edge:
+
+| Page | Before | After |
+|---|---|---|
+| All topics, phone (375 × 812) | 701 px, no row whole on screen | 485 px, three rows |
+| A topic's list, desktop (1280 × 800) | about 700 px | 481 px |
+| A visitor outside the model's range, desktop | about 690 px | 464 px, four rows |
+
+Smaller things from the same list:
+
+- **The two columns are defined where the eye lands after them:** "Rating
+  is Codeforces' own, the same for everybody. Chance is yours: …". That is
+  also the answer to the 09-26 audit's question of why a 1000 and a 2300
+  can both say 49%.
+- **"The same as your overall target" was false** on a topic whose plan was
+  made before the overall target moved. It now says the topic *follows* the
+  overall target.
+- **"Put back" is offered only for hidden problems that have no row on
+  screen**, and says "you" where it said "I". One skip used to offer it
+  beside the row's own undo.
+- **Three folds**, using the browser's own `<details>`: why the Solved
+  column adds up to more than the total; the topics not practised yet
+  (open when the topic on screen is one of them); and the past plans, whose
+  last column is now headed "Outcome", not "Ended".
+- **"A problem you solve is ticked the next time this page updates"** moved
+  from above the five to the note beside "Update from Codeforces", which is
+  what does it.
+
+One thing only the browser found: the notes were two widths again. The
+measure is in `ch`, the width of a character in the element's *own* font,
+so the group at body size was 595 pixels wide and the small notes inside it
+484. The group now has the notes' size.
+
+### Accessibility
+
+- **The sync line is announced when it changes, and only then.** A live
+  region (a part of the page a screen reader reads out whenever it changes)
+  round the line itself would read its countdown out every second. A
+  hidden one beside it is filled in by the script when the sync's state
+  changes: in the browser it stayed empty while the sync ran and said
+  "Fresh numbers are ready — show them" once.
+- **Every button names its problem to a screen reader** ("too hard: Huge
+  Pile"), the words shown first so that somebody who speaks to their
+  computer can still say what they see.
+- **The handle field's edge** was about 1.3 to 1 against the page, where 3
+  to 1 is the minimum for a control's boundary. It is now the muted grey,
+  about 5 to 1.
+- **A topic's five dim while they load.** No motion: the tool's pages carry
+  none that is not information (§7.1).
+
+### The landing page's field
+
+Directly under the headline, before the two paragraphs, which are the
+argument for whoever wants one. Its top edge on a first visit: 941 → 346
+pixels on a phone, 831 → 475 on a 1280 × 800 laptop, and the page no longer
+scrolls itself when the field is focused. The lede lost "Enter your
+handle.", an instruction for a field that is now above it.
+
+### How it was checked
+
+Six new plan checks and five new component tests; older checks in five
+files changed with the wording, or gained an assertion. 450 pass, and the dataset tier 454, with
+dataset.db untouched.
+
+Thirty-two mutations, each in a fresh copy, all caught in the end. One
+survived first: taking the summaries out of the touch-screen rule that
+gives 44 pixels. The check looked for the selectors anywhere in that
+block, and the same block has a second rule naming them. It now reads the
+selector list of the rule that holds the 44 pixels. Its first version was
+itself wrong, and matched from the `@media` rule's own brace; running it
+before trusting it found that.
+
+Measured in the browser at 375px and 1280px: every number in the table
+above, the three folds and their 44-pixel height on a touch screen, the
+notes at one width, a topic's five dimming while they load, and the
+announcement, which stayed empty while a sync ran and spoke once when it
+finished.

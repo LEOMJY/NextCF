@@ -301,7 +301,7 @@ def the_page_says_which_model_chose():
     try:
         model.current_topic_model = lambda path=None: fitted
         html = client.get("/results/visitor").get_data(as_text=True)
-        assert "Chosen for you" in html, "the topic model's sentence is missing"
+        assert "the same for everybody" in html, "the topic model's sentence is missing"
         assert "Rating only" not in html, "the baseline's sentence appeared with a model present"
         assert html.count('class="num chance"') == 5, html.count('class="num chance"')
         model.current_topic_model = lambda path=None: None
@@ -315,7 +315,7 @@ def the_page_says_which_model_chose():
             conn.close()
         html = client.get("/results/visitor").get_data(as_text=True)
         assert "Rating only" in html, "no model, and the page did not say it fell back"
-        assert "Chosen for you" not in html
+        assert "the same for everybody" not in html
     finally:
         model.current_topic_model = real
 

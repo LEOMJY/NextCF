@@ -209,7 +209,7 @@ def the_first_view_makes_a_plan_of_five():
     five = ids()
     assert len(five) == 5, five
     html = page()
-    assert "Your plan, started just now" in flat(html), "the page does not say it is a plan"
+    assert "plan started just now" in flat(html), "the page does not say it is a plan"
     assert "0 of 5 done, 0 solved" in flat(html), "no progress line"
 
 
@@ -689,7 +689,7 @@ def a_skipped_problem_is_hidden_and_can_be_put_back():
     assert hidden() == {first[0]: "skip"}, hidden()
     end()
     assert first[0] not in ids(), "a skipped problem came back in the next plan"
-    assert "Put back the 1 problem I hid" in page(), "put back does not count the skip"
+    assert "Put back the problem you hid" in page(), "put back does not count the skip"
 
 
 def undo_takes_back_one_answer_only():
@@ -752,7 +752,7 @@ def a_marked_row_offers_undo():
     # alone passed it.
     form = re.search(rf'action="/results/{HANDLE}/undo">(.*?)</form>', html, re.S)
     assert form, "no undo on the marked row"
-    assert '<button type="submit">undo</button>' in form.group(1), "the undo form has no button"
+    assert re.search(r'<button type="submit" aria-label="undo: [^"]+">undo</button>', form.group(1)),         "the undo form has no button"
     assert 'name="verdict" value="skip"' in html, "no skip on the rows still to do"
 
 
@@ -809,10 +809,16 @@ def the_buttons_are_targets_a_finger_can_hit():
     import re
     css = Path("static/style.css").read_text(encoding="utf-8")
     coarse = css.split("@media (pointer: coarse)", 1)[1].split("\n}\n", 1)[0]
+    # The selectors of the rule that gives 44 pixels, not merely somewhere in
+    # the block: a second rule there naming the summaries let a mutation that
+    # took them out of the 44-pixel rule pass (2026-09-28).
+    # Past the @media rule's own opening brace, then a rule whose body holds
+    # the 44 pixels; group 1 is its selector list.
+    sized = re.search(r"([^{}]*)\{[^{}]*min-height: 44px[^{}]*\}", coarse.split("{", 1)[1])
+    assert sized, "no 44-pixel height on a touch screen"
     for selector in (".verdict-form button", ".restore button", ".plan-mark button",
-                     ".plan-next button", ".continue button"):
-        assert selector in coarse, f"{selector} is not in the touch-screen rule"
-    assert "min-height: 44px" in coarse, "no 44-pixel height on a touch screen"
+                     ".plan-next button", ".continue button", ".topics summary", ".plans summary"):
+        assert selector in sized.group(1), f"{selector} is not in the touch-screen rule"
     fine = re.search(r"\.verdict-form button,\s*\.restore button,\s*\.plan-mark button \{(.*?)\}", css, re.S)
     assert fine and "padding-top: 4px" in fine.group(1) and "margin-top: -4px" in fine.group(1), \
         "the 24-pixel target for a mouse is gone"
@@ -859,6 +865,120 @@ def the_hidden_attribute_beats_every_class():
     rule = re.search(r"(?m)^\[hidden\] \{([^}]*)\}", css)
     assert rule, "no [hidden] rule: any class that sets display shows a hidden element"
     assert "display: none !important" in rule.group(1), rule.group(1)
+
+
+# ------------------------------------------- the review of 2026-09-28
+def the_five_come_first():
+    """Six paragraphs stood between the heading and the first problem, which
+    on a phone was 701 pixels down a 812-pixel screen. Now one line, then
+    the table, then everything that explains it, in one group."""
+    import html as entities
+    a_visitor()
+    ids()
+    text = page()
+    status, table, notes = (text.index(mark) for mark in
+                            ('class="meta recs-status"', 'class="rec-table"', 'class="notes"'))
+    assert status < table < notes, (status, table, notes)
+    # Nothing between the status line and the table but the line itself.
+    between = flat(text[status:table])
+    assert "Chance is yours" not in between and "follows your overall" not in between, between
+    import re
+    line = entities.unescape(flat(text[status:table]))
+    assert re.search(r"Aiming at \d+% · 0 of 5 done, 0 solved · plan started just now", line), line
+    after = flat(text[notes:])
+    assert "Rating is Codeforces’ own" in entities.unescape(after) and "Chance is yours" in after, \
+        "the two column names are not explained under the table"
+    assert "Chosen for you" not in text, "the old sentence above the table is back"
+
+
+def every_button_names_its_problem():
+    """To a screen reader, five rows of "too hard, too easy, skip" were
+    fifteen buttons that did not say which problem they were for."""
+    import html as entities
+    import re
+    a_visitor()
+    first = ids()
+    press(first[0], "skip")
+    text = page()
+    for verdict in ("too hard", "too easy", "skip"):
+        labels = re.findall(rf'aria-label="{verdict}: ([^"]+)">{verdict}</button>', text)
+        assert len(labels) == 4, (verdict, labels)
+    undo = re.findall(r'aria-label="undo: ([^"]+)">undo</button>', text)
+    assert len(undo) == 1, undo
+    names = [entities.unescape(n) for n in re.findall(r'<td>\s*<a href="[^"]+">([^<]+)</a>', text)]
+    assert entities.unescape(undo[0]) in names, (undo, names)
+
+
+def put_back_is_not_a_second_undo():
+    """One skip offered "undo" on its row and "put back the 1 problem"
+    under the list. "Put back" is for hidden problems that have no undo on
+    screen, and says "you", like the rest of the page."""
+    a_visitor()
+    first = ids()
+    press(first[0], "skip")
+    assert "Put back" not in page(), "put back offered beside the row's own undo"
+    end()
+    ids()
+    assert "Put back the problem you hid" in page(), "no way back for a problem hidden in an ended plan"
+    assert " I hid" not in page()
+    # Pressed, then solved: the row shows the solve and has no undo, and
+    # nothing is offered back -- a solved problem is never offered again.
+    a_visitor()
+    first = ids()
+    press(first[0], "too_hard")
+    a_solve(first[0])
+    text = page()
+    assert "&#10003; solved" in text, "the solve after the press was not read; this checks nothing"
+    assert "Put back" not in text, "put back offered for a problem that is solved"
+
+
+def what_is_kept_but_not_read_every_visit_is_folded():
+    a_visitor()
+    first = ids()
+    a_solve(first[0], seconds_from_now=0)
+    end()
+    text = page()
+    assert '<details class="footnote">' in text and "<summary>Why Solved adds up to more than" in text, \
+        "the Solved column's footnote is not folded"
+    assert '<details class="meta other-topics"' in text and "Not practised yet:" in text, \
+        "the unpractised topics are not folded"
+    plans = text.split('<section class="plans">', 1)[1].split("</section>", 1)[0]
+    assert "<h2>Past plans</h2>" in plans and "<details>" in plans and "1 ended plan</summary>" in plans, plans[:300]
+    assert "<th>Outcome</th>" in plans and "<th>Ended</th>" not in plans, "the column headed like a date"
+    # Closed on another list; open when the topic on screen is one of them,
+    # so the link marked as the current page is not folded away.
+    assert '<details class="meta other-topics">' in text, "folded open on a list that is not one of them"
+    assert '<details class="meta other-topics" open>' in page("dp"), "the current topic's link is folded away"
+
+
+def the_stylesheet_carries_the_review():
+    """The field's edge, the loading dim, the notes' one width and the
+    hidden announcement: a line or two of CSS each, and a regression in any
+    is invisible to every other check."""
+    import re
+    css = Path("static/style.css").read_text(encoding="utf-8")
+    field = re.search(r"\.handle-form input \{([^}]*)\}", css).group(1)
+    assert "border: 1px solid var(--muted)" in field, "the handle field's edge is back to --line"
+    busy = re.search(r'\.recs\[aria-busy="true"\] \{([^}]*)\}', css)
+    assert busy and "opacity" in busy.group(1), "nothing shows that a topic's five are loading"
+    notes = re.search(r"\.notes \{([^}]*)\}", css).group(1)
+    # Both: the measure is in ch, a width of the element's own font, so the
+    # group has to be at the notes' size for them all to be one width.
+    assert "max-width: var(--measure)" in notes and "font-size: var(--text-small)" in notes, \
+        "the notes run at two widths again"
+    hidden = re.search(r"\.sr-only \{([^}]*)\}", css)
+    assert hidden and "clip: rect(0, 0, 0, 0)" in hidden.group(1) and "position: absolute" in hidden.group(1), \
+        "the announcement a screen reader hears is drawn on the page"
+
+
+def the_field_comes_before_the_argument():
+    """The handle field was 830 pixels down a phone's 812-pixel screen on a
+    first visit, under the two paragraphs; spec 4.1 puts it in the hero so
+    a returning visitor types at once."""
+    html = client.get("/").get_data(as_text=True)
+    assert html.index('<h1>') < html.index('class="handle-form"') < html.index('class="lede"') \
+        < html.index('class="caveat"'), "the form is not directly under the headline"
+    assert "Enter your handle." not in html, "the lede still tells somebody to fill in a field above it"
 
 
 def the_landing_page_does_not_scroll_past_the_continue_box():
@@ -1005,6 +1125,14 @@ check("the landing page does not scroll past the continue box",
       the_landing_page_does_not_scroll_past_the_continue_box)
 check("a press comes back to where it was made", a_press_comes_back_to_where_it_was_made)
 check("the hidden attribute beats every class", the_hidden_attribute_beats_every_class)
+
+print("\nthe review of 2026-09-28")
+check("the five come first, and the notes after them", the_five_come_first)
+check("every button names its problem", every_button_names_its_problem)
+check("put back is not a second undo", put_back_is_not_a_second_undo)
+check("what is kept but not read every visit is folded", what_is_kept_but_not_read_every_visit_is_folded)
+check("the stylesheet carries the review", the_stylesheet_carries_the_review)
+check("the field comes before the argument", the_field_comes_before_the_argument)
 
 print("\nhistory")
 check("no history until a plan ends", no_history_until_a_plan_ends)

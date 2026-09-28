@@ -349,7 +349,11 @@ def the_page_offers_to_put_them_back():
 
     press(shown_problems()[0], "too_hard")
     html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
-    assert "Put back the 1 problem I hid" in html, "no way to undo"
+    # The pressed row stays in the plan with its own undo (ADR 0028), so
+    # "put back" is not offered as a second way back from the same press
+    # (review of 2026-09-28) -- but the route still puts everything back.
+    assert ">undo</button>" in html, "no way to undo"
+    assert "Put back" not in html, "two ways back from one press"
 
     response = client.post(f"/results/{HANDLE}/restore")
     assert response.status_code == 302, response.status_code
@@ -397,7 +401,7 @@ def the_undo_survives_an_empty_list():
     hidden = hide_everything()
     html = client.get(f"/results/{HANDLE}").get_data(as_text=True)
     assert "rec-table" not in html, "the pool was not emptied; this checks nothing"
-    assert f"Put back the {hidden} problems I hid" in html, "no way back from an empty list"
+    assert f"Put back all {hidden} problems you hid" in html, "no way back from an empty list"
 
 
 def an_empty_list_caused_by_hiding_does_not_claim_everything_is_solved():
@@ -422,7 +426,7 @@ def the_undo_survives_a_missing_problemset():
         conn.close()
         a_problemset()
     assert "still loading" in html, "the problemset was not missing; this checks nothing"
-    assert "Put back the 1 problem I hid" in html, "no way back while the list is loading"
+    assert "Put back the problem you hid" in html, "no way back while the list is loading"
 
 
 # ------------------------------------------------------- what cannot be said

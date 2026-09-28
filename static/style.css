@@ -208,6 +208,23 @@
   display: none !important;
 }
 
+/* Read by a screen reader, drawn nowhere: the results page's announcement
+   that a sync has finished. Not display: none, which a screen reader skips
+   too -- a box one pixel square, clipped to nothing, off the layout. The
+   standard recipe, kept whole: each line closes a way the text could still
+   show or take up room. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -381,6 +398,19 @@ main {
   color: var(--accent);
 }
 
+/* The handle field, directly under the headline since 2026-09-28 (see
+   index.html), and the paragraphs after it: the same step down to them as
+   from the lede to the rest of the page used to be. */
+.hero-form {
+  margin-bottom: var(--s4);
+}
+
+/* The hero's own bottom padding is the gap to the footer; a last
+   paragraph's margin on top of it doubled that. */
+.hero > :last-child {
+  margin-bottom: 0;
+}
+
 .lede {
   color: var(--muted);
   font-size: var(--text-lead);
@@ -421,7 +451,11 @@ main {
   flex: 1 1 240px;
   min-width: 0;
   background: var(--panel);
-  border: 1px solid var(--line);
+  /* --muted, not --line: measured 2026-09-28, the --line edge was about
+     1.3 to 1 against the page, and a field whose edge cannot be seen is a
+     field somebody has to hunt for. WCAG asks 3 to 1 of a control's
+     boundary (1.4.11); --muted is about 5. */
+  border: 1px solid var(--muted);
   border-radius: var(--radius);
   color: var(--ink);
   font: 400 var(--text-body) / 1 var(--mono);
@@ -475,6 +509,51 @@ main {
   font-size: var(--text-small);
   margin-top: var(--s1);
   margin-bottom: var(--s3);
+}
+
+/* THE FIVE'S ONE LINE (review of 2026-09-28): the target and how far the
+   plan has got, the only words between the heading and the table. Ink, not
+   grey: every other sentence in the section is an explanation, read once,
+   and this is the one read on every visit. A topic's "only problems
+   tagged" line sits directly above it, one step away rather than three. */
+.recs-status {
+  color: var(--ink);
+}
+
+.meta.topic-scope {
+  margin-bottom: 0;
+}
+
+/* Everything under the five that explains them, as one group: one measure
+   for all of it, and one step between its sentences. Before, the sentence
+   defining the chance ran the page's full width and the notes after it
+   wrapped at the measure, so a page with three of them had a ragged left
+   column of two widths; and margins collapsing between .meta and .footnote
+   left a note about the target 32 pixels from its sentence and 8 from an
+   unrelated one. */
+.notes {
+  /* The notes' own size, set here as well, because --measure is in ch and a
+     ch is a width of the element's own font: at the body size the group was
+     595 pixels wide and the small notes in it 484. */
+  font-size: var(--text-small);
+  max-width: var(--measure);
+  margin-top: var(--s2);
+}
+
+.notes > p {
+  margin: 0;
+}
+
+.notes > p + p {
+  margin-top: var(--s1);
+}
+
+/* While a topic's five are being fetched (TopicIsland.jsx sets aria-busy),
+   the old five are dimmed, so a press on a topic is answered at once. No
+   transition: the tool's pages carry no motion that is not information
+   (spec 7.1), and a dimmed table is the whole message. */
+.recs[aria-busy="true"] {
+  opacity: 0.5;
 }
 
 /* "too hard" and "too easy", under each recommendation (ADR 0021). Two words
@@ -832,10 +911,19 @@ tbody tr:hover td {
   .remembered button,
   .continue button,
   .plan-next button,
-  .resync button {
+  .resync button,
+  .topics summary,
+  .plans summary {
     min-height: 44px;
     margin-top: 0;
     margin-bottom: 0;
+  }
+
+  /* A summary is a list item, not a flex box, so its words sit at the top
+     of the 44 pixels. Padding centres them instead. */
+  .topics summary,
+  .plans summary {
+    padding: 12px 0;
   }
 
   .verdict-form button,
@@ -911,6 +999,42 @@ tbody tr:hover td {
   font-size: var(--text-small);
   max-width: var(--measure);
   margin-top: var(--s2);
+}
+
+/* FOLDS: the browser's own <details>, for what is kept but not read on
+   every visit -- why the Solved column adds up, the topics not practised
+   yet, the past plans (review of 2026-09-28). The summary is drawn as the
+   page's other quiet controls are, muted and underlined: available, not
+   asked for. Its triangle (::marker) is the browser's; only its colour is
+   ours. 4 pixels above and below make a 24-pixel target for a mouse, as
+   for the buttons; the touch-screen rule further down makes it 44. */
+.topics summary,
+.plans summary {
+  color: var(--muted);
+  font-size: var(--text-small);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.topics summary:hover,
+.plans summary:hover {
+  color: var(--ink);
+}
+
+.topics summary::marker,
+.plans summary::marker {
+  color: var(--muted);
+}
+
+.topics details[open] > summary,
+.plans details[open] > summary {
+  margin-bottom: var(--s1);
+}
+
+.plans details {
+  margin-top: var(--s1);
 }
 
 /* ------------------------------------------------------ reading pages: /how

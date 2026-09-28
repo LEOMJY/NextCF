@@ -71,6 +71,19 @@ describe('the topic chart', () => {
     expect(screen.getByRole('link', { name: 'fft' }).getAttribute('href')).toBe('/results/somebody?topic=fft')
   })
 
+  // Folded since the review of 2026-09-28; open when the topic on screen is
+  // one of the unpractised ones, so the link marked as the current page shows.
+  it('folds the unpractised topics, open only when one of them is on screen', async () => {
+    const { container } = render(<TopicIsland initial={initial} fetchImpl={answering({ recs: recs('fft', [problem('7A', 'An FFT Problem')]), dismissed: 0 })} navigate={vi.fn()} />)
+    const fold = container.querySelector('details.other-topics')
+    expect(fold.querySelector('summary').textContent).toBe('Not practised yet: 1 topic')
+    expect(fold.open).toBe(false)
+    fireEvent.click(screen.getByRole('link', { name: 'fft' }))
+    await screen.findByText('An FFT Problem')
+    expect(container.querySelector('details.other-topics').open).toBe(true)
+    expect(container.querySelector('details.footnote summary').textContent).toBe('Why Solved adds up to more than 4')
+  })
+
   it('choosing a topic swaps the five in place, and the address follows', async () => {
     const fetchImpl = answering({ recs: recs('dp', [problem('9A', 'A DP Problem')]), dismissed: 0 })
     const push = vi.spyOn(window.history, 'pushState')
@@ -200,7 +213,7 @@ describe('a practice plan', () => {
     drawn(recs(null, [problem('1A', 'Done One', { solved: true })],
                { plan: { id: 8, started_at: '2026-09-27T10:00:00Z', size: 1, settled: 1, solved: 1, complete: true } }))
     expect(screen.getByRole('button', { name: 'Next five' }).className).toBe('primary')
-    expect(document.body.textContent).not.toContain('ticked the next time')
+    expect(document.body.textContent).toContain('1 of 1 done, 1 solved')
   })
 
   it('says where the next plan will aim once a press has moved the target', () => {
@@ -226,7 +239,7 @@ describe('a practice plan', () => {
 
   it('says when the plan began, in words', () => {
     drawn(recs(null, [problem('1A', 'One')]))
-    expect(document.body.textContent).toContain('Your plan, started just now:')
+    expect(document.body.textContent).toContain('plan started just now')
   })
 
   it('says nothing about the next plan while the target has not moved', () => {
@@ -258,6 +271,49 @@ describe('a practice plan', () => {
       Element.prototype.scrollIntoView = original
       window.history.replaceState(null, '', '/')
     }
+  })
+
+  // The review of 2026-09-28: one line above the five, and everything that
+  // explains them under the table, in one group.
+  it('says the target and the plan on one line above the table, and explains the numbers under it', () => {
+    const { container } = drawn(recs(null, [problem('1A', 'One')], { target: 52 }))
+    const status = container.querySelector('.recs-status')
+    expect(status.textContent.replace(/\s+/g, ' ')).toContain('Aiming at 52% · 0 of 1 done, 0 solved · plan started just now')
+    const table = container.querySelector('.rec-table')
+    const notes = container.querySelector('.notes')
+    // The status line comes before the table, the notes after it.
+    expect(status.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(table.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(notes.textContent).toContain('Rating is Codeforces’ own, the same for everybody. Chance is yours')
+  })
+
+  it("a topic that has no target of its own says it follows the overall one, not that they are equal", () => {
+    drawn(recs('dp', [problem('9A', 'One')], { own_target: false, target: 55, overall_target: 52 }))
+    expect(document.body.textContent).toContain('dp follows your overall target until a plan here ends')
+    expect(document.body.textContent).not.toContain('The same as your overall target')
+  })
+
+  it('every button names its problem to a screen reader, the words shown first', () => {
+    drawn(recs(null, [problem('1A', 'Open One'), problem('2A', 'Pressed One', { outcome: 'skip' })]))
+    expect(screen.getByRole('button', { name: 'too hard: Open One' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'too easy: Open One' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'skip: Open One' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'undo: Pressed One' })).toBeTruthy()
+  })
+
+  it('offers "put back" only for hidden problems that have no undo on screen', () => {
+    const list = recs(null, [problem('1A', 'Open One'), problem('2A', 'Pressed One', { outcome: 'skip' })])
+    const { unmount } = render(<TopicIsland initial={{ ...initial, recs: list, dismissed: 1 }} fetchImpl={answering({})} navigate={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /Put back/ })).toBeNull()
+    unmount()
+    const second = render(<TopicIsland initial={{ ...initial, recs: list, dismissed: 3 }} fetchImpl={answering({})} navigate={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Put back all 3 problems you hid' })).toBeTruthy()
+    second.unmount()
+    // Pressed, then solved: no undo on the row, and nothing to put back --
+    // a solved problem is never offered again, hidden or not.
+    const solved = recs(null, [problem('1A', 'Open One'), problem('2A', 'Solved One', { outcome: 'too_hard', solved: true })])
+    render(<TopicIsland initial={{ ...initial, recs: solved, dismissed: 1 }} fetchImpl={answering({})} navigate={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /Put back/ })).toBeNull()
   })
 
   it('scrolls nowhere when the address names nothing', () => {

@@ -211,7 +211,10 @@ def the_current_topic_is_marked():
 def a_topic_starts_from_the_overall_target_and_says_so():
     a_visitor()
     _, html = page("dp")
-    assert "The same as your overall target" in " ".join(html.split()), "the borrowed target went unsaid"
+    assert "dp follows your overall target" in " ".join(html.split()), "the borrowed target went unsaid"
+    # Not "the same as": the plan keeps the target it was made at, so the
+    # two can differ (review of 2026-09-28).
+    assert "The same as your overall target" not in " ".join(html.split())
 
 
 def a_press_on_a_topic_list_moves_only_that_topic():

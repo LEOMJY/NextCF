@@ -228,6 +228,11 @@ field at the same time, which is harder to compose. Accepted.
 Nothing on the landing page is compulsory reading. Scrolling is optional; the
 tool is always one action away.
 
+*Moved 2026-09-28:* the field sits directly under the headline, before the
+paragraphs. Below them it was under the first screen on a phone (its top at
+941 pixels of 812) and at the bottom edge of a laptop's, which broke the
+promise above for exactly the visitor it was made to.
+
 ### Why `/how` is not an appendix
 
 §3 states the differentiator is measurement and that it is the only one. The
@@ -772,6 +777,27 @@ leave, and motion there costs attention without returning any.
 **The landing page is not covered by this.** Motion is allowed there if it
 carries the visual idea rather than decorating it. The limit on the landing page
 is the budget below, not a rule about technique.
+
+### The results page, in order
+
+Set on 2026-09-28, after a review found six paragraphs between the heading
+and the first problem, which on a phone was 701 pixels down a 812-pixel
+screen. Each had been added for a good reason, one at a time.
+
+```
+one line      the target, and how far the plan has got
+the five      the table, and the buttons on each row
+one group     what Rating and Chance are, then whatever bends the
+              numbers, then where the next plan will aim -- one
+              measure, one step between sentences
+the plan      "swap the five" or "next five"
+folded        what is kept but not read on every visit: why Solved
+              adds up, the topics not practised yet, past plans
+```
+
+A new sentence about the five goes into the group under the table, not
+above it. If it seems to need to be above, that is a reason to change the
+one line, not to add a second.
 
 The React rejection in §7 was re-examined against this section and stood at
 v0.2; React was adopted for interactive components only on 2026-09-13 (ADR

@@ -32,6 +32,12 @@
          data-status="{{ url_for('sync_status', job_id=syncing.job_id) }}">
         {% include "_sync_line.html" %}
       </p>
+      {# What a screen reader is told, and only when the sync's state
+         changes: the line above counts down every second, and a live region
+         (a part of the page a screen reader reads out whenever it changes)
+         wrapped round it would read every second out. The script below
+         fills this in; it is invisible on screen (.sr-only). #}
+      <p class="sr-only" id="sync-announce" role="status"></p>
     {% else %}
       {# Nothing is running. If the numbers are old, say so -- that is rare,
          since an old page starts a sync on arrival, and it means one failed
@@ -45,9 +51,14 @@
          the page is out of date even though it counts as fresh. A form, not a
          link -- a GET that starts work gets followed by prefetchers, crawlers
          and link checkers, each taking a turn in the queue. #}
+      {# The note says what the button is for as well as how long it takes:
+         a problem solved on Codeforces is ticked in the plan only after an
+         update. That sentence used to sit above the five, one of six
+         paragraphs between the heading and the first problem (review of
+         2026-09-28). #}
       <form class="resync" method="post" action="{{ url_for('resync', handle=handle) }}">
         <button type="submit">Update from Codeforces</button>
-        <span class="meta">takes a few seconds, longer if others are waiting</span>
+        <span class="meta">ticks off what you have solved since; takes a few seconds</span>
       </form>
     {% endif %}
 
@@ -78,166 +89,16 @@
       {% endif %}
 
       {% if recs.state == "ok" %}
-        {# The sentence that says exactly what the number is. A bare "71%"
-           invites the reader to supply their own meaning, and the two
-           meanings on offer differ by a thousand rating points -- see the ADR
-           on the baseline. #}
-        {# "around 2800" is the PROBLEM rating. The first version said "at your
-           rating -- around 2800", which reads as if 2800 were the visitor's
-           own rating, so the problem rating now comes first and "your rating"
-           only ever means theirs. #}
-        {% if recs.source == "topic" %}
-          {# The topic model's claim is about THIS person, and the sentence
-             says what it was worked out from -- the three things the
-             evaluation found carry the information (ADR 0014). #}
-          <p class="meta">
-            Chosen for you: the chance your first submission is accepted, worked
-            out from your own history, how 4,000 other users actually did on
-            each problem, and how hard its topics are. Aiming at
-            {{ recs.target }}%.
-            <a href="{{ url_for('how') }}">How this works</a>
-          </p>
-          {# ADR 0025: each topic keeps its own target once its buttons have
-             been pressed. Until then it borrows the overall one, and the
-             page says which, because "too hard" here moves only this. #}
-          {% if recs.topic %}
-            <p class="footnote">
-              {% if recs.own_target %}
-                This is {{ recs.topic }}&rsquo;s own target: &ldquo;too hard&rdquo;
-                and &ldquo;too easy&rdquo; here move it, and nothing else.
-              {% else %}
-                The same as your overall target, until a plan here ends with
-                &ldquo;too hard&rdquo; or &ldquo;too easy&rdquo; pressed: then
-                {{ recs.topic }} keeps a target of its own.
-              {% endif %}
-            </p>
-          {% endif %}
-          {# Said plainly rather than hidden: the model learned from users
-             rated roughly 350 to 2,370 at the time of their attempts, and
-             beyond that its numbers are a guess with the same confidence
-             as its measurements -- unless the page says otherwise. #}
-          {# Not when the guard rail's note below is shown too: both began
-             "Your rating is outside...", and two sentences saying nearly the
-             same thing read as a page that does not know what it means.
-             That note carries this one's point instead. #}
-          {% if recs.extrapolated and not recs.looked_up_at %}
-            <p class="footnote">
-              Your rating is outside the range the model learned from, so these
-              chances are an extrapolation and less reliable than they look.
-            </p>
-          {% endif %}
-          {# Codeforces shows a new account less than it computes with, for
-             six rated contests. The chances use the computed number, and
-             without this line a visitor who sees 700 on their profile gets
-             problems picked for 1250 and no reason why. #}
-          {# Nobody has a rating before their first rated contest. The model
-             still needs one, so it starts them at the value that predicted
-             such attempts best, and their own practice moves them -- ADR
-             0016. Said, because the number is a choice and not theirs. #}
-          {% if recs.unrated %}
-            <p class="footnote">
-              You have no rating yet, so these chances start from
-              {{ recs.computed }} &mdash; the starting point that predicted best
-              for people who had not yet entered a rated contest &mdash; and
-              move with how your own practice has gone. They are less certain
-              than a rated account's.
-            </p>
-          {% endif %}
-          {% if recs.hidden %}
-            <p class="footnote">
-              Codeforces shows you {{ recs.shown }} but computes with
-              {{ recs.computed }}: for a new account's first six rated contests
-              it holds part of the rating back and returns it contest by
-              contest. These chances use {{ recs.computed }}.
-            </p>
-          {% endif %}
-        {% else %}
-          <p class="meta">
-            Problems rated around {{ recs.centre }}, where
-            {% if recs.event == "first_try" %}
-              a first submission from somebody at your rating is accepted about
-              {{ recs.target }}% of the time.
-            {%- else %}
-              somebody at your rating solves them in the end about
-              {{ recs.target }}% of the time.
-            {%- endif %}
-            Rating only, so everybody at your rating is shown these five.
-          </p>
-        {% endif %}
-
-        {# ADR 0023's guard rail, said when it bends. Problems are offered only
-           if people near the visitor's rating have tried them; a visitor
-           outside the ratings the data covers is looked up at its edge, and
-           a visitor who has solved nearly everything people near them tried
-           gets the rule lifted rather than an empty list. Either way the
-           page says which, because both change what the five mean. #}
-        {% if recs.looked_up_at %}
-          <p class="footnote">
-            Your rating is outside what the 4,000 users behind these numbers
-            were rated, so problems are chosen from ones people rated around
-            {{ recs.looked_up_at }} have actually tried
-            {%- if recs.extrapolated %}, and the chances are an extrapolation,
-            less reliable than they look{% endif %}.
-          </p>
-        {% endif %}
-        {% if recs.unguarded %}
-          <p class="footnote">
-            You have solved most of what people near your rating have tried,
-            so these include problems few of them attempted. The chances on
-            those rest on less evidence.
-          </p>
-        {% endif %}
-
-        {# When the buttons can no longer change the list, say so before the
-           visitor finds out by pressing. Found on review: an 800-rated
-           visitor's third "too hard" gave back the same five with no word
-           why, because nothing on Codeforces is rated below 800. The wall
-           that explains the list comes first; the end of the ladder is
-           mentioned only when the list itself is fine -- see
-           web.target_limits. #}
-        {% if recs.reach == "easiest" %}
-          <p class="footnote">
-            Nothing left {% if recs.topic %}in {{ recs.topic }}{% else %}on Codeforces{% endif %} is as easy as {{ recs.target }}% for you:
-            these are the easiest problems there are, so &ldquo;too hard&rdquo;
-            can hide one but cannot find anything easier.
-          </p>
-        {% elif recs.reach == "hardest" %}
-          <p class="footnote">
-            Nothing left {% if recs.topic %}in {{ recs.topic }}{% else %}on Codeforces{% endif %} is as hard as {{ recs.target }}% for you:
-            these are the hardest problems there are, so &ldquo;too easy&rdquo;
-            can hide one but cannot find anything harder.
-          </p>
-        {% elif recs.at_end == "easiest" %}
-          <p class="footnote">
-            {{ recs.target }}% is as easy as the target goes. &ldquo;Too
-            hard&rdquo; still hides a problem, and no longer moves the target.
-          </p>
-        {% elif recs.at_end == "hardest" %}
-          <p class="footnote">
-            {{ recs.target }}% is as hard as the target goes. &ldquo;Too
-            easy&rdquo; still hides a problem, and no longer moves the target.
-          </p>
-        {% endif %}
-        {# Five that straddle the target but reach far from it: a topic with
-           few problems near it (web.target_limits). #}
-        {% if recs.scattered %}
-          <p class="footnote">
-            Few problems {% if recs.topic %}in {{ recs.topic }}{% else %}left{% endif %}
-            come near {{ recs.target }}% for you, so some of these are well off
-            it: the chance on each says how far.
-          </p>
-        {% endif %}
-
-        {# ADR 0026: these five are a plan, kept until the visitor asks for
-           the next. Said once, above the table, with how far along it is --
-           and how a solve gets ticked, because nothing on this page can see
-           Codeforces until it updates from it. #}
-        <p class="meta plan-progress">
-          Your plan, started <time datetime="{{ recs.plan.started_at }}" title="{{ recs.plan.started_at }}">{{ recs.plan.started_ago }}</time>:
-          {{ recs.plan.settled }} of {{ recs.plan.size }} done, {{ recs.plan.solved }} solved.
-          {% if not recs.plan.complete %}
-            A problem you solve is ticked the next time this page updates from Codeforces.
-          {% endif %}
+        {# ONE LINE ABOVE THE FIVE: where they aim, and how far the plan has
+           got (ADR 0026). Everything that explains the numbers is under the
+           table. Found by the review of 2026-09-28: six paragraphs stood
+           between the heading and the first problem, which on a phone was
+           701 pixels down a 812-pixel screen. Ink rather than grey, because
+           this is the line of the section's words that is read every time. #}
+        <p class="meta recs-status">
+          Aiming at {{ recs.target }}%
+          &middot; {{ recs.plan.settled }} of {{ recs.plan.size }} done, {{ recs.plan.solved }} solved
+          &middot; plan started <time datetime="{{ recs.plan.started_at }}" title="{{ recs.plan.started_at }}">{{ recs.plan.started_ago }}</time>
         </p>
 
         <table class="rec-table">
@@ -267,7 +128,14 @@
                      wins over a press -- somebody who called it too hard and
                      solved it anyway solved it. A pressed row keeps one
                      button, "undo", which takes back that answer alone (ADR
-                     0028); "put back" below still takes back all of them. #}
+                     0028). #}
+                  {# Every button here names its problem to a screen reader
+                     (aria-label: the name read out instead of the words
+                     shown). Otherwise a list of the page's buttons is "too
+                     hard, too easy, skip" five times over, with nothing to
+                     say which problem each belongs to. The words shown come
+                     first in it, so somebody who speaks to their computer can
+                     still say what they see. #}
                   {% if problem.solved %}
                     <span class="plan-mark solved">&#10003; solved</span>
                   {% elif problem.outcome %}
@@ -275,7 +143,7 @@
                       {{ {"too_hard": "marked too hard", "too_easy": "marked too easy", "skip": "skipped"}[problem.outcome] }}
                       <input type="hidden" name="problem" value="{{ problem.id }}">
                       {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
-                      <button type="submit">undo</button>
+                      <button type="submit" aria-label="undo: {{ problem.name }}">undo</button>
                     </form>
                   {% else %}
                   {# ADR 0021. Words under the name rather than a fourth
@@ -293,9 +161,9 @@
                     {# The list the press was made on: its topic's target
                        moves, and the page comes back to it (ADR 0025). #}
                     {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
-                    <button type="submit" name="verdict" value="too_hard">too hard</button>
-                    <button type="submit" name="verdict" value="too_easy">too easy</button>
-                    <button type="submit" name="verdict" value="skip">skip</button>
+                    <button type="submit" name="verdict" value="too_hard" aria-label="too hard: {{ problem.name }}">too hard</button>
+                    <button type="submit" name="verdict" value="too_easy" aria-label="too easy: {{ problem.name }}">too easy</button>
+                    <button type="submit" name="verdict" value="skip" aria-label="skip: {{ problem.name }}">skip</button>
                   </form>
                   {% endif %}
                 </td>
@@ -309,23 +177,188 @@
           </tbody>
         </table>
 
+        {# UNDER THE TABLE: what the numbers are, then whatever bends them.
+           One group, one measure and one spacing, so a page with four of
+           these notes reads as one explanation rather than four paragraphs
+           of different widths (review of 2026-09-28). #}
+        <div class="notes">
+          {# The sentence that says exactly what the number is. A bare "71%"
+             invites the reader to supply their own meaning, and the two
+             meanings on offer differ by a thousand rating points -- see the ADR
+             on the baseline. #}
+          {# "around 2800" is the PROBLEM rating. The first version said "at your
+             rating -- around 2800", which reads as if 2800 were the visitor's
+             own rating, so the problem rating now comes first and "your rating"
+             only ever means theirs. #}
+          {% if recs.source == "topic" %}
+            {# The topic model's claim is about THIS person, and the sentence
+               says what it was worked out from -- the three things the
+               evaluation found carry the information (ADR 0014). It opens
+               with the two column names, so a 1500 and an 800 both at 54% is
+               explained where the eye goes after the table: the rating is
+               the problem's, the chance is the visitor's. #}
+            <p class="meta">
+              Rating is Codeforces&rsquo; own, the same for everybody. Chance is
+              yours: how likely your first submission is to be accepted, worked
+              out from your own history, how 4,000 other users actually did on
+              each problem, and how hard its topics are.
+              <a href="{{ url_for('how') }}">How this works</a>
+            </p>
+            {# ADR 0025: each topic keeps its own target once its buttons have
+               been pressed. Until then it follows the overall one, and the
+               page says which, because "too hard" here moves only this.
+               "Follows", not "the same as": the plan keeps the target it was
+               made at, so after the overall target moves the two differ
+               until this list's next plan -- found on review, a page saying
+               "the same as your overall target" beside 55% when the overall
+               target was 52%. #}
+            {% if recs.topic %}
+              <p class="footnote">
+                {% if recs.own_target %}
+                  This is {{ recs.topic }}&rsquo;s own target: &ldquo;too hard&rdquo;
+                  and &ldquo;too easy&rdquo; here move it, and nothing else.
+                {% else %}
+                  {{ recs.topic }} follows your overall target until a plan here
+                  ends with &ldquo;too hard&rdquo; or &ldquo;too easy&rdquo;
+                  pressed; then it keeps a target of its own.
+                {% endif %}
+              </p>
+            {% endif %}
+            {# Said plainly rather than hidden: the model learned from users
+               rated roughly 350 to 2,370 at the time of their attempts, and
+               beyond that its numbers are a guess with the same confidence
+               as its measurements -- unless the page says otherwise. #}
+            {# Not when the guard rail's note below is shown too: both began
+               "Your rating is outside...", and two sentences saying nearly the
+               same thing read as a page that does not know what it means.
+               That note carries this one's point instead. #}
+            {% if recs.extrapolated and not recs.looked_up_at %}
+              <p class="footnote">
+                Your rating is outside the range the model learned from, so these
+                chances are an extrapolation and less reliable than they look.
+              </p>
+            {% endif %}
+            {# Codeforces shows a new account less than it computes with, for
+               six rated contests. The chances use the computed number, and
+               without this line a visitor who sees 700 on their profile gets
+               problems picked for 1250 and no reason why. #}
+            {# Nobody has a rating before their first rated contest. The model
+               still needs one, so it starts them at the value that predicted
+               such attempts best, and their own practice moves them -- ADR
+               0016. Said, because the number is a choice and not theirs. #}
+            {% if recs.unrated %}
+              <p class="footnote">
+                You have no rating yet, so these chances start from
+                {{ recs.computed }} &mdash; the starting point that predicted best
+                for people who had not yet entered a rated contest &mdash; and
+                move with how your own practice has gone. They are less certain
+                than a rated account's.
+              </p>
+            {% endif %}
+            {% if recs.hidden %}
+              <p class="footnote">
+                Codeforces shows you {{ recs.shown }} but computes with
+                {{ recs.computed }}: for a new account's first six rated contests
+                it holds part of the rating back and returns it contest by
+                contest. These chances use {{ recs.computed }}.
+              </p>
+            {% endif %}
+          {% else %}
+            <p class="meta">
+              Problems rated around {{ recs.centre }}, where
+              {% if recs.event == "first_try" %}
+                a first submission from somebody at your rating is accepted about
+                {{ recs.target }}% of the time.
+              {%- else %}
+                somebody at your rating solves them in the end about
+                {{ recs.target }}% of the time.
+              {%- endif %}
+              Rating only, so everybody at your rating is shown these five.
+            </p>
+          {% endif %}
+
+          {# ADR 0023's guard rail, said when it bends. Problems are offered only
+             if people near the visitor's rating have tried them; a visitor
+             outside the ratings the data covers is looked up at its edge, and
+             a visitor who has solved nearly everything people near them tried
+             gets the rule lifted rather than an empty list. Either way the
+             page says which, because both change what the five mean. #}
+          {% if recs.looked_up_at %}
+            <p class="footnote">
+              Your rating is outside what the 4,000 users behind these numbers
+              were rated, so problems are chosen from ones people rated around
+              {{ recs.looked_up_at }} have actually tried
+              {%- if recs.extrapolated %}, and the chances are an extrapolation,
+              less reliable than they look{% endif %}.
+            </p>
+          {% endif %}
+          {% if recs.unguarded %}
+            <p class="footnote">
+              You have solved most of what people near your rating have tried,
+              so these include problems few of them attempted. The chances on
+              those rest on less evidence.
+            </p>
+          {% endif %}
+
+          {# When the buttons can no longer change the list, say so before the
+             visitor finds out by pressing. Found on review: an 800-rated
+             visitor's third "too hard" gave back the same five with no word
+             why, because nothing on Codeforces is rated below 800. The wall
+             that explains the list comes first; the end of the ladder is
+             mentioned only when the list itself is fine -- see
+             web.target_limits. #}
+          {% if recs.reach == "easiest" %}
+            <p class="footnote">
+              Nothing left {% if recs.topic %}in {{ recs.topic }}{% else %}on Codeforces{% endif %} is as easy as {{ recs.target }}% for you:
+              these are the easiest problems there are, so &ldquo;too hard&rdquo;
+              can hide one but cannot find anything easier.
+            </p>
+          {% elif recs.reach == "hardest" %}
+            <p class="footnote">
+              Nothing left {% if recs.topic %}in {{ recs.topic }}{% else %}on Codeforces{% endif %} is as hard as {{ recs.target }}% for you:
+              these are the hardest problems there are, so &ldquo;too easy&rdquo;
+              can hide one but cannot find anything harder.
+            </p>
+          {% elif recs.at_end == "easiest" %}
+            <p class="footnote">
+              {{ recs.target }}% is as easy as the target goes. &ldquo;Too
+              hard&rdquo; still hides a problem, and no longer moves the target.
+            </p>
+          {% elif recs.at_end == "hardest" %}
+            <p class="footnote">
+              {{ recs.target }}% is as hard as the target goes. &ldquo;Too
+              easy&rdquo; still hides a problem, and no longer moves the target.
+            </p>
+          {% endif %}
+          {# Five that straddle the target but reach far from it: a topic with
+             few problems near it (web.target_limits). #}
+          {% if recs.scattered %}
+            <p class="footnote">
+              Few problems {% if recs.topic %}in {{ recs.topic }}{% else %}left{% endif %}
+              come near {{ recs.target }}% for you, so some of these are well off
+              it: the chance on each says how far.
+            </p>
+          {% endif %}
+
+          {# ADR 0027: the presses in a plan move the target together, once,
+             when it ends -- and they move the aim, not the chances. Said,
+             because a visitor who calls a 50% problem too easy expects the
+             number to change, and it does not: the chances come from their
+             history, which a press does not add to and a solve does. #}
+          {% if recs.next_target != recs.target %}
+            <p class="footnote">
+              Your next five will aim at {{ recs.next_target }}%. The buttons move
+              where the next five aim, not the chances: those come from your own
+              history, and change as your solves arrive.
+            </p>
+          {% endif %}
+        </div>
+
         {# The end of a plan (ADR 0026), and only by asking: "next five" once
            every problem is done, "swap the five" before that. The form names
            the plan it ends, so a double-click cannot end the next one too
            (web.new_plan). A press moves the target for the NEXT plan, and
-           the page says where that will be before the visitor asks for it. #}
-        {# ADR 0027: the presses in a plan move the target together, once,
-           when it ends -- and they move the aim, not the chances. Said,
-           because a visitor who calls a 50% problem too easy expects the
-           number to change, and it does not: the chances come from their
-           history, which a press does not add to and a solve does. #}
-        {% if recs.next_target != recs.target %}
-          <p class="footnote">
-            Your next five will aim at {{ recs.next_target }}%. The buttons move
-            where the next five aim, not the chances: those come from your own
-            history, and change as your solves arrive.
-          </p>
-        {% endif %}
+           the note above says where that will be before the visitor asks. #}
         <form class="plan-next" method="post" action="{{ url_for('new_plan', handle=handle) }}">
           <input type="hidden" name="plan" value="{{ recs.plan.id }}">
           {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
@@ -386,11 +419,19 @@
          in -- loading, or emptied by the hiding itself -- so the way back has
          to be there in every state too. Inside the "ok" branch it vanished at
          exactly the moment a visitor had hidden too much. #}
-      {% if dismissed %}
+      {# Not when every hidden problem is a row on screen (ADR 0028): found
+         on review, one skip offered both "undo" on its row and "put back the
+         1 problem" under the list, two ways back from one press. `answered`
+         counts the rows pressed in this list. A pressed row that was then
+         solved has no undo, and needs none: a solved problem is never
+         offered again, hidden or not. Said as "you", like the rest of the
+         page; it was the one "I" on it. #}
+      {% set answered = (recs.problems | selectattr("outcome") | list | length) if recs.state == "ok" else 0 %}
+      {% if dismissed > answered %}
         <form class="restore" method="post" action="{{ url_for('restore', handle=handle) }}">
           {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
           <button type="submit">
-            Put back the {{ dismissed }} problem{{ 's' if dismissed > 1 }} I hid
+            {% if dismissed == 1 %}Put back the problem you hid{% else %}Put back all {{ dismissed }} problems you hid{% endif %}
           </button>
         </form>
         {# At the cap each new press pushes the oldest hidden problem back
@@ -489,33 +530,47 @@
 
         {# The two things about these numbers that look like mistakes and are
            not. Somebody will add the column up; it should agree with them
-           before they have to ask. #}
-        <p class="footnote">
-          A problem carries about three tags and counts under each, so the
-          Solved column adds to more than the {{ totals.solved }} problems
-          solved
-          {%- if totals.solved_untagged %}, and {{ totals.solved_untagged }}
-          solved
-          {{- ' problem has' if totals.solved_untagged == 1 else ' problems have' }}
-          no tags at all and appear in no row
-          {%- endif -%}
-          . Average rating covers the rated problems solved in each topic; topics
-          differ in how hard their problems are for everybody, so the averages
-          are not yet comparable between rows.
-        </p>
+           before they have to ask.
+
+           Folded since the review of 2026-09-28: five lines of small print
+           under every chart, for a question most visitors never ask. The
+           summary asks the question, so whoever has it finds the answer in
+           one press. <details> is the browser's own fold: it needs no script,
+           and a keyboard opens it with Enter. #}
+        <details class="footnote">
+          <summary>Why Solved adds up to more than {{ totals.solved }}</summary>
+          <p>
+            A problem carries about three tags and counts under each, so the
+            Solved column adds to more than the {{ totals.solved }} problems
+            solved
+            {%- if totals.solved_untagged %}, and {{ totals.solved_untagged }}
+            solved
+            {{- ' problem has' if totals.solved_untagged == 1 else ' problems have' }}
+            no tags at all and appear in no row
+            {%- endif -%}
+            . Average rating covers the rated problems solved in each topic; topics
+            differ in how hard their problems are for everybody, so the averages
+            are not yet comparable between rows.
+          </p>
+        </details>
         {% endif %}
 
         {# The topics this visitor has never practised, as a line of links
            rather than empty rows: nothing to chart, and still worth choosing
-           (ADR 0025). #}
+           (ADR 0025). Folded too: twenty-odd links in a row read as a wall
+           (ten lines on a phone), and the summary says how many are inside.
+           Open when the topic on screen is one of them, so the link marked
+           as the current page is not hidden. #}
         {% if other_topics %}
-          <p class="meta other-topics">
-            Not practised yet:
-            {% for tag in other_topics -%}
-              <a href="{{ url_for('results', handle=handle, topic=tag) }}"
-                 {% if tag == recs.topic %}aria-current="page"{% endif %}>{{ tag }}</a>{{ ", " if not loop.last }}
-            {%- endfor %}
-          </p>
+          <details class="meta other-topics"{% if recs.topic in other_topics %} open{% endif %}>
+            <summary>Not practised yet: {{ other_topics | length }} topic{{ 's' if other_topics | length > 1 }}</summary>
+            <p>
+              {% for tag in other_topics -%}
+                <a href="{{ url_for('results', handle=handle, topic=tag) }}"
+                   {% if tag == recs.topic %}aria-current="page"{% endif %}>{{ tag }}</a>{{ ", " if not loop.last }}
+              {%- endfor %}
+            </p>
+          </details>
         {% endif %}
       </section>
     {% endif %}
@@ -528,12 +583,17 @@
        here rather than in the island: choosing a topic does not change it,
        and it is drawn once, by the server. Each list's name goes back to
        that list. #}
+    {# Folded (review of 2026-09-28): a record to look back at, not something
+       to read on every visit, and up to ten rows between the chart and the
+       submissions. The heading stays out of the fold, so the page's outline
+       -- what a screen reader lists as its headings -- still has it. The last
+       column says how a plan ended; it was headed "Ended", which reads as a
+       date. #}
     {% if plans %}
       <section class="plans">
         <h2>Past plans</h2>
-        {% if plans | length >= 10 %}
-          <p class="meta">The ten most recent.</p>
-        {% endif %}
+        <details>
+          <summary>{{ plans | length }} ended plan{{ 's' if plans | length > 1 }}{% if plans | length >= 10 %}, the ten most recent{% endif %}</summary>
         <div class="table-wrap">
           <table>
             <thead>
@@ -541,7 +601,7 @@
                 <th>Began</th>
                 <th>List</th>
                 <th class="num">Solved</th>
-                <th>Ended</th>
+                <th>Outcome</th>
               </tr>
             </thead>
             <tbody>
@@ -560,6 +620,7 @@
             </tbody>
           </table>
         </div>
+        </details>
       </section>
     {% endif %}
 
@@ -675,6 +736,21 @@
           return line.querySelector(".syncing-body");
         }
 
+        // What a screen reader hears: the new line, once, when the sync's
+        // state changes -- "fresh numbers are ready", or that it failed --
+        // and never the countdown, which changes every second (the note on
+        // #sync-announce above). The state the page arrived with is not
+        // read out: it is already on the page to be read.
+        var announce = document.getElementById("sync-announce");
+        var said = body() ? body().dataset.state : null;
+
+        function tell() {
+          var state = body() ? body().dataset.state : null;
+          if (!announce || state === said) return;
+          said = state;
+          announce.textContent = body().textContent.replace(/\s+/g, " ").trim();
+        }
+
         function countdown() {
           clearInterval(ticking);
           var seconds = line.querySelector(".syncing-seconds");
@@ -706,6 +782,7 @@
               // that are there rather than replacing them with a guess.
               if (html === null) { clearInterval(ticking); return; }
               line.innerHTML = html;
+              tell();
               countdown();
               schedule();
             })

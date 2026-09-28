@@ -6,14 +6,18 @@
 // visitor gets first, and this one, after a topic is chosen -- so this file
 // follows the template branch for branch, and the tests check the sentences
 // that carry meaning. When one changes, the other has to.
+//
+// The order since the review of 2026-09-28, as in the template: one status
+// line, the table, then everything that explains the numbers in one group
+// under it, then the plan's button.
 
-const nbsp = ' '
+const nbsp = ' '
 
 // How a pressed row says what was pressed -- the template's words.
 const MARKED = { too_hard: 'marked too hard', too_easy: 'marked too easy', skip: 'skipped' }
 
 // One problem's row: the link, the "less evidence" note on a filled row,
-// then either how it was settled in the plan (ADR 0026) or the two verdict
+// then either how it was settled in the plan (ADR 0026) or the verdict
 // buttons as a real form, the rating and the chance.
 function ProblemRow({ problem, topic, urls }) {
   const settled = problem.solved || problem.outcome
@@ -29,7 +33,9 @@ function ProblemRow({ problem, topic, urls }) {
           </span>
         )}
         {/* Solved wins over a press, as in the template; a pressed row keeps
-            one button, "undo", for that answer alone (ADR 0028). */}
+            one button, "undo", for that answer alone (ADR 0028). Every button
+            names its problem to a screen reader, words shown first, as the
+            template's do. */}
         {problem.solved ? (
           <span className="plan-mark solved">✓ solved</span>
         ) : problem.outcome ? (
@@ -37,7 +43,7 @@ function ProblemRow({ problem, topic, urls }) {
             {MARKED[problem.outcome]}{' '}
             <input type="hidden" name="problem" value={problem.id} />
             {topic && <input type="hidden" name="topic" value={topic} />}
-            <button type="submit">undo</button>
+            <button type="submit" aria-label={`undo: ${problem.name}`}>undo</button>
           </form>
         ) : (
           // A form and a POST, exactly as the template's: pressing reloads
@@ -45,9 +51,9 @@ function ProblemRow({ problem, topic, urls }) {
           <form className="verdict-form" method="post" action={urls.feedback}>
             <input type="hidden" name="problem" value={problem.id} />
             {topic && <input type="hidden" name="topic" value={topic} />}
-            <button type="submit" name="verdict" value="too_hard">too hard</button>
-            <button type="submit" name="verdict" value="too_easy">too easy</button>
-            <button type="submit" name="verdict" value="skip">skip</button>
+            <button type="submit" name="verdict" value="too_hard" aria-label={`too hard: ${problem.name}`}>too hard</button>
+            <button type="submit" name="verdict" value="too_easy" aria-label={`too easy: ${problem.name}`}>too easy</button>
+            <button type="submit" name="verdict" value="skip" aria-label={`skip: ${problem.name}`}>skip</button>
           </form>
         )}
       </td>
@@ -57,24 +63,25 @@ function ProblemRow({ problem, topic, urls }) {
   )
 }
 
-// The sentence that says what the number is, and the notes under it.
+// Under the table: what the numbers are, then whatever bends them, then
+// where the next five will aim -- one group, as in the template's div.notes.
 function Notes({ recs, urls }) {
   const where = recs.topic ? `in ${recs.topic}` : 'on Codeforces'
   return (
-    <>
+    <div className="notes">
       {recs.source === 'topic' ? (
         <>
           <p className="meta">
-            Chosen for you: the chance your first submission is accepted, worked
-            out from your own history, how 4,000 other users actually did on
-            each problem, and how hard its topics are. Aiming at {recs.target}%.{' '}
+            Rating is Codeforces’ own, the same for everybody. Chance is yours: how likely your
+            first submission is to be accepted, worked out from your own history, how 4,000
+            other users actually did on each problem, and how hard its topics are.{' '}
             <a href={urls.how}>How this works</a>
           </p>
           {recs.topic && (
             <p className="footnote">
               {recs.own_target
                 ? <>This is {recs.topic}’s own target: “too hard” and “too easy” here move it, and nothing else.</>
-                : <>The same as your overall target, until a plan here ends with “too hard” or “too easy” pressed: then {recs.topic} keeps a target of its own.</>}
+                : <>{recs.topic} follows your overall target until a plan here ends with “too hard” or “too easy” pressed; then it keeps a target of its own.</>}
             </p>
           )}
           {recs.extrapolated && !recs.looked_up_at && (
@@ -150,7 +157,15 @@ function Notes({ recs, urls }) {
           you, so some of these are well off it: the chance on each says how far.
         </p>
       )}
-    </>
+
+      {recs.next_target !== recs.target && (
+        <p className="footnote">
+          Your next five will aim at {recs.next_target}%. The buttons move where the next
+          five aim, not the chances: those come from your own history, and change as your
+          solves arrive.
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -192,11 +207,18 @@ function Empty({ recs, dismissed, urls, onChoose, handle }) {
 }
 
 export default function Recommendations({ handle, recs, dismissed, dismissalsKept, urls, busy, heading, onChoose }) {
+  // The rows pressed in this list. "Put back" is offered only for hidden
+  // problems beyond these, as in the template -- one skip used to offer
+  // both it and the row's own undo. A pressed row since solved counts too:
+  // a solved problem is never offered again, hidden or not.
+  const answered = recs.state === 'ok'
+    ? recs.problems.filter((problem) => problem.outcome).length
+    : 0
   return (
     // aria-busy tells assistive technology the section is being replaced, so
-    // it waits for the new list rather than reading a half-changed one.
-    // id="next" is where "put back" and "swap the five" come back to
-    // (web.LIST_ANCHOR), as in the template.
+    // it waits for the new list rather than reading a half-changed one; the
+    // stylesheet dims it meanwhile. id="next" is where "put back" and "swap
+    // the five" come back to (web.LIST_ANCHOR), as in the template.
     <section className="recs" id="next" aria-busy={busy}>
       <h2 ref={heading} tabIndex={-1}>Next{recs.topic ? ` in ${recs.topic}` : ''}</h2>
 
@@ -209,14 +231,10 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
 
       {recs.state === 'ok' ? (
         <>
-          <Notes recs={recs} urls={urls} />
-          <p className="meta plan-progress">
-            Your plan, started{' '}
-            <time dateTime={recs.plan.started_at} title={recs.plan.started_at}>{recs.plan.started_ago}</time>:{' '}
-            {recs.plan.settled} of {recs.plan.size} done, {recs.plan.solved} solved.
-            {!recs.plan.complete && (
-              <> A problem you solve is ticked the next time this page updates from Codeforces.</>
-            )}
+          <p className="meta recs-status">
+            Aiming at {recs.target}% · {recs.plan.settled} of {recs.plan.size} done,{' '}
+            {recs.plan.solved} solved · plan started{' '}
+            <time dateTime={recs.plan.started_at} title={recs.plan.started_at}>{recs.plan.started_ago}</time>
           </p>
           <table className="rec-table">
             <thead>
@@ -232,15 +250,9 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
               ))}
             </tbody>
           </table>
+          <Notes recs={recs} urls={urls} />
           {/* The end of a plan, by asking only (ADR 0026) -- the template's
               form, naming the plan it ends. */}
-          {recs.next_target !== recs.target && (
-            <p className="footnote">
-              Your next five will aim at {recs.next_target}%. The buttons move where the next
-              five aim, not the chances: those come from your own history, and change as your
-              solves arrive.
-            </p>
-          )}
           <form className="plan-next" method="post" action={urls.plan}>
             <input type="hidden" name="plan" value={recs.plan.id} />
             {recs.topic && <input type="hidden" name="topic" value={recs.topic} />}
@@ -261,12 +273,12 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
         <Empty recs={recs} dismissed={dismissed} urls={urls} onChoose={onChoose} handle={handle} />
       )}
 
-      {dismissed > 0 && (
+      {dismissed > answered && (
         <>
           <form className="restore" method="post" action={urls.restore}>
             {recs.topic && <input type="hidden" name="topic" value={recs.topic} />}
             <button type="submit">
-              Put back the {dismissed} problem{dismissed > 1 ? 's' : ''} I hid
+              {dismissed === 1 ? 'Put back the problem you hid' : `Put back all ${dismissed} problems you hid`}
             </button>
           </form>
           {dismissed >= dismissalsKept && (

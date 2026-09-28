@@ -61,10 +61,31 @@
 
     <h1>Which Codeforces problem should you solve <span class="accent">next?</span></h1>
 
+    {# THE FIELD RIGHT UNDER THE HEADLINE (review of 2026-09-28). Below the
+       two paragraphs it sat 830 pixels down a phone's 812-pixel screen on a
+       first visit, and at the bottom edge of a 1280 x 800 laptop -- when
+       spec section 4.1 puts it in the hero so that a returning visitor
+       types at once and never scrolls. The paragraphs are the argument for
+       whoever wants one, and follow it.
+
+       `error` is only passed in when the POST was rejected, and an undefined
+       name is falsy in Jinja rather than an error -- so this block is simply
+       skipped on a normal page load. role="alert" makes a screen reader
+       announce it instead of leaving it to be found by chance. #}
+    {% if error %}
+      <p class="form-error" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <div class="hero-form">
+      {% include "_handle_form.html" %}
+    </div>
+
+    {# "Enter your handle." used to open this: it was the instruction for a
+       field below it, and the field is now above. #}
     <p class="lede">
-      Enter your handle. It reads your submission history and picks five
-      problems where your first submission has about an even chance of being
-      accepted &mdash; hard enough to teach you something.
+      NextCF reads your submission history and picks five problems where your
+      first submission has about an even chance of being accepted &mdash; hard
+      enough to teach you something.
     </p>
 
     {# The claim, and where to check it. Until 2026-09-19 this paragraph said
@@ -76,15 +97,5 @@
       alone in every rating band.
       <a href="{{ url_for('how') }}">How it works, and how that was measured</a>
     </p>
-
-    {# `error` is only passed in when the POST was rejected, and an undefined
-       name is falsy in Jinja rather than an error -- so this block is simply
-       skipped on a normal page load. role="alert" makes a screen reader
-       announce it instead of leaving it to be found by chance. #}
-    {% if error %}
-      <p class="form-error" role="alert">{{ error }}</p>
-    {% endif %}
-
-    {% include "_handle_form.html" %}
   </div>
 {% endblock %}

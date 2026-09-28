@@ -276,6 +276,14 @@ def stale_data_is_shown_and_resynced_behind_a_live_line():
     assert response.status_code == 200, f"a returning visitor was sent to a queue ({response.status_code})"
     assert "Re-syncing" in html, "the page did not say a sync was running"
     assert "The numbers below are from the sync above" in html, "old numbers shown as if current"
+    # A screen reader is told when the sync's state changes, and only then:
+    # a live region round the line itself would read the countdown out
+    # every second (review of 2026-09-28).
+    assert '<p class="sr-only" id="sync-announce" role="status"></p>' in html, "nothing announces the sync"
+    assert "line.innerHTML = html;\n              tell();" in html, "the new line is never announced"
+    assert "if (!announce || state === said) return;" in html, "the line is announced on every poll"
+    assert 'role="status"' not in html.split('id="sync-status"', 1)[1].split("</p>", 1)[0], \
+        "the counting line itself is a live region"
 
     conn = db.connect()
     try:
