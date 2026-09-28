@@ -530,7 +530,7 @@ def a_topic_plan_is_ended_on_its_own_list():
     a_visitor()
     ids()
     response = end("dp")
-    assert response.headers["Location"].endswith("?topic=dp"), response.headers["Location"]
+    assert response.headers["Location"].endswith("?topic=dp#next"), response.headers["Location"]
     assert history()[0]["list"] == "dp", history()
 
 
@@ -728,7 +728,7 @@ def undo_on_a_topic_list_comes_back_to_it():
     dp = ids("dp")
     press(dp[0], "skip", topic="dp")
     response = undo(dp[0], topic="dp")
-    assert response.headers["Location"].endswith("?topic=dp"), response.headers["Location"]
+    assert response.headers["Location"].endswith(f"?topic=dp#p-{dp[0]}"), response.headers["Location"]
 
 
 def undo_refuses_junk():
@@ -816,6 +816,49 @@ def the_buttons_are_targets_a_finger_can_hit():
     fine = re.search(r"\.verdict-form button,\s*\.restore button,\s*\.plan-mark button \{(.*?)\}", css, re.S)
     assert fine and "padding-top: 4px" in fine.group(1) and "margin-top: -4px" in fine.group(1), \
         "the 24-pixel target for a mouse is gone"
+
+
+def a_press_comes_back_to_where_it_was_made():
+    """Found 2026-09-28 at phone width: every button reloaded the page at its
+    top, 700 to 1,200 pixels from the row pressed. A press on a row comes
+    back to that row, and a press on the whole list to the list -- and the
+    ids the addresses name are on the page to be found."""
+    a_visitor()
+    first = ids()
+    response = press(first[0], "too_hard")
+    assert response.headers["Location"].endswith(f"/results/{HANDLE}#p-{first[0]}"), \
+        response.headers["Location"]
+    html = page()
+    # Every row, not only the pressed one, and on the <tr> itself.
+    for problem_id in first:
+        assert f'<tr id="p-{problem_id}"' in html, f"no row carries the id p-{problem_id}"
+    response = undo(first[0])
+    assert response.headers["Location"].endswith(f"#p-{first[0]}"), response.headers["Location"]
+
+    press(first[1], "skip")
+    response = client.post(f"/results/{HANDLE}/restore", data={})
+    assert response.headers["Location"].endswith(f"/results/{HANDLE}#next"), response.headers["Location"]
+    response = end()
+    assert response.headers["Location"].endswith(f"/results/{HANDLE}#next"), response.headers["Location"]
+    assert '<section class="recs" id="next"' in page(), "the list does not carry the id the address names"
+    # And it lands a step below the top edge, not against it.
+    import re
+    css = Path("static/style.css").read_text(encoding="utf-8")
+    landing = re.search(r"\.recs,\s*\.rec-table tr \{([^}]*)\}", css)
+    assert landing and "scroll-margin-top: var(--s3)" in landing.group(1), "a press lands against the top edge"
+
+
+def the_hidden_attribute_beats_every_class():
+    """Found 2026-09-28 on the live site: `.continue { display: flex }`
+    outranked the browser's own `[hidden] { display: none }`, so every first
+    visit was shown an empty "Continue as" box pointing at /results/__HANDLE__.
+    The rule that puts hidden back on top is what every hidden box on the
+    site now rests on."""
+    import re
+    css = Path("static/style.css").read_text(encoding="utf-8")
+    rule = re.search(r"(?m)^\[hidden\] \{([^}]*)\}", css)
+    assert rule, "no [hidden] rule: any class that sets display shows a hidden element"
+    assert "display: none !important" in rule.group(1), rule.group(1)
 
 
 def the_landing_page_does_not_scroll_past_the_continue_box():
@@ -960,6 +1003,8 @@ check("the icon is served, and its old address redirects", the_icon_is_served_an
 check("the buttons are targets a finger can hit", the_buttons_are_targets_a_finger_can_hit)
 check("the landing page does not scroll past the continue box",
       the_landing_page_does_not_scroll_past_the_continue_box)
+check("a press comes back to where it was made", a_press_comes_back_to_where_it_was_made)
+check("the hidden attribute beats every class", the_hidden_attribute_beats_every_class)
 
 print("\nhistory")
 check("no history until a plan ends", no_history_until_a_plan_ends)

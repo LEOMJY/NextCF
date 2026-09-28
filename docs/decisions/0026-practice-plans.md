@@ -141,3 +141,33 @@ counted when the plan ends. A marked row has one button, "undo", which
 returns it to "to do" in the plans still running; ended plans keep what was
 said, as with "put back". "Skip, and save for later" was among the
 alternatives above; skip is now built, and "save for later" still is not.
+
+## Amendment — 2026-09-28, night: only a typed handle is remembered
+
+The landing page's "Continue as" named the last handle this browser had
+looked up, and that is often not the visitor: a friend's page, a link from a
+chat, an old plan's list. The author chose, from three ways to fix it, to
+remember only a handle typed into the box.
+
+The form leaves what was typed in `sessionStorage` (kept by the browser for
+this tab only, gone when it closes) and the results page saves its handle
+only if the handle is inside that note, then takes the note away. "Inside",
+not "equal", because the server reads `@tourist` and a pasted profile
+address as the handle, and the handle is inside both, so the rule
+`web.handle_from_input` applies is not written a second time in JavaScript.
+
+The alternatives:
+
+- **"This is me"**, a button on the results page, and "Continue as" only for
+  a handle so marked. The only one that is never wrong, at the cost of one
+  press, once. Not chosen.
+- **Honest wording without a change of behaviour** ("Back to …"). Cheapest,
+  and it stops claiming to know who the visitor is. Not chosen.
+
+Accepted: somebody who types a friend's handle into the box still replaces
+their own. Signing in (spec §11) is what makes this exact.
+
+Tried first and dropped: a mark in the address (`#typed` on the redirect
+from the form). A handle with no data goes through `/progress`, and
+Chromium's meta refresh on an address with a fragment never reloads the
+page, so the visitor would have waited there for ever (devlog, 2026-09-28).

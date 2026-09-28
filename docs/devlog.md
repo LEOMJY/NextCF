@@ -5402,3 +5402,106 @@ untouched. Twenty-three mutations, each in a fresh copy: twenty-two caught
 at first. The survivor removed the undo button but left its form, and the
 check looked only for the form. The check now looks for the button, and
 catches it.
+
+---
+
+## 2026-09-28, night — A design review, and what could not wait for it
+
+v0.8 is design polish and unhandled states. Before changing anything the
+author asked for a review of the two surfaces spec §7.1 judges differently,
+the landing page and the results page, at desktop width (1280 × 800) and at
+375px, with every problem ranked by severity for the author to choose from.
+Each page was scored against the ten usual usability heuristics; two of
+them do not apply to a landing page. Results page 25 of 40, landing page 19
+of 32.
+
+### What the review found
+
+- **On the live site, every first visit saw an empty "Continue as" button**
+  at the top of the landing page, the brightest thing on it. It pointed at
+  `/results/__HANDLE__`. Pressing it queued a sync for a user called
+  `__HANDLE__` and ended on "Codeforces has no user called __HANDLE__".
+  The box has the `hidden` attribute, but `hidden` works only through the
+  browser's own stylesheet (`display: none`), and `.continue { display:
+  flex }` in ours outranked it. It had been live since 09-27. The browser
+  checks that day and the review before this one both missed it, because
+  every browser they used already remembered a handle; the check read the
+  HTML, which does say `hidden`.
+- **The results page is too full, as the author suspected.** The first of
+  the five sat 570 pixels down on a 800-pixel desktop screen, 700 on a
+  topic's page, and 701 of 812 on a phone, where only the first problem's
+  name showed. Above the table: four to six paragraphs, all in the same
+  small grey type, running at two different widths.
+- **Every button came back to the top of the page**, 700 to 1,200 pixels
+  from the row pressed on a phone. The 09-26 audit had listed this and it
+  was still true.
+- **The landing page's handle field is below the first screen** at both
+  widths, and focusing it scrolls the page down on load.
+- Smaller: a topic page saying "Aiming at 55%" and "the same as your
+  overall target" when that target is 52% (the plan was made when it was
+  55); "undo" and "put back" both offered for one skipped problem; buttons
+  whose spoken names do not say which problem; an input box whose edge has
+  a contrast of about 1.3 to 1 against the page, where 3 to 1 is the
+  accessibility minimum; no sign that a topic's five are loading; the Past
+  plans column headed "Ended" holding outcomes.
+- **On the landing page's look:** clean, but it is the most common look
+  for a developer tool's landing page, dark with one neon colour and a mono
+  face, and nothing on it belongs to Codeforces. That is what spec §12's
+  open question is for.
+
+### What the author chose now
+
+The hidden box, landing where the press was made, which handle is
+remembered, and no reset for the target (ADR 0027, amended). The rest of the
+list waits for the author.
+
+### How each was done, and what broke on the way
+
+- **`[hidden] { display: none !important; }`**, at the top of the
+  stylesheet. The one use of `!important` in the file: the rule exists to
+  outrank any class that sets a display, so every hidden box now rests on
+  it, not only this one.
+- **A press comes back to its row.** Every button's redirect names a
+  fragment (the part of an address after `#`, which the browser keeps to
+  itself and scrolls to): `#p-<problem>` after a press on a row, `#next`
+  after "put back" or "swap the five". The rows and the section carry those
+  ids, in the template and in the component. Two things broke:
+  - *The component undid it.* The browser scrolled to the row as the page
+    arrived; then the React component replaced the rows it had scrolled to,
+    and the place was lost. Measured: the row landed 32 pixels from the top,
+    then the page stood 970 pixels away from it. The component now scrolls
+    back to the row the address names, once, before its first paint.
+    Without JavaScript nothing is replaced and the browser's own scroll
+    stands.
+  - *A fragment stops the progress page.* Found while trying one to mark a
+    typed handle: Chromium treats a meta refresh to an address with a
+    fragment as a jump within the page, and never reloads. A visitor would
+    wait on "Reading …'s submissions" for ever. The same can happen to
+    `#next`: a results page whose data was wiped by a restart sends the
+    visitor to `/progress`, and the fragment goes with them. The progress
+    page's refresh now names its own address, without one.
+- **Only a typed handle is remembered** (ADR 0026, amended). The fragment
+  was the first way tried, and the paragraph above is why it went. What
+  shipped is a note in `sessionStorage`, this tab only, left by the form and
+  taken by the next results page.
+
+### How it was checked
+
+Two new plan checks and three new component tests; older checks in four
+files changed where a redirect now carries a fragment, the progress page's
+refresh names its address, and the results page saves only a typed handle.
+439 pass, and the dataset tier 443, with dataset.db untouched.
+
+Twenty mutations, each in a fresh copy of the repository, all caught in
+the end. Four looked like survivors at first and were not: the component
+tests had caught them, but `check_components` crashed printing Vitest's
+report, because on Windows a pipe defaults to an old code page that cannot
+write one of its characters, and the runner said BROKEN instead of naming
+the test. `tests/run.py` now runs every check in UTF-8. Three copies at
+once also made `check_visits` fail against itself, since it starts a real
+server on a fixed port; run alone, the copy passes.
+
+Clicked through at 375px and 1280px: a first visit; a handle typed, and one
+pasted as a profile address, through the progress page; a link that must
+not be remembered; a note that does not match; `#next` into the progress
+page; and skip, undo and put back, each landing where it should.

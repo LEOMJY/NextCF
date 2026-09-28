@@ -233,4 +233,42 @@ describe('a practice plan', () => {
     drawn(recs(null, [problem('1A', 'One')]))
     expect(document.body.textContent).not.toContain('Your next five')
   })
+
+  // A press reloads the page at an address naming the row, or the list
+  // (web.row_anchor, web.LIST_ANCHOR). After a topic has been chosen the
+  // component draws the list, so it carries the same ids as the template.
+  it('carries the ids a press comes back to', () => {
+    const { container } = drawn(recs('dp', [problem('9A', 'Open One'), problem('8B', 'Pressed One', { outcome: 'skip' })]))
+    expect(container.querySelector('section.recs').id).toBe('next')
+    expect(screen.getByText('Open One').closest('tr').id).toBe('p-9A')
+    expect(screen.getByText('Pressed One').closest('tr').id).toBe('p-8B')
+  })
+
+  // The component replaces the rows the browser scrolled to on arrival, so
+  // it scrolls back to the one the address names, once, when it first draws.
+  it('goes back to the row the address names after replacing it', () => {
+    const scrolled = []
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function () { scrolled.push(this.id) }
+    window.history.replaceState(null, '', '/results/somebody#p-8B')
+    try {
+      drawn(recs(null, [problem('9A', 'Open One'), problem('8B', 'Pressed One', { outcome: 'skip' })]))
+      expect(scrolled).toEqual(['p-8B'])
+    } finally {
+      Element.prototype.scrollIntoView = original
+      window.history.replaceState(null, '', '/')
+    }
+  })
+
+  it('scrolls nowhere when the address names nothing', () => {
+    const scrolled = []
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function () { scrolled.push(this.id) }
+    try {
+      drawn(recs(null, [problem('9A', 'Open One')]))
+      expect(scrolled).toEqual([])
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
 })

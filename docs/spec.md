@@ -253,7 +253,9 @@ not slipped in while coding.
   Remembering who you are needs no account: the browser keeps the last
   handle, and the landing page offers to continue as it. Proving that a
   handle is yours does need one, and that is v1.5 (§11), where the pet
-  system needs it too.
+  system needs it too. *Narrowed 2026-09-28:* the handle kept is the last
+  one typed into the box, not the last one looked up, which could be
+  anybody's (ADR 0026, amended).
 - No mobile app.
 - No running, judging, or sandboxing of code.
 - No social features — no friends, leaderboards, or comparison to others.
@@ -1139,6 +1141,21 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   read as stiff when used as large fields. They are the original saturated
   handle colours, with very uneven lightness. Retuning them is part of the
   decision.
+  *Reviewed 2026-09-28, before choosing.* Two findings constrain both
+  preferred directions. First, their second screens were written before
+  §11's rule and the 50% target: each says which topics a history is weak
+  in, which is the claim §11 refuses, and each aims at 70%. The visual ideas
+  can carry over; those two sections cannot. Second, rank colours make
+  colour mean a rating band everywhere, including the Rating column on the
+  results page. That conflicts with the current rule in ADR 0006 that the one
+  accent means "act here", and the current green is pupil's green, so
+  choosing them retires the accent and gives acting a neutral colour.
+  Retuning keeps each band's hue, evens out the lightness, and uses
+  saturated colour only at small sizes, with pale tints for large fields. A
+  third option came out of the review: the balloons, each in its problem's
+  rank colour, so that both ideas carry information. Whichever is chosen
+  redraws the landing page, so its layout fixed before the choice is fixed
+  twice; the results page's layout does not depend on it.
 - **3D balloons as the landing page's visual idea?** Proposed 2026-09-13: one 3D
   balloon per topic in the centre; clicking one makes it rise with the camera
   following, into that topic's recommendations. Material quality (light,

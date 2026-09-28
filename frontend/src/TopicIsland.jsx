@@ -13,7 +13,7 @@
 // would have done without it: goes to that address. A visitor never ends up
 // on a page that silently did nothing.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Recommendations from './Recommendations.jsx'
 import TopicChart from './TopicChart.jsx'
 import { dataUrl, pageUrl } from './urls.js'
@@ -55,6 +55,21 @@ export default function TopicIsland({
       setBusy(false)
     }
   }, [fetchImpl, navigate, initial.urls])
+
+  // A press reloads the page at an address naming its row or the list
+  // (web.row_anchor, web.LIST_ANCHOR), and the browser scrolls there as the
+  // page arrives. Then this component replaces the rows the browser scrolled
+  // to with its own, and the place is lost: measured 2026-09-28 at phone
+  // width, a row landed at the top and then jumped 970 pixels away. So on
+  // the first draw -- a layout effect, before anything is painted -- go back
+  // to it. Without JavaScript nothing is replaced and the browser's own
+  // scroll stands.
+  useLayoutEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1))
+    const target = id ? document.getElementById(id) : null
+    // scrollIntoView honours the rows' scroll-margin-top in style.css.
+    if (target && target.scrollIntoView) target.scrollIntoView()
+  }, [])
 
   // The back and forward buttons: the address changed, so draw its list.
   useEffect(() => {

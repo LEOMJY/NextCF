@@ -18,7 +18,9 @@ const MARKED = { too_hard: 'marked too hard', too_easy: 'marked too easy', skip:
 function ProblemRow({ problem, topic, urls }) {
   const settled = problem.solved || problem.outcome
   return (
-    <tr className={settled ? 'settled' : undefined}>
+    // The id is where a press on this row comes back to (web.row_anchor),
+    // the same as the template's.
+    <tr id={`p-${problem.id}`} className={settled ? 'settled' : undefined}>
       <td>
         <a href={problem.url}>{problem.name}</a>
         {problem.thin && (
@@ -193,7 +195,9 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
   return (
     // aria-busy tells assistive technology the section is being replaced, so
     // it waits for the new list rather than reading a half-changed one.
-    <section className="recs" aria-busy={busy}>
+    // id="next" is where "put back" and "swap the five" come back to
+    // (web.LIST_ANCHOR), as in the template.
+    <section className="recs" id="next" aria-busy={busy}>
       <h2 ref={heading} tabIndex={-1}>Next{recs.topic ? ` in ${recs.topic}` : ''}</h2>
 
       {recs.topic && (

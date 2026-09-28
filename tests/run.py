@@ -93,6 +93,15 @@ def main():
     scratch = Path(tempfile.mkdtemp(prefix="nextcf-tests-"))
     environment["NEXTCF_DB"] = str(scratch / "run.db")
 
+    # UTF-8 both ways. A check's output is a pipe here, and on Windows a pipe
+    # defaults to the old code page, which cannot write "❯" -- found
+    # 2026-09-28, when a failing component test made check_components crash
+    # printing Vitest's report, and the runner said BROKEN instead of which
+    # test failed. The runner's own print of that report replaces what its
+    # console cannot show rather than crashing on it.
+    environment["PYTHONIOENCODING"] = "utf-8"
+    sys.stdout.reconfigure(errors="replace")
+
     started = time.monotonic()
     passed = failed = skipped = 0
     went_wrong = []
@@ -104,6 +113,8 @@ def main():
             env=environment,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         output = (result.stdout or "") + (result.stderr or "")
         matches = SUMMARY.findall(output)

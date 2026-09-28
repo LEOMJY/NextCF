@@ -107,3 +107,19 @@ and they are.
   spread when people had 20 attempts each. The method was changed, and the
   number re-measured: 4.2. The conclusion did not change, but it was not
   safe to assume it would not.
+
+## Amendment — 2026-09-28, night: no reset
+
+Asked once the staircase existed: should a visitor be able to put a list's
+target back to where it started? The author decided not, for now.
+
+- A slip is taken back before it counts: a plan's presses move nothing
+  until the plan ends, and "undo" takes back one answer (ADR 0028).
+- After that, pressing the other way moves the target back, and turning
+  round halves the step, so the staircase returns on its own.
+- A reset throws away what the presses taught it, and adds a button to a
+  page the same day's review found too full.
+
+What a reset would really answer is somebody else pressing the buttons on
+your handle, which ADR 0021 accepts while there are no accounts. Signing in
+(spec §11) is the fix for that, not a reset.

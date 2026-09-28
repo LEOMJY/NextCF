@@ -198,6 +198,16 @@
   box-sizing: border-box;
 }
 
+/* THE hidden ATTRIBUTE MUST WIN. It hides an element only through the
+   browser's own stylesheet -- `display: none` -- and any rule here that sets
+   `display` beats that. Found 2026-09-28: `.continue { display: flex }` below
+   drew the landing page's "Continue as" box for every first visit, empty,
+   pointing at /results/__HANDLE__. !important is the one honest use of it:
+   this rule's whole job is to outrank every class that sets a display. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -645,6 +655,16 @@ tbody tr:hover td {
   color: var(--accent);
   font-size: var(--text-lead);
   font-weight: 600;
+}
+
+/* Where a press comes back to. Every button on the five reloads the page,
+   and the address it returns to names the row pressed, or the list (web.py,
+   feedback and the rest) -- so the visitor lands where they were instead of
+   at the top, 700 pixels away on a phone. One spacing step of room above,
+   so the row does not sit against the edge of the screen. */
+.recs,
+.rec-table tr {
+  scroll-margin-top: var(--s3);
 }
 
 /* ------------------------------------------- the tool: the topic breakdown

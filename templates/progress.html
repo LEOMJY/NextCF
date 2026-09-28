@@ -14,8 +14,16 @@
      the redirect to the results page, so leaving needs no code at all.
 
      The script at the bottom only smooths the number between reloads.
-     Everything it says, the page already says without it. #}
-  <meta http-equiv="refresh" content="{{ refresh }}">
+     Everything it says, the page already says without it.
+
+     The address is written out, and without a fragment (the part after
+     "#"). With none named, the refresh goes to the address in the bar, and
+     a redirect can leave a fragment there -- the results page's buttons
+     come back to "#next" or a row (web.LIST_ANCHOR). Chromium treats a
+     refresh to an address with a fragment as a jump within the page and
+     never reloads: found 2026-09-28, a visitor waiting on this page for
+     ever. #}
+  <meta http-equiv="refresh" content="{{ refresh }}; url={{ url_for('progress', job_id=job.id) }}">
 {% endblock %}
 
 {% block content %}

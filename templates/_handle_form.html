@@ -47,11 +47,13 @@
 </p>
 
 <script>
-  // Remembers the last handle that worked, so a visitor who comes back does
-  // not retype their own name. Deliberately localStorage and not the visitor
-  // cookie: that cookie is counted (ADR 0017) and /privacy says it is used
-  // for nothing else, so the handle stays on the device and never reaches
-  // the server by this route.
+  // Remembers the last handle that was typed into this box and worked (the
+  // results page saves it, told by the note this script leaves when the
+  // form is sent), so a visitor who comes back does not retype their own
+  // name. A handle reached by a link is never saved. Deliberately
+  // localStorage and not the visitor cookie: that cookie is counted (ADR
+  // 0017) and /privacy says it is used for nothing else, so the handle
+  // stays on the device and never reaches the server by this route.
   //
   // Every read and write is wrapped, because localStorage throws rather than
   // returning nothing in a private window or with site data blocked, and a
@@ -61,6 +63,19 @@
     var note = document.getElementById("remembered");
     var forget = document.getElementById("forget-handle");
     if (!input || !note || !forget) return;
+
+    // What was typed, as typed, for the results page to recognise its own
+    // handle in (results.html). sessionStorage rather than localStorage:
+    // this tab only, gone when it closes, and like the rest never sent to
+    // the server. Not a mark in the address -- tried first, and a fragment
+    // there stopped the progress page from reloading (progress.html).
+    if (input.form) {
+      input.form.addEventListener("submit", function () {
+        try {
+          sessionStorage.setItem("nextcf_typed", input.value);
+        } catch (e) {}
+      });
+    }
 
     // The field is where to start -- unless the landing page is offering to
     // continue as a remembered handle, which it draws above this form before

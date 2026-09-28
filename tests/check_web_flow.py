@@ -190,6 +190,10 @@ def progress_page_invents_no_number():
     assert response.status_code == 200, response.status_code
     assert "alpha" in html, "the page does not say whose history it is reading"
     assert 'http-equiv="refresh"' in html, "the page does not reload itself"
+    # Its own address, written out: a refresh to the address in the bar
+    # does not reload in Chromium when a redirect left a fragment there
+    # (found 2026-09-28), and the visitor waits here for ever.
+    assert f'; url=/progress/{job_id}">' in html, "the refresh relies on the address bar, fragment and all"
     assert "1234" not in html, "a submission count is on a page that cannot know one mid-sync"
     assert "%" not in html, "a percentage appeared on a page that cannot know one"
 
@@ -292,9 +296,23 @@ def the_browser_is_asked_to_remember_the_handle():
     _, results = get("/results/zeta")
     assert 'localStorage.setItem("nextcf_handle"' in results, "the page remembers nothing"
     assert '"zeta"' in results, "it remembered somebody else"
+    # Only a handle typed into the box. Until 2026-09-28 any results page
+    # saved its handle, so "Continue as" named whoever was looked up last.
+    # The form leaves what was typed in sessionStorage; the page saves only
+    # when its handle is in that note, and takes the note either way.
+    before, found, after = results.partition('var typed = sessionStorage.getItem("nextcf_typed");')
+    assert found, "the page does not look for what was typed"
+    assert 'localStorage.setItem("nextcf_handle"' not in before, "the page saves every handle it shows, typed or not"
+    assert results.count('localStorage.setItem("nextcf_handle"') == 1, "a second save, outside the test below"
+    test = 'if (typed.toLowerCase().indexOf(handle.toLowerCase()) !== -1) {\n          localStorage.setItem("nextcf_handle", handle);'
+    assert test in after, "the save does not depend on the handle being what was typed"
+    assert after.index('sessionStorage.removeItem("nextcf_typed")') < after.index(test), \
+        "the note is kept when it does not match, for the next page this tab opens"
 
     _, landing = get("/")
     assert 'localStorage.getItem("nextcf_handle")' in landing, "the form never reads it back"
+    assert 'addEventListener("submit"' in landing and 'sessionStorage.setItem("nextcf_typed", input.value)' in landing, \
+        "the form leaves no note of what was typed"
     assert "Use another handle" in landing, "no way to change what was remembered"
 
     _, privacy = get("/privacy")

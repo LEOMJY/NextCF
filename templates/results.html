@@ -64,7 +64,9 @@
        without JavaScript, or whose bundle failed, is this page, and every
        topic is still a link that works. #}
     <div id="topic-island">
-    <section class="recs">
+    {# id="next": where "put back" and "swap the five" come back to (web.py,
+       LIST_ANCHOR). #}
+    <section class="recs" id="next">
       <h2>Next{% if recs.topic %} in {{ recs.topic }}{% endif %}</h2>
 
       {% if recs.topic %}
@@ -249,8 +251,10 @@
           <tbody>
             {% for problem in recs.problems %}
               {# A settled row stays, marked (ADR 0026), and its chance goes
-                 quiet: the accent means "act here", and it no longer asks. #}
-              <tr{% if problem.solved or problem.outcome %} class="settled"{% endif %}>
+                 quiet: the accent means "act here", and it no longer asks.
+                 The id is where a press on this row comes back to
+                 (web.row_anchor). #}
+              <tr id="p-{{ problem.id }}"{% if problem.solved or problem.outcome %} class="settled"{% endif %}>
                 <td>
                   <a href="{{ problem.url }}">{{ problem.name }}</a>
                   {# ADR 0025: a small topic's list is filled to five, and a
@@ -621,9 +625,32 @@
     // instead of asking somebody to type their own name again. On the device
     // only -- see the note in _handle_form.html. tojson makes a safe string
     // literal out of it rather than pasting it into quotes and hoping.
-    try {
-      localStorage.setItem("nextcf_handle", {{ handle | tojson }});
-    } catch (e) {}
+    //
+    // Only a handle TYPED INTO THE BOX. Until 2026-09-28 every results page
+    // saved its handle, so the landing page's "Continue as" named whoever
+    // was looked up last -- a friend, a link from a chat, an old plan's list
+    // -- not the visitor. The form leaves what was typed in this tab's
+    // sessionStorage (_handle_form.html); this page takes the note, and
+    // saves its handle only if the handle is in it. "In", not "equal": the
+    // server reads "@tourist" and a pasted profile address as the handle
+    // (web.handle_from_input), and the handle is inside both, so this needs
+    // no second copy of that rule. Somebody looking up a friend by typing
+    // still overwrites it; that was the author's choice over a "this is me"
+    // button.
+    (function () {
+      var handle = {{ handle | tojson }};
+      try {
+        var typed = sessionStorage.getItem("nextcf_typed");
+        if (typed === null) return;
+        // Taken whether it matches or not. A lookup that failed leaves its
+        // note behind; once any results page has been shown the note has had
+        // its chance, and must not name a page opened later by a link.
+        sessionStorage.removeItem("nextcf_typed");
+        if (typed.toLowerCase().indexOf(handle.toLowerCase()) !== -1) {
+          localStorage.setItem("nextcf_handle", handle);
+        }
+      } catch (e) {}
+    })();
   </script>
 
   {% if syncing %}

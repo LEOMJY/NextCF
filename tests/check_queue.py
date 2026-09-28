@@ -227,8 +227,9 @@ def the_page_polls_less_often_further_back():
     front = client.get(f"/progress/{ids[0]}").get_data(as_text=True)
     back = client.get(f"/progress/{ids[11]}").get_data(as_text=True)
 
-    assert f'content="{web.MIN_REFRESH_SECONDS}"' in front, "the front of the queue is not polling quickly"
-    assert f'content="{web.MAX_REFRESH_SECONDS}"' in back, "the back of the queue is polling too often"
+    # The interval, then "; url=" and the page's own address (progress.html).
+    assert f'content="{web.MIN_REFRESH_SECONDS}; url=' in front, "the front of the queue is not polling quickly"
+    assert f'content="{web.MAX_REFRESH_SECONDS}; url=' in back, "the back of the queue is polling too often"
 
 
 def the_estimate_follows_the_rate_limit():

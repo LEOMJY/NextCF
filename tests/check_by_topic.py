@@ -218,9 +218,10 @@ def a_press_on_a_topic_list_moves_only_that_topic():
     """At the end of that topic's plan (ADR 0027), and nowhere else."""
     a_visitor()
     _, html = page("dp")
-    response = press(shown(html)[0], "too_hard", topic="dp")
+    pressed = shown(html)[0]
+    response = press(pressed, "too_hard", topic="dp")
     assert response.status_code == 302, response.status_code
-    assert response.headers["Location"].endswith("?topic=dp"), response.headers["Location"]
+    assert response.headers["Location"].endswith(f"?topic=dp#p-{pressed}"), response.headers["Location"]
     assert targets() == (model.DEFAULT_TARGET, {}), f"a press moved a target before its plan ended: {targets()}"
     end("dp")
     overall, per_topic = targets()
@@ -281,7 +282,7 @@ def putting_back_returns_to_the_topic():
     _, html = page("dp")
     press(shown(html)[0], "too_hard", topic="dp")
     response = client.post(f"/results/{HANDLE}/restore", data={"topic": "dp"})
-    assert response.headers["Location"].endswith("?topic=dp"), response.headers["Location"]
+    assert response.headers["Location"].endswith("?topic=dp#next"), response.headers["Location"]
 
 
 # ------------------------------------------------------------- small topic
@@ -293,7 +294,8 @@ def a_small_topic_is_filled_and_only_the_filled_rows_say_so():
     _, html = page("fft")
     ids = shown(html)
     assert set(ids) == {"2100A", "2101A"}, ids
-    rows = re.findall(r'<tr>\s*<td>(.*?)</td>', html, re.S)
+    # A recommendation's row carries an id since 2026-09-28 (web.row_anchor).
+    rows = re.findall(r'<tr[^>]*>\s*<td>(.*?)</td>', html, re.S)
     thin_rows = [r for r in rows if "thin-note" in r]
     assert len(thin_rows) == 1 and "F1" in thin_rows[0], thin_rows
 

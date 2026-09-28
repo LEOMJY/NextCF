@@ -546,6 +546,32 @@ def queue_view(conn, job_id):
     }
 
 
+# Where a redirect lands on the results page. The part of an address after
+# "#" is a fragment: the browser never sends it to the server, and on arrival
+# it scrolls to the element with that id.
+#
+#   LIST_ANCHOR    the five's section, <section id="next">: after a button that
+#                  changes the whole list ("put back", "swap the five")
+#   row_anchor()   one problem's row, <tr id="p-...">: after a button on it
+#
+# Found 2026-09-28 at phone width: every press came back to the top of the
+# page, 700 to 1,200 pixels from the row that was pressed.
+#
+# A redirect that names no fragment keeps the one the browser already had,
+# so one of these can reach /progress -- a results page whose data was wiped
+# by a restart sends the visitor there. Chromium's meta refresh on an address
+# with a fragment does not reload the page, and the visitor would wait there
+# for ever. progress.html names its own address, without one, for that
+# reason. Found the same day, trying a fragment to mark a typed handle.
+LIST_ANCHOR = "next"
+
+
+def row_anchor(problem_id):
+    """The id a recommendation's row carries: results.html and
+    Recommendations.jsx both write it as p-<problem id>."""
+    return f"p-{problem_id}"
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     """The landing page: the pitch, and the handle input inside it.
@@ -886,8 +912,9 @@ def feedback(handle):
     # spelling, not the typed one, so every row about this person names them
     # the same way.
     db.record_feedback(conn, user["handle"], problem_id, verdict)
-    # Back to the list the press was made on.
-    return redirect(url_for("results", handle=handle, topic=topic))
+    # Back to the list the press was made on, at the row: it now says what
+    # was pressed, which is the confirmation.
+    return redirect(url_for("results", handle=handle, topic=topic, _anchor=row_anchor(problem_id)))
 
 
 @app.route("/results/<handle>/undo", methods=["POST"])
@@ -915,7 +942,8 @@ def undo(handle):
     user = db.get_user(conn, handle)
     if user is not None:
         db.undo_feedback(conn, user["handle"], problem_id)
-    return redirect(url_for("results", handle=handle, topic=topic))
+    # At the row, which has its buttons back.
+    return redirect(url_for("results", handle=handle, topic=topic, _anchor=row_anchor(problem_id)))
 
 
 @app.route("/results/<handle>/restore", methods=["POST"])
@@ -933,7 +961,8 @@ def restore(handle):
     db.clear_dismissals(get_db(), handle)
     # Back to the list the visitor was on. Only used to build the address,
     # and url_for escapes it, so an unknown topic costs a 404 page at worst.
-    return redirect(url_for("results", handle=handle, topic=request.form.get("topic") or None))
+    return redirect(url_for("results", handle=handle, topic=request.form.get("topic") or None,
+                            _anchor=LIST_ANCHOR))
 
 
 @app.route("/results/<handle>/plan", methods=["POST"])
@@ -975,7 +1004,8 @@ def new_plan(handle):
         # The stored spelling: the plan was made under it. NOCASE would find
         # it either way; this keeps every row about a person naming them one way.
         db.end_plan(conn, user["handle"], topic or "", int(plan_id), move)
-    return redirect(url_for("results", handle=handle, topic=topic))
+    # At the list, where the next five now are.
+    return redirect(url_for("results", handle=handle, topic=topic, _anchor=LIST_ANCHOR))
 
 
 def list_target(conn, user, topic=None):
