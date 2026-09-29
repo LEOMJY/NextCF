@@ -18,6 +18,7 @@ you something, and chosen from a model that is measured, not guessed.
 | Works now | Enter a handle; the history is fetched in the background, then shown with a breakdown by topic and five recommended problems — overall, or in any one topic ([ADR 0025](docs/decisions/0025-problems-by-topic.md)) |
 | Practice plans | The five are kept as a plan until you ask for the next: a solve is ticked from your history, "too hard", "too easy" or "skip" marks a problem, one tap undoes a mark, and past plans are listed ([ADR 0026](docs/decisions/0026-practice-plans.md), [ADR 0028](docs/decisions/0028-skip-and-undo.md)) |
 | Difficulty that adapts | When a plan ends, its "too hard" and "too easy" move where the next five aim — a small step first, larger while you keep pressing the same way, smaller when you turn back ([ADR 0027](docs/decisions/0027-target-staircase.md)) |
+| Looks like | A card table: each problem is a card framed in the Codeforces rank colour of its rating, and the landing page deals a real sample pack of five ([ADR 0029](docs/decisions/0029-the-card-table.md)) |
 | Remembers you | The browser keeps the last handle typed into the box, and the landing page offers to continue as it; no accounts |
 | Built to be used at once by many | Syncs run one at a time, and a waiting visitor sees their place in the queue and a countdown; a returning visitor sees their page at once while it refreshes behind them ([ADR 0018](docs/decisions/0018-one-sync-at-a-time.md)) |
 | Built to be left running | A background thread keeps the problem list current and refreshes recent visitors when nobody is waiting ([ADR 0020](docs/decisions/0020-the-upkeep-thread.md)); every failure answers with a status code for its cause, on the site's own page, and is logged without the handle it was about ([ADR 0022](docs/decisions/0022-errors-and-logs.md)) |
@@ -25,7 +26,7 @@ you something, and chosen from a model that is measured, not guessed.
 | Measured | Log loss on the first attempts of 2026, which no model was fitted on: **0.5934** against a rating-only baseline's 0.6535, lower in every rating band ([spec §9](docs/spec.md)) |
 | Collected (v0.3) | A dataset of 4000 users stratified by rating: 3.9 million submissions and every rating change, refreshed monthly |
 | Counted | Visits, for the "50 people used it, 20 came back" test in spec §9 — a handle and a random cookie id, nothing else; what is kept is on [`/privacy`](https://nextcf.onrender.com/privacy) ([ADR 0017](docs/decisions/0017-visit-records-and-a-paid-instance.md)) |
-| Next (v0.8) | The design pass, and every unhandled state made deliberate — see spec §7.1 |
+| Next (v0.8) | The results page drawn as cards, and every unhandled state made deliberate — see spec §7.1 |
 | Target for v1.0 | mid-November 2026 |
 
 Hosted on a free instance, which sleeps when idle — the first visit after a
@@ -117,8 +118,8 @@ evaluate.py          the evaluation harness behind spec §9's number — see doc
 baseline.json        the baseline's two fitted numbers
 topic_model.json     the topic model's crowd part, refitted monthly
 support.json         who attempted each problem, by rating: what may be offered — see docs/decisions/0023-guard-rails-on-what-is-offered.md
-static/style.css     the whole design system — see docs/decisions/0006-design-direction.md
-static/fonts/        IBM Plex Mono, served from this site, with its licence
+static/style.css     the whole design system — see docs/decisions/0029-the-card-table.md
+static/fonts/        Unbounded, Onest and IBM Plex Mono, served from this site, each with its licence
 static/app/          the built topic chart component, committed — see docs/decisions/0011-bundle-built-locally.md
 frontend/            its React source, and the Vite build that makes static/app/ — see docs/decisions/0025-problems-by-topic.md
 schema.sql           the tables and the view — see docs/spec.md §6

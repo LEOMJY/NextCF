@@ -237,6 +237,46 @@ EVALUATION = {
     "gap_baseline": 4.8,
 }
 
+# A problem's rarity on the landing page's cards (ADR 0029): its rating read
+# as the Codeforces rank of a person with that rating, and drawn in that
+# rank's colour. Master and international master share orange on Codeforces,
+# and every grandmaster rank is red, so seven colours, not ten. Each entry
+# holds the rating the band stops below; the last has no ceiling.
+RARITIES = [
+    (1200, "newbie", "Newbie"),
+    (1400, "pupil", "Pupil"),
+    (1600, "spec", "Specialist"),
+    (1900, "expert", "Expert"),
+    (2100, "cm", "Candidate Master"),
+    (2400, "master", "Master"),
+    (None, "gm", "Grandmaster"),
+]
+
+
+def rarity(rating):
+    """(key, name) of the band a rating falls in: 1491 -> ("spec", "Specialist").
+    The key names the colour tokens in style.css, --r-spec and --t-spec."""
+    for below, key, name in RARITIES:
+        if below is None or rating < below:
+            return key, name
+
+
+# The landing page's sample pack (ADR 0029): the first plan a real history,
+# rated 1491, was dealt on this site on 2026-09-27, with the chances the
+# model gave then and the target it was aimed at. Real rather than made up,
+# so the page shows what the site actually does. The handle is left out: it
+# belongs to a person, and the page is not about them. Never presented as the
+# visitor's own five -- those are on the results page.
+SAMPLE_RATING = 1491
+SAMPLE_TARGET = 0.525
+SAMPLE_PACK = [
+    ("2253C", "Sum of Distinct Values in a Matrix", 1500, ("greedy", "sortings", "two pointers"), 0.537),
+    ("2250A", "Threshold Movement", 800, ("brute force", "implementation", "math"), 0.538),
+    ("2167G", "Mukhammadali and the Smooth Array", 1600, ("data structures", "dp"), 0.501),
+    ("2123F", "Minimize Fixed Points", 1700, ("constructive algorithms", "number theory"), 0.508),
+    ("2073L", "Boarding Queue", 1300, (), 0.510),
+]
+
 # Create the tables if they are missing, then fail any job left behind by a
 # process that died. Runs on import, which means once per server start, before
 # any request is served.
@@ -599,7 +639,7 @@ def index():
             # browser and a browser is not the only thing that can POST here.
             # Anything arriving from outside is unchecked input, always.
             # 400 = "your request was malformed", which is accurate.
-            return render_template("index.html", error="Enter a Codeforces handle."), 400
+            return landing(error="Enter a Codeforces handle."), 400
 
         # Do not decide anything here beyond where to send them. Whether the
         # data needs fetching is the results page's question, and asking it in
@@ -613,7 +653,58 @@ def index():
         # everyone has seen.
         return redirect(url_for("results", handle=handle))
 
-    return render_template("index.html")
+    return landing()
+
+
+def landing(error=None):
+    """The landing page, with its sample pack and the numbers it quotes.
+
+    Everything the page states about the model is computed here from the
+    same constants the rest of the site uses -- EVALUATION, the target's
+    limits in model.py -- so the pitch cannot drift from what /how says or
+    from what the code does.
+    """
+    lowest, highest = model.TARGET_HARDEST * 100, model.TARGET_EASIEST * 100
+
+    def along(percent):
+        # Where a chance sits on the line from the hardest target to the
+        # easiest, as a CSS left offset.
+        return f"{(percent - lowest) / (highest - lowest) * 100:.1f}%"
+
+    cards = []
+    for problem_id, name, rating, tags, chance in SAMPLE_PACK:
+        key, band = rarity(rating)
+        cards.append({"id": problem_id, "name": name, "rating": rating, "tags": tags,
+                      "percent": round(chance * 100), "band": key, "rarity": band, "at": along(chance * 100)})
+
+    # The calibration bin nearest the target a first plan is aimed at: the
+    # one sentence the page quotes from the ten.
+    said, happened = min(EVALUATION["calibration"],
+                         key=lambda pair: abs(pair[0] - model.DEFAULT_TARGET * 100))
+    tiers = []
+    floor = None
+    for below, key, band in RARITIES:
+        if floor is None:
+            span = f"below {below}"
+        elif below is None:
+            span = f"{floor} and up"
+        else:
+            span = f"{floor}–{below - 1}"
+        tiers.append({"key": key, "name": band, "span": span})
+        floor = below
+
+    return render_template(
+        "index.html",
+        error=error,
+        sample=cards,
+        sample_rating=SAMPLE_RATING,
+        sample_aim={"percent": f"{SAMPLE_TARGET * 100:g}", "at": along(SAMPLE_TARGET * 100)},
+        target={"start": round(model.DEFAULT_TARGET * 100), "lowest": round(lowest), "highest": round(highest)},
+        ev=EVALUATION,
+        said=said,
+        happened=happened,
+        tiers=tiers,
+    )
 
 
 @app.route("/results/<handle>")

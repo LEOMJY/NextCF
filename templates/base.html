@@ -20,9 +20,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}NextCF{% endblock %}</title>
 
-    {# Nothing in this head comes from another server. The typeface is
+    {# Nothing in this head comes from another server. The typefaces are
        declared inside style.css and served from static/fonts/ -- see the top
-       of that file for why it left the font CDN. #}
+       of that file for why they are not on a font CDN.
+
+       Every page draws its name in Unbounded and its text in Onest, so both
+       files are asked for here, alongside the stylesheet, instead of after
+       the browser has read it and found them named: the page's text appears
+       in its own face sooner, with less of a jump from the fallback.
+       crossorigin is required for a font preload, even from this server;
+       without it the browser fetches the file twice. #}
+    <link rel="preload" href="{{ url_for('static', filename='fonts/Onest-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/Unbounded-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
 
     {# url_for('static', ...) rather than a hardcoded "/static/style.css":
        Flask knows where it serves static files from, and this follows it. #}
@@ -40,7 +49,8 @@
     <header class="site-head">
       {# url_for("index") asks the routing table for that view's URL instead
          of hardcoding "/". #}
-      <a class="brand" href="{{ url_for('index') }}">NextCF</a>
+      {# The small card is the mark: a specialist's frame, tipped over. #}
+      <a class="brand" href="{{ url_for('index') }}"><span class="brand-card" aria-hidden="true"></span>NextCF</a>
       <span class="version">v0.7</span>
       {# Spec section 4.1: the section 9 number one click from every page,
          and /privacy beside it from v0.7 -- a site that writes down that you

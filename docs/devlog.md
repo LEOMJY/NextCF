@@ -5601,3 +5601,102 @@ above, the three folds and their 44-pixel height on a touch screen, the
 notes at one width, a topic's five dimming while they load, and the
 announcement, which stayed empty while a sync ran and spoke once when it
 finished.
+
+## 2026-09-29 — The card table
+
+The v0.8 design question (spec §12), answered: the site is a card table now
+(ADR 0029, which replaces the terminal look of ADR 0006).
+
+### What was tried
+
+Five landing directions were drawn side by side the day before, at desktop
+and phone width: a ladder of rank colours, five balloons, balloons in rank
+colours, the plan as a one-row contest scoreboard, and a weather forecast
+graded on calibration. The author's verdict on all of them: not creative,
+and nobody would be drawn in at first look.
+
+So the question was turned round: what does this audience already play
+with? Codeforces rank colours are a rarity scale, the way colours are on
+game cards, and a plan is five problems dealt at once. A problem became a
+card framed in its rating's rank colour, a plan a pack of five, and the
+landing page a card table that deals one. A working prototype, with the
+site's own copy and a real plan, was the author's favourite. A black table
+was "too dim, too serious". Six table colours were tried on the same page,
+each with its text checked at 4.5 to 1, and navy was kept.
+
+### What was built
+
+- **The landing page** deals a sample pack: five cards from a real
+  1491-rated history's first plan, drawn by the server so they are there
+  without JavaScript. The handle is not shown. The caption says "Sample
+  pack". A card leans toward a mouse and its foil catches the light.
+  Sending the form packs the five away and tears the pack, about 1.5
+  seconds, and then the form goes as it always did. No card comes out: the
+  visitor's own five are on the next page. "Continue as" opens no pack.
+- **Three sections** after it. How a pack is made. The calibration, drawn
+  as ten dots. The seven rarity bands. Every number is computed from the
+  constants the rest of the site uses. The step that shows the aim draws
+  the sample's own aim and five chances.
+- **The tokens:** Unbounded for display, Onest for reading, IBM Plex Mono
+  kept for data; a navy table and cream cards; gold for acting and the
+  chance; a lighter green for accepted; the seven rank colours, each with a
+  darker version for text on a card. The other pages took the tokens and
+  kept their layout.
+- **Two new font families**, served from this site with their licences:
+  about 100 KB on a first visit, preloaded.
+
+### What broke on the way
+
+- **Every animation on a desktop silently did nothing.** A card's width
+  on a wide screen is written `clamp(150px, 14.4vw, 184px)`, and a CSS
+  custom property (a named value in the stylesheet, `--cw` here) reaches
+  script as the text it was written with, not the number it works out to.
+  `parseFloat` of that text is NaN, so every keyframe was invalid, and the
+  browser ignores an invalid keyframe without an error. The phone width
+  is a plain `118px`, so the phone would have worked and hidden it. The
+  script now measures a card instead. Found by reading the code again
+  before the checks, not by a check. There is one now.
+- **The form could wait forever.** The browser window used for checking
+  was not on screen, and a browser pauses animations in a page nobody is
+  looking at. The pack never tore, so the form was never sent. The same
+  happens to a visitor who presses Enter and switches tab. The form now
+  goes when the pack tears, or after two seconds, whichever comes first.
+- **The Back button could send the form again.** A page kept by the
+  browser for going back keeps its timers too. Coming back 0.5 seconds
+  before the two-second timer ran out would have sent the form a second
+  time. The timer is cleared when the page is shown again.
+- **The focus ring changed the shape of the button it was on.** It set a
+  corner radius as well as an outline, so the gold button's corners
+  jumped from 10 pixels to 4 when it was reached with the keyboard.
+- **Headless Chrome will not draw a window narrower than 500 pixels**, so
+  its phone screenshots were a 500-pixel page cut to 375. The phone
+  measurements were taken in a 375-pixel frame, and in a browser window
+  set to that size.
+
+### How it was checked
+
+Measured at 375 × 812: the field's top at 335 pixels, the button's bottom
+at 458 (602 with "Continue as" above), and the whole hand on the first
+screen, ending at 781. At 1280 × 800 the field and the hand sit side by
+side, both above 480, and nothing scrolls sideways. The results, /how,
+progress and error pages were looked at on the new tokens at both widths.
+
+In the browser: a pasted profile address is read as the handle on the pack,
+the form is sent and lands on the results page, and Back restores the page
+without sending it again.
+
+`tests/check_landing.py` is new, with 13 checks. The sample is the real plan
+and says it is a sample. Every number is the code's. The form is never held
+and never sent twice. Every text colour is at least 4.5 to 1 on every
+surface it is drawn on. Each font has its licence. Four older checks changed
+with the design: the accent rule is now two rules, gold and green, and the
+field's edge is now checked as a computed contrast instead of a named
+border. Everything passes: 463 checks, and 467 with the dataset tier, with
+dataset.db untouched.
+
+Thirty-one mutations, each in a fresh copy of the repository, all caught the
+first time. Each one breaks a single thing: a rank band's edge moved by one,
+the fallback timer taken out, the timer left running after Back, the width
+read from `--cw` again, a caption that calls the sample "Your pack", the
+muted grey darkened below 4.5 to 1, a solved mark drawn in gold, a font
+file's licence deleted.

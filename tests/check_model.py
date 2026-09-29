@@ -439,27 +439,39 @@ check("an unrated user is served from the chosen start, or told why when there i
       an_unrated_user_starts_from_the_chosen_rating_or_is_told_why)
 
 
-def the_chance_is_the_only_new_accent():
-    """ADR 0006. The accent now appears on exactly two things: an OK verdict,
-    and the probability on a recommendation. Anything else reaching for it is
-    a new meaning, and the colour only works while it has one."""
+def gold_and_green_each_keep_one_meaning():
+    """ADR 0029, which split ADR 0006's one accent in two. Text in gold is
+    the forecast, or the landing page's own voice; text in green is an
+    accepted solve. Anything else reaching for either is a new meaning, and
+    a colour only works while it has one."""
     import re
     css = Path("static/style.css").read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
-    users = sorted({
-        selector.strip()
-        for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css)
-        # (?<![\w-]) so that "border-color:" and "border-bottom-color:" do
-        # not count. A focused input's border in the accent is the form saying
-        # "type here", which is its meaning; text drawn in it is the question.
-        if re.search(r"(?<![\w-])color:\s*var\(--accent\)", body)
-    })
-    # .plan-mark.solved is .verdict-ok's own meaning -- an accepted solve --
-    # on a practice plan's row (ADR 0026), not a new one.
-    allowed = {".verdict-ok", ".chance", "a:hover", ".eyebrow", ".hero h1 .accent",
-               ".brand::before", ".plan-mark.solved"}
-    unexpected = [s for s in users if s not in allowed]
-    assert not unexpected, f"new users of the accent colour: {unexpected}"
+
+    def users(token):
+        return sorted({
+            selector.strip()
+            for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css)
+            # (?<![\w-]) so that "border-color:" and "border-bottom-color:"
+            # do not count. A focused input's border in gold is the form
+            # saying "type here", which is its meaning; text drawn in it is
+            # the question.
+            if re.search(r"(?<![\w-])color:\s*var\(" + token + r"\)", body)
+        })
+
+    # The chance on a recommendation; a link under the pointer; and on the
+    # landing page only, the line under the form and the steps' numbers.
+    gold = {".chance", "a:hover", ".motto", ".step-n"}
+    unexpected = [s for s in users("--accent") if s not in gold]
+    assert not unexpected, f"new users of gold: {unexpected}"
+    # An OK verdict, and a plan's solved mark -- the same meaning on a
+    # practice plan's row (ADR 0026) -- and the landing page's picture of
+    # a history, whose OKs are verdicts too.
+    green = {".verdict-ok", ".plan-mark.solved", ".step .verdicts .ac"}
+    unexpected = [s for s in users("--good") if s not in green]
+    assert not unexpected, f"new users of green: {unexpected}"
+    assert ".chance" in users("--accent"), "the chance is no longer drawn in gold"
+    assert ".verdict-ok" in users("--good"), "an accepted verdict is no longer green"
 
 
 def importing_web_starts_no_fetch():
@@ -468,7 +480,7 @@ def importing_web_starts_no_fetch():
     assert "problemset" not in names, names
 
 
-check("the chance is the only new use of the accent", the_chance_is_the_only_new_accent)
+check("gold and green each keep one meaning", gold_and_green_each_keep_one_meaning)
 check("importing web starts no problemset fetch", importing_web_starts_no_fetch)
 
 

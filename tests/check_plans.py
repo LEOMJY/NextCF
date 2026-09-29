@@ -951,14 +951,38 @@ def what_is_kept_but_not_read_every_visit_is_folded():
     assert '<details class="meta other-topics" open>' in page("dp"), "the current topic's link is folded away"
 
 
+def token(css, name):
+    """A colour token's value in style.css's :root, as #rrggbb."""
+    import re
+    value = re.search(r"(?<![\w-])" + re.escape(name) + r":\s*(#[0-9a-fA-F]{6});", css)
+    assert value, f"no {name} colour in :root"
+    return value.group(1)
+
+
+def contrast(one, other):
+    """WCAG's contrast ratio between two #rrggbb colours: 1 to 21."""
+    def luminance(colour):
+        channels = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    high, low = sorted((luminance(one), luminance(other)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
 def the_stylesheet_carries_the_review():
     """The field's edge, the loading dim, the notes' one width and the
     hidden announcement: a line or two of CSS each, and a regression in any
     is invisible to every other check."""
     import re
     css = Path("static/style.css").read_text(encoding="utf-8")
+    # The field's edge is its fill since v0.8 (ADR 0029): cream on the navy.
+    # Whatever the two tokens become, that edge is held to WCAG's 3 to 1 for
+    # a control's boundary -- the review found it at 1.3.
     field = re.search(r"\.handle-form input \{([^}]*)\}", css).group(1)
-    assert "border: 1px solid var(--muted)" in field, "the handle field's edge is back to --line"
+    fill = re.search(r"background: var\((--[\w-]+)\)", field)
+    assert fill, "the handle field has no fill of its own"
+    ratio = contrast(token(css, fill.group(1)), token(css, "--bg"))
+    assert ratio >= 3, f"the handle field's edge is {ratio:.2f} to 1 against the page"
     busy = re.search(r'\.recs\[aria-busy="true"\] \{([^}]*)\}', css)
     assert busy and "opacity" in busy.group(1), "nothing shows that a topic's five are loading"
     notes = re.search(r"\.notes \{([^}]*)\}", css).group(1)
@@ -974,10 +998,20 @@ def the_stylesheet_carries_the_review():
 def the_field_comes_before_the_argument():
     """The handle field was 830 pixels down a phone's 812-pixel screen on a
     first visit, under the two paragraphs; spec 4.1 puts it in the hero so
-    a returning visitor types at once."""
+    a returning visitor types at once. Since v0.8 (ADR 0029) one sentence
+    stands between the headline and the field -- measured at 375 by 812,
+    the field's top is at 335 pixels and the button's bottom at 458, 602
+    with "Continue as" above them -- and the argument is the sections after
+    the hero."""
+    import re
     html = client.get("/").get_data(as_text=True)
-    assert html.index('<h1>') < html.index('class="handle-form"') < html.index('class="lede"') \
-        < html.index('class="caveat"'), "the form is not directly under the headline"
+    assert html.index('<h1>') < html.index('class="lede"') < html.index('class="handle-form"') \
+        < html.index('<section class="band"'), "the form is not in the hero, under the headline"
+    lede = re.search(r'<p class="lede">(.*?)</p>', html, re.S).group(1)
+    words = " ".join(re.sub(r"<[^>]+>|&\w+;", " ", lede).split())
+    assert len(words) <= 200, f"the sentence above the field has grown to {len(words)} characters"
+    between = html[html.index('<h1>'):html.index('class="hero-form"')]
+    assert between.count("<p") == 1, "more than the one sentence between the headline and the field"
     assert "Enter your handle." not in html, "the lede still tells somebody to fill in a field above it"
 
 
@@ -1059,7 +1093,8 @@ def the_landing_page_can_offer_to_continue():
     # more than one place, and a mutation removing the hiding once passed a
     # check that looked only for the name.
     assert 'id="continue-forget"' in html, "no way to forget the remembered handle"
-    assert 'localStorage.removeItem("nextcf_handle");\n          } catch (e) {}\n          box.hidden = true;' in html, \
+    import re
+    assert re.search(r'localStorage\.removeItem\("nextcf_handle"\);\s*\} catch \(e\) \{\}\s*box\.hidden = true;', html), \
         "forgetting the handle leaves the continue box"
     assert 'if (document.getElementById("continue")) return;' in html, \
         "the form is filled in with the handle the continue box already offers"

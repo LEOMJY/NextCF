@@ -1,101 +1,380 @@
 {% extends "base.html" %}
 
-{% block title %}NextCF &mdash; what to solve next on Codeforces{% endblock %}
+{% block title %}NextCF &mdash; open your next five Codeforces problems{% endblock %}
 
 {% block content %}
-  {# The loud surface, spec section 7.1. It uses the same tokens as the tool
-     pages at full volume: the display size appears here and nowhere else, the
-     accent colour is on the headline and the button, and the spacing steps
-     are the large ones. #}
+  {# The loud surface, spec section 7.1, and since v0.8 a card table
+     (ADR 0029): the five problems a plan deals are five cards, framed in the
+     Codeforces rank colour of their rating. The hero deals a real sample
+     pack; each section after it answers one question somebody would ask
+     about that pack. The tool pages use the same tokens quietly. #}
   <div class="hero">
-    {# For a browser whose visitor has typed a handle into the box before
-       (results.html saves only those): one press back to that page, at the
-       very top, where a phone shows it without scrolling
-       (spec section 5, reconsidered 2026-09-27: remembering a visitor needs
-       no account). Hidden until the script below finds a handle, so a first
-       visit, or a browser without script, sees the page as it always was.
-       The address is built from url_for with a placeholder, so the route is
-       never spelled out twice. #}
-    {# The handle form below stays empty while this is shown: this is the
-       way back for the handle this browser knows, and the form is for any
-       other. Both filled in with the same name was two bright buttons doing
-       one thing (_handle_form.html). #}
-    <p class="continue" id="continue" hidden>
-      <a id="continue-link" href="{{ url_for('results', handle='__HANDLE__') }}">
-        Continue as <strong id="continue-handle"></strong> &rarr;
-      </a>
-      <button type="button" id="continue-forget">Use another handle</button>
-    </p>
-    <script>
-      (function () {
-        var box = document.getElementById("continue");
-        var link = document.getElementById("continue-link");
-        var name = document.getElementById("continue-handle");
-        var forget = document.getElementById("continue-forget");
-        if (!box || !link || !name || !forget) return;
-        var saved = null;
-        try {
-          saved = localStorage.getItem("nextcf_handle");
-        } catch (e) {
-          return;
-        }
-        if (!saved) return;
-        link.href = link.getAttribute("href").replace("__HANDLE__", encodeURIComponent(saved));
-        name.textContent = saved;
-        box.hidden = false;
-
-        // Somebody else on this device, or a handle they no longer use:
-        // forget it here, and send them to the field.
-        forget.addEventListener("click", function () {
+    <div class="hero-text">
+      {# For a browser whose visitor has typed a handle into the box before
+         (results.html saves only those): one press back to that page, at
+         the very top, where a phone shows it without scrolling
+         (spec section 5, reconsidered 2026-09-27: remembering a visitor
+         needs no account). Hidden until the script below finds a handle, so
+         a first visit, or a browser without script, sees the page as it
+         always was. The address is built from url_for with a placeholder,
+         so the route is never spelled out twice. No pack opens for it
+         (ADR 0029): it is the way back to five cards already dealt. #}
+      {# The handle form below stays empty while this is shown: this is the
+         way back for the handle this browser knows, and the form is for any
+         other. Both filled in with the same name was two bright buttons
+         doing one thing (_handle_form.html). #}
+      <p class="continue" id="continue" hidden>
+        <a id="continue-link" href="{{ url_for('results', handle='__HANDLE__') }}">
+          Continue as <strong id="continue-handle"></strong> &rarr;
+        </a>
+        <button type="button" id="continue-forget">Use another handle</button>
+      </p>
+      <script>
+        (function () {
+          var box = document.getElementById("continue");
+          var link = document.getElementById("continue-link");
+          var name = document.getElementById("continue-handle");
+          var forget = document.getElementById("continue-forget");
+          if (!box || !link || !name || !forget) return;
+          var saved = null;
           try {
-            localStorage.removeItem("nextcf_handle");
-          } catch (e) {}
-          box.hidden = true;
-          var input = document.getElementById("handle");
-          if (input) input.focus();
-        });
-      })();
-    </script>
+            saved = localStorage.getItem("nextcf_handle");
+          } catch (e) {
+            return;
+          }
+          if (!saved) return;
+          link.href = link.getAttribute("href").replace("__HANDLE__", encodeURIComponent(saved));
+          name.textContent = saved;
+          box.hidden = false;
 
-    <p class="eyebrow">// measured, not guessed</p>
+          // Somebody else on this device, or a handle they no longer use:
+          // forget it here, and send them to the field.
+          forget.addEventListener("click", function () {
+            try {
+              localStorage.removeItem("nextcf_handle");
+            } catch (e) {}
+            box.hidden = true;
+            var input = document.getElementById("handle");
+            if (input) input.focus();
+          });
+        })();
+      </script>
 
-    <h1>Which Codeforces problem should you solve <span class="accent">next?</span></h1>
+      <h1>Open your next five.</h1>
 
-    {# THE FIELD RIGHT UNDER THE HEADLINE (review of 2026-09-28). Below the
-       two paragraphs it sat 830 pixels down a phone's 812-pixel screen on a
-       first visit, and at the bottom edge of a 1280 x 800 laptop -- when
-       spec section 4.1 puts it in the hero so that a returning visitor
-       types at once and never scrolls. The paragraphs are the argument for
-       whoever wants one, and follow it.
+      {# One sentence between the headline and the field, and no more. The
+         field was once 830 pixels down a phone's 812-pixel screen under two
+         paragraphs (review of 2026-09-28); the argument for the site is the
+         sections further down, for whoever wants it. #}
+      <p class="lede">
+        NextCF reads your Codeforces history and deals you five problems, each
+        about a coin flip on your first submission &mdash; hard enough to
+        teach you something.
+      </p>
 
-       `error` is only passed in when the POST was rejected, and an undefined
-       name is falsy in Jinja rather than an error -- so this block is simply
-       skipped on a normal page load. role="alert" makes a screen reader
-       announce it instead of leaving it to be found by chance. #}
-    {% if error %}
-      <p class="form-error" role="alert">{{ error }}</p>
-    {% endif %}
+      {# `error` is only passed in when the POST was rejected, and an
+         undefined name is falsy in Jinja rather than an error -- so this
+         block is simply skipped on a normal page load. role="alert" makes a
+         screen reader announce it instead of leaving it to be found by
+         chance. #}
+      {% if error %}
+        <p class="form-error" role="alert">{{ error }}</p>
+      {% endif %}
 
-    <div class="hero-form">
-      {% include "_handle_form.html" %}
+      <div class="hero-form">
+        {% include "_handle_form.html" %}
+      </div>
+
+      <p class="motto">The pack isn&rsquo;t random. Your first submission is.</p>
     </div>
 
-    {# "Enter your handle." used to open this: it was the instruction for a
-       field below it, and the field is now above. #}
-    <p class="lede">
-      NextCF reads your submission history and picks five problems where your
-      first submission has about an even chance of being accepted &mdash; hard
-      enough to teach you something.
-    </p>
-
-    {# The claim, and where to check it. Until 2026-09-19 this paragraph said
-       the site did none of the above, which had stopped being true at v0.4
-       and went on saying so to every visitor for two days. #}
-    <p class="caveat">
-      <strong>Tested, not assumed.</strong> On 527,388 attempts from 2026 that
-      it never learned from, it predicted first submissions better than rating
-      alone in every rating band.
-      <a href="{{ url_for('how') }}">How it works, and how that was measured</a>
-    </p>
+    {# THE SAMPLE PACK. Five real cards from a real history (web.SAMPLE_PACK),
+       drawn by the server, so the fan is there without JavaScript and the
+       checks can read it. Each card's --k is its place in the hand, -2 to 2,
+       and the stylesheet turns that into the fan; the script below only
+       animates between places. The caption says whose they are not. #}
+    <figure class="stage" id="stage">
+      <ul class="fan">
+        {% for card in sample %}
+          <li class="card" style="--k: {{ loop.index0 - 2 }}; --frame: var(--r-{{ card.band }}); --mark: var(--t-{{ card.band }})">
+            <div class="tilt">
+              <div class="flip">
+                <div class="face front">
+                  <div class="card-inner">
+                    <p class="card-meta"><span class="card-rarity">{{ card.rarity }}</span><span class="card-id">{{ card.id }}</span></p>
+                    <p class="card-rating">{{ card.rating }}</p>
+                    <p class="card-name">{{ card.name }}</p>
+                    <p class="card-tags">
+                      {% for tag in card.tags %}<span>{{ tag }}</span>{% else %}<span>no tags</span>{% endfor %}
+                    </p>
+                    <p class="card-chance"><b>{{ card.percent }}<span>%</span></b><small>first try<br>accepted</small></p>
+                    <div class="holo" aria-hidden="true"></div>
+                  </div>
+                </div>
+                <div class="face back" aria-hidden="true"><span>NextCF</span></div>
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+      <figcaption class="fan-caption">Sample pack &middot; a real {{ sample_rating }}-rated history</figcaption>
+      {# The pack the five go into when the form is sent: drawn only then,
+         and never with anybody's cards coming out of it here -- the
+         visitor's own five are on the next page. #}
+      <div class="pack" id="pack" hidden aria-hidden="true">
+        <div class="pack-top" id="pack-top"></div>
+        <div class="pack-body" id="pack-body">
+          <span class="pack-logo">NextCF</span>
+          <span class="pack-five">5 problems</span>
+          <span class="pack-who" id="pack-who"></span>
+        </div>
+      </div>
+    </figure>
   </div>
+
+  <section class="band">
+    <h2>How a pack is made</h2>
+    <p class="band-lead">Three steps, in this order, every time you open one.</p>
+    <ol class="steps">
+      <li class="step">
+        <span class="step-n">Step 1</span>
+        <h3>Reads your history</h3>
+        <p class="verdicts" aria-hidden="true"><span class="ac">OK</span><span>WA 3</span><span class="ac">OK</span><span>TLE 17</span><span>WA 2</span><span class="ac">OK</span><span class="ac">OK</span><span>RE 5</span><span class="ac">OK</span></p>
+        <p>Every submission you have made, from the public Codeforces API: which problems you solved, and which took more than one try.</p>
+      </li>
+      <li class="step">
+        <span class="step-n">Step 2</span>
+        <h3>Forecasts every problem</h3>
+        <p class="big">1.58 million</p>
+        <p>first attempts by 4,000 other players taught it how hard each problem is, and for whom. Each one gets a chance that your first submission is accepted.</p>
+      </li>
+      <li class="step">
+        <span class="step-n">Step 3</span>
+        <h3>Deals the five nearest its aim</h3>
+        {# The sample pack's own aim and its five chances, on the line from
+           the hardest target to the easiest (model.TARGET_HARDEST and
+           TARGET_EASIEST): the picture is the data above, not a drawing. #}
+        <div class="aim" aria-hidden="true">
+          <div class="aim-line"></div>
+          <div class="aim-target" style="left: {{ sample_aim.at }}"></div>
+          {% for card in sample %}<div class="aim-tick" style="left: {{ card.at }}"></div>{% endfor %}
+          <span class="aim-label aim-start">{{ target.lowest }}%</span>
+          <span class="aim-label" style="left: {{ sample_aim.at }}">aim {{ sample_aim.percent }}%</span>
+          <span class="aim-label aim-end">{{ target.highest }}%</span>
+        </div>
+        <p>The first is aimed at {{ target.start }}%. Say a pack was too hard or too easy, and the next one aims somewhere else, from {{ target.lowest }}% to {{ target.highest }}%.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="band">
+    <h2>A forecast you can check</h2>
+    <div class="proof">
+      {# Section 9's calibration, from web.EVALUATION: each dot is one of
+         the ten groups on /how, at what the model said (across) and what
+         happened (up). The dashed line is where they would sit if every
+         forecast came true exactly as often as it said. #}
+      <svg viewBox="0 0 280 280" role="img" aria-label="Ten groups of forecasts, each drawn at what the model said against how often those first submissions were accepted. Every group sits close to the diagonal where the two are equal.">
+        <rect class="cal-frame" x="30" y="10" width="240" height="240"></rect>
+        <line class="cal-diagonal" x1="30" y1="250" x2="270" y2="10"></line>
+        <g class="cal-dots">
+          {% for s, h in ev.calibration %}<circle cx="{{ '%.1f'|format(30 + s * 2.4) }}" cy="{{ '%.1f'|format(250 - h * 2.4) }}" r="5"></circle>{% endfor %}
+        </g>
+        <g class="cal-text">
+          <text x="30" y="266">0%</text><text x="150" y="266" text-anchor="middle">forecast</text><text x="270" y="266" text-anchor="end">100%</text>
+          <text x="22" y="250" text-anchor="end">0</text><text x="22" y="16" text-anchor="end">100</text>
+          <text transform="translate(12 130) rotate(-90)" text-anchor="middle">accepted</text>
+        </g>
+      </svg>
+      <div>
+        <p class="said">When it said about {{ "%.0f"|format(said) }}%, {{ happened }}% were accepted.</p>
+        <p>
+          It was checked on {{ ev.attempts }} first attempts from 2026 that it
+          never learned from. On average its forecasts were off by
+          {{ ev.gap_model }} points; rating alone was off by
+          {{ ev.gap_baseline }}.
+          <a href="{{ url_for('how') }}">How it works, and how that was measured</a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Rarity is just rating</h2>
+    <p class="band-lead">A card&rsquo;s frame is its problem&rsquo;s rating, in the colour Codeforces gives a handle with that rating.</p>
+    <ul class="rarity">
+      {% for tier in tiers %}
+        <li class="tier" style="--frame: var(--r-{{ tier.key }}); --mark: var(--t-{{ tier.key }})"><div><b>{{ tier.name }}</b><span>{{ tier.span }}</span></div></li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <script>
+    // The card table's motion (ADR 0029): the hand is dealt once on arrival,
+    // a card leans towards a mouse, and sending the form packs the five away
+    // before the page moves on. All of it is decoration. The fan stands
+    // without this script, the form sends without it, and somebody whose
+    // system asks for less motion gets none of it.
+    (function () {
+      var stage = document.getElementById("stage");
+      var form = document.querySelector(".hero-form form");
+      var pack = document.getElementById("pack");
+      if (!stage || !form || !pack || !stage.animate) return;
+      if (!stage.querySelector(".card")) return;
+
+      var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var mouse = window.matchMedia("(pointer: fine)").matches;
+      var EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
+      var busy = false;
+      var sent = false;
+      var timer = null;
+      var played = [];
+      var cards = Array.prototype.map.call(stage.querySelectorAll(".card"), function (card) {
+        return {
+          card: card,
+          tilt: card.querySelector(".tilt"),
+          flip: card.querySelector(".flip"),
+          k: parseFloat(card.style.getPropertyValue("--k"))
+        };
+      });
+
+      function token(name) {
+        return parseFloat(getComputedStyle(stage).getPropertyValue(name));
+      }
+      // A card's width in pixels, measured. Not read from --cw: that is a
+      // clamp() on a wide screen, and a custom property is handed to script
+      // as the text it was written with, not as the width it works out to.
+      function cardWidth() {
+        return cards[0].card.offsetWidth;
+      }
+      // Where card k sits in the hand, for a card w pixels wide: the same
+      // transform the stylesheet gives .card, in pixels, so an animation
+      // that ends here ends exactly where the page already draws it.
+      function fan(k, w) {
+        return "translateX(" + (-w / 2 + k * w * token("--spread")) + "px) translateY(" +
+          (k * k * w * 0.025) + "px) rotate(" + (k * token("--turn")) + "deg)";
+      }
+      function stacked(w) {
+        return "translateX(" + (-w / 2) + "px) translateY(0px) rotate(0deg)";
+      }
+      function play(target, frames, options) {
+        var a = target.animate(frames, options);
+        played.push(a);
+        return a;
+      }
+
+      if (still) return;
+
+      // 1. The deal: from one stack into the hand, a card at a time.
+      var w = cardWidth();
+      cards.forEach(function (c, i) {
+        play(c.card, [{ transform: stacked(w) }, { transform: fan(c.k, w) }],
+          { duration: 900, delay: 250 + i * 90, easing: EASE, fill: "backwards" });
+      });
+
+      // 2. A card leans towards a mouse, and its foil catches the light.
+      // Only for a mouse or a pen: on a touch screen there is no pointer to
+      // follow, and a tap is a tap.
+      if (mouse) {
+        cards.forEach(function (c) {
+          c.card.addEventListener("pointermove", function (e) {
+            if (busy) return;
+            var r = c.card.getBoundingClientRect();
+            var x = (e.clientX - r.left) / r.width;
+            var y = (e.clientY - r.top) / r.height;
+            c.tilt.style.transform = "translateY(-" + (r.height * 0.1) + "px) rotateY(" + ((x - 0.5) * 16) +
+              "deg) rotateX(" + ((0.5 - y) * 16) + "deg) translateZ(20px)";
+            c.card.style.setProperty("--mx", (x * 100) + "%");
+            c.card.style.setProperty("--my", (y * 100) + "%");
+            c.card.classList.add("lit");
+          });
+          c.card.addEventListener("pointerleave", function () {
+            c.tilt.style.transform = "";
+            c.card.classList.remove("lit");
+          });
+        });
+      }
+
+      // 3. Sending the form: the hand closes, turns face down, goes into a
+      // pack with the handle on it, and the pack tears -- about a second and
+      // a half, and then the form is sent as it would have been. The cards
+      // going in are the sample; nothing comes out here, because the
+      // visitor's own five are on the page this sends them to.
+      function handleShown() {
+        var typed = document.getElementById("handle").value.trim().replace(/^@/, "");
+        var profile = typed.match(/profile\/([^\/?#\s]+)/);
+        return (profile ? profile[1] : typed).slice(0, 24);
+      }
+
+      form.addEventListener("submit", function (event) {
+        // The browser's own check (the field is required) has already
+        // passed by the time this runs. A second press while the pack is
+        // opening is swallowed.
+        event.preventDefault();
+        if (busy) return;
+        busy = true;
+        var button = form.querySelector("button[type=submit]");
+        if (button) button.disabled = true;
+        // The form is sent when the pack has torn -- or after two seconds
+        // whatever happened, because a browser pauses animations in a tab
+        // nobody is looking at, and a lookup must never wait on a picture.
+        timer = window.setTimeout(send, 2000);
+        try {
+          packAway();
+        } catch (e) {
+          send();
+        }
+      });
+
+      function send() {
+        window.clearTimeout(timer);
+        if (sent) return;
+        sent = true;
+        form.submit();
+      }
+
+      function packAway() {
+        document.getElementById("pack-who").textContent = "for " + handleShown();
+        var w = cardWidth();
+        cards.forEach(function (c, i) {
+          c.tilt.style.transform = "";
+          c.card.classList.remove("lit");
+          play(c.card, [{ transform: fan(c.k, w) }, { transform: stacked(w) }],
+            { duration: 380, delay: i * 30, easing: EASE, fill: "forwards" });
+          play(c.flip, [{ transform: "rotateY(0deg)" }, { transform: "rotateY(180deg)" }],
+            { duration: 240, delay: 260, easing: EASE, fill: "both" });
+        });
+        pack.hidden = false;
+        play(pack, [
+          { transform: "translateX(-50%) translateY(40px) scale(0.9)", opacity: 0 },
+          { transform: "translateX(-50%) translateY(0) scale(1)", opacity: 1 }
+        ], { duration: 300, delay: 480, easing: EASE, fill: "both" });
+        play(pack, [
+          { transform: "translateX(-50%) rotate(0deg)" }, { transform: "translateX(calc(-50% - 6px)) rotate(-3deg)" },
+          { transform: "translateX(calc(-50% + 6px)) rotate(3deg)" }, { transform: "translateX(-50%) rotate(0deg)" }
+        ], { duration: 320, delay: 780, easing: "ease-in-out" });
+        var tear = play(document.getElementById("pack-top"), [
+          { transform: "translate(0, 0) rotate(0deg)", opacity: 1 },
+          { transform: "translate(60px, -110px) rotate(24deg)", opacity: 0 }
+        ], { duration: 380, delay: 1100, easing: EASE, fill: "forwards" });
+        tear.finished.then(send, send);
+      }
+
+      // Back from the results page, a browser may show this page exactly as
+      // it was left: packed away, the button off, and any timer it had still
+      // counting. Stop the timer -- it would send the form again -- and put
+      // the hand back.
+      window.addEventListener("pageshow", function (event) {
+        if (!event.persisted) return;
+        window.clearTimeout(timer);
+        played.forEach(function (a) { a.cancel(); });
+        played = [];
+        pack.hidden = true;
+        var button = form.querySelector("button[type=submit]");
+        if (button) button.disabled = false;
+        busy = false;
+        sent = false;
+      });
+    })();
+  </script>
 {% endblock %}

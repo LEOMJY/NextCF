@@ -35,7 +35,9 @@
     spellcheck="false"
     placeholder="tourist"
     value="{{ handle or '' }}">
-  <button type="submit">Show my next problems</button>
+  {# "Open pack": the landing page's cards are a pack (ADR 0029). The same
+     words on the error page, where it is the same action tried again. #}
+  <button type="submit">Open pack</button>
 </form>
 
 {# Filled in by the script below when this browser has looked somebody up

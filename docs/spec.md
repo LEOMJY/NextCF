@@ -722,17 +722,34 @@ and exactly one accent colour). Those were a reasonable default presented as a
 rule, and they are withdrawn. Pick the scale; then hold it.
 
 **Picked on 2026-09-12**, from three directions built as working pages — see
-`docs/decisions/0006-design-direction.md`. The system lives in
-`static/style.css`: one monospace typeface, five type sizes, five spacing
-steps, a dark canvas with a single accent, 3px radius, no shadow.
+`docs/decisions/0006-design-direction.md`: one monospace typeface, a dark
+canvas with a single green accent, 3px radius, no shadow. That was the
+working direction, and v0.8 replaced it.
 
-That is the **working** direction: it makes the v0.2 pages usable and
-legible, and it is not necessarily the final look. The final direction is
-revisited at the v0.8 design pass — see §12. Because every value is a token in
-one file, changing type, colour and spacing later is a one-file change. Layout
-can change too, at any point. It just means editing each page's template and
-CSS, and any check that looks for specific elements, instead of one file.
-That makes it the more expensive part of a late change of direction.
+**The card table, since 2026-09-29** — see
+`docs/decisions/0029-the-card-table.md`. A problem is a card framed in the
+Codeforces rank colour of its rating, a plan is a pack of five, and the
+landing page is a navy card table that deals a real sample pack. The system
+lives in `static/style.css`:
+
+```
+type     Unbounded (display) · Onest (reading) · IBM Plex Mono (data); six sizes
+space    five steps: 8 / 16 / 32 / 64 / 96
+colour   navy table, cream cards; gold = act here and the forecast,
+         green = accepted, seven rank colours = a problem's rating
+radius   4 / 10 / 16, and one shadow for a card lifted off the table
+motion   the landing page only: the deal, a card leaning to the mouse, and
+         the pack opening when the form is sent (about 1.5 seconds)
+```
+
+The tool pages take the same tokens and keep their layout. The results page
+drawn as flat cards is the next step, not yet built.
+
+Because every value is a token in one file, changing type, colour and
+spacing later is a one-file change. Layout can change too, at any point. It
+just means editing each page's template and CSS, and any check that looks for
+specific elements, instead of one file. That makes it the more expensive part
+of a late change of direction.
 
 ### Interactivity that is in scope
 
@@ -1157,31 +1174,6 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   markup, which the pet system at v1.5 (§11) would cause. Not before then, and
   not without an ADR. A component library such as shadcn/ui is a separate and
   weaker case, because it ships an appearance and §7.1 forbids a templated one.
-- **Final design direction.** Terminal (ADR 0006) is the working direction,
-  not necessarily the last one. Decide at v0.8, inside the design budget in
-  §7.1. The stack under it is settled: React for interactive parts (ADR 0008),
-  styling still the tokens in one stylesheet.
-  A second round on 2026-09-13 built four landing directions from things the
-  audience already knows (a problem statement, the rank colours, a calibration
-  plot, ICPC balloons). Preferred: rank colours, then balloons. The rank colours
-  read as stiff when used as large fields. They are the original saturated
-  handle colours, with very uneven lightness. Retuning them is part of the
-  decision.
-  *Reviewed 2026-09-28, before choosing.* Two findings constrain both
-  preferred directions. First, their second screens were written before
-  §11's rule and the 50% target: each says which topics a history is weak
-  in, which is the claim §11 refuses, and each aims at 70%. The visual ideas
-  can carry over; those two sections cannot. Second, rank colours make
-  colour mean a rating band everywhere, including the Rating column on the
-  results page. That conflicts with the current rule in ADR 0006 that the one
-  accent means "act here", and the current green is pupil's green, so
-  choosing them retires the accent and gives acting a neutral colour.
-  Retuning keeps each band's hue, evens out the lightness, and uses
-  saturated colour only at small sizes, with pale tints for large fields. A
-  third option came out of the review: the balloons, each in its problem's
-  rank colour, so that both ideas carry information. Whichever is chosen
-  redraws the landing page, so its layout fixed before the choice is fixed
-  twice; the results page's layout does not depend on it.
 - **3D balloons as the landing page's visual idea?** Proposed 2026-09-13: one 3D
   balloon per topic in the centre; clicking one makes it rise with the camera
   following, into that topic's recommendations. Material quality (light,
@@ -1198,9 +1190,29 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   still where layer 2's still image comes from (§7.1). Whether balloons ship
   at all is decided at v0.8, after a prototype with a fixed time limit shows
   whether the material quality is reachable inside the budget.
+  *Since 2026-09-29 the landing page's visual idea is the card table (ADR
+  0029).* Balloons would now have to fit beside it or replace it; no
+  prototype has been built.
 
 ### Answered
 
+- **Final design direction?** *(asked 09-12, answered 09-29, at v0.8 as
+  scheduled.)* The card table (ADR 0029), superseding terminal (ADR 0006).
+  Two rounds of landing directions (09-13) and five more drawn side by side
+  (09-28: the ladder, balloons, rank balloons, a one-row scoreboard, a
+  forecast) were all judged not creative: a site nobody would stop for. The
+  answer came from asking what this audience already plays with. Rank
+  colours are a rarity scale, so a problem is a card framed in its rating's
+  colour, and a plan is a pack of five. The prototype was the author's
+  favourite, and navy was kept as the table after six colours were tried.
+  The review of 09-28 had found two constraints, and both are met. The
+  second screens that claimed weak topics and aimed at 70% were not carried
+  over. The landing page's sections say only what the model can back up,
+  from its own constants. The single accent, which could not also be
+  pupil's green, became two colours: gold for acting and the forecast, and
+  green for accepted. The rank colours are used as card frames and as text
+  on cream, never as large fields, which is where they read as stiff. The
+  results page keeps its layout for now.
 - **What happens when a sync job is interrupted mid-user?** *(asked 08-11,
   answered 09-07, at v0.2 as scheduled.)* One transaction per user: the whole
   history is fetched, then written and `last_synced` set in a single

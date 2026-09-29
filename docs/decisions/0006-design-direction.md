@@ -1,8 +1,10 @@
 # 0006 — Design direction: terminal
 
 **Date:** 2026-09-12
-**Status:** accepted as the working direction. Not necessarily final: the
-final direction is revisited at v0.8 (spec §12).
+**Status:** superseded on 2026-09-29 by ADR 0029 (the card table). It was
+accepted as the working direction, not necessarily the final one, and the
+final direction was revisited at v0.8 (spec §12). Its amendment on fonts,
+self-hosting, still holds and now covers three families.
 
 ## Context
 
