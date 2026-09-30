@@ -5752,3 +5752,12 @@ Sixteen mutations, each in a fresh copy, all caught the first time: among
 them the data never sent, a browser sent data instead of the redirect, the
 verdict left out of the press, a double press sent twice, and a failed
 press left silent instead of sent the ordinary way.
+
+## 2026-09-30 — The card table is current, not decided
+
+A correction to the entry of 09-29, which called spec §12's design question
+answered. The card table is live and is the site's design system, but the
+author has not decided it is the final look. §12's question is open again,
+and ADR 0029 says "current". What the theme has not been tried on is the
+tool itself: the results page, read in a hurry on a phone. A mock-up of
+that page is the next test of it.

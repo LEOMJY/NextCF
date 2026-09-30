@@ -1,8 +1,11 @@
 # 0029 — Design direction: the card table
 
 **Date:** 2026-09-29
-**Status:** accepted. Supersedes ADR 0006 (terminal) as the site's design
-system. Like every choice in the spec, revisable.
+**Status:** accepted as the **current** direction: built, live, and the
+site's design system in place of ADR 0006 (terminal). **Not settled as the
+final one.** On 2026-09-30 the author said the theme is not decided yet, so
+spec §12's question stays open. The next test of it is the results page
+drawn in it (see Consequences).
 
 ## Context
 

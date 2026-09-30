@@ -726,7 +726,7 @@ rule, and they are withdrawn. Pick the scale; then hold it.
 canvas with a single green accent, 3px radius, no shadow. That was the
 working direction, and v0.8 replaced it.
 
-**The card table, since 2026-09-29** — see
+**The card table, since 2026-09-29, as the current direction** (not yet settled as the final one — §12) — see
 `docs/decisions/0029-the-card-table.md`. A problem is a card framed in the
 Codeforces rank colour of its rating, a plan is a pack of five, and the
 landing page is a navy card table that deals a real sample pack. The system
@@ -1174,6 +1174,23 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   markup, which the pet system at v1.5 (§11) would cause. Not before then, and
   not without an ADR. A component library such as shadcn/ui is a separate and
   weaker case, because it ships an appearance and §7.1 forbids a templated one.
+- **Final design direction.** Asked 09-12; the working answer since 09-29
+  is the card table (ADR 0029), which replaced terminal (ADR 0006) on the
+  live site. **It is the current direction, not a settled one:** on 09-30
+  the author said the theme is not decided. How it got here: two rounds of
+  landing directions (09-13) and five more drawn side by side (09-28: the
+  ladder, balloons, rank balloons, a one-row scoreboard, a forecast) were
+  all judged not creative, a site nobody would stop for. The card table
+  came from asking what this audience already plays with. Rank colours are
+  a rarity scale, so a problem is a card framed in its rating's colour,
+  and a plan is a pack of five. The prototype was the author's favourite,
+  and navy was kept after six table colours were tried. The review of 09-28
+  had found two constraints, and the card table meets both. The claims
+  about weak topics and the 70% target were not carried over. The one
+  accent became two colours, gold for acting and green for accepted. What
+  it has not been tested on is the tool: the results page, read in a hurry
+  on a phone, still has the old layout. A mock-up of that page in the card
+  table is the next input to the decision, not a commitment to it.
 - **3D balloons as the landing page's visual idea?** Proposed 2026-09-13: one 3D
   balloon per topic in the centre; clicking one makes it rise with the camera
   following, into that topic's recommendations. Material quality (light,
@@ -1196,23 +1213,6 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
 
 ### Answered
 
-- **Final design direction?** *(asked 09-12, answered 09-29, at v0.8 as
-  scheduled.)* The card table (ADR 0029), superseding terminal (ADR 0006).
-  Two rounds of landing directions (09-13) and five more drawn side by side
-  (09-28: the ladder, balloons, rank balloons, a one-row scoreboard, a
-  forecast) were all judged not creative: a site nobody would stop for. The
-  answer came from asking what this audience already plays with. Rank
-  colours are a rarity scale, so a problem is a card framed in its rating's
-  colour, and a plan is a pack of five. The prototype was the author's
-  favourite, and navy was kept as the table after six colours were tried.
-  The review of 09-28 had found two constraints, and both are met. The
-  second screens that claimed weak topics and aimed at 70% were not carried
-  over. The landing page's sections say only what the model can back up,
-  from its own constants. The single accent, which could not also be
-  pupil's green, became two colours: gold for acting and the forecast, and
-  green for accepted. The rank colours are used as card frames and as text
-  on cream, never as large fields, which is where they read as stiff. The
-  results page keeps its layout for now.
 - **What happens when a sync job is interrupted mid-user?** *(asked 08-11,
   answered 09-07, at v0.2 as scheduled.)* One transaction per user: the whole
   history is fetched, then written and `last_synced` set in a single
