@@ -5806,3 +5806,25 @@ A version with one button, "Not this one", in front of the three answers
 was tried first. The author: too complicated. The answers are straight
 under the card, one press each, and rule 5 now says so: an action taken on
 every plan is never behind a menu.
+
+## 2026-09-30, last — The results-page cards, set aside
+
+Two more mock-ups followed the checklist. The first put the three answers
+straight under each card, each with its effect on the next pack. The
+author: ugly. Five boxes of three lines under five cards put back the text
+the checklist had taken out, the same three sentences repeated five times.
+The second printed the cards: a face tinted toward the rank, a fine edge, the
+problem's letter in its contest as the picture, the three answers as a strip
+along the card's bottom edge, and the effect said once above the five. The
+author did not like that either, and intends to replace the whole theme
+later instead.
+
+Nothing on the site changed. What is kept from the round: the checklist in
+spec §7.1, which does not depend on the theme, and rule 5's line that an
+action taken on every plan is one press, never behind a menu.
+
+What the round taught about the process, for the next theme: five
+redraws, each answered with a word ("cheap", "ugly"), cost more than they
+had to. The checklist makes a verdict specific after the fact. Choosing a
+few real sites the author likes, before drawing anything, would make it
+specific before the fact.

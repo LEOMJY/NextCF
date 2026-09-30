@@ -1262,6 +1262,12 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   it has not been tested on is the tool: the results page, read in a hurry
   on a phone, still has the old layout. A mock-up of that page in the card
   table is the next input to the decision, not a commitment to it.
+  *09-30:* five versions of that mock-up were drawn, and the author liked
+  none of them. They intend to replace the whole theme later. Until then the
+  card table stays live as it is: the landing page as built, and the results
+  page in its current layout on the card table's tokens. The checklist
+  ("What a good page is", §7.1) does not depend on the theme and applies to
+  whatever replaces it.
 - **3D balloons as the landing page's visual idea?** Proposed 2026-09-13: one 3D
   balloon per topic in the centre; clicking one makes it rise with the camera
   following, into that topic's recommendations. Material quality (light,
