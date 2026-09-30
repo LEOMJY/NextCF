@@ -5794,14 +5794,15 @@ What the second mock-up broke, rule by rule:
 
 The third mock-up follows the checklist. The whole card is the link to the
 problem, since that is the page's one job. The card shows three things, the
-rating, the name and the chance, with the rarity small. Under it is one
-button, "Not this one", which opens three answers, each with its effect on
-the next pack. A card put down turns face down, like a discarded card. The
+rating, the name and the chance, with the rarity small. Under it are the
+three answers, each with its effect on the next pack ("Too hard · next pack
+easier"). A card put down turns face down, like a discarded card. The
 heading is one line, the explanation is one line, and topics and history sit
 below, the history folded. On a 375 × 812 phone the first card starts at
 about 295 pixels, in the top half as rule 13 asks. It is a mock-up only;
 nothing on the site has changed yet.
 
-One trade-off the author has to decide: answering a problem now takes two
-presses instead of one. In exchange the effect of each answer is stated, and
-the page is quiet until somebody wants to answer.
+A version with one button, "Not this one", in front of the three answers
+was tried first. The author: too complicated. The answers are straight
+under the card, one press each, and rule 5 now says so: an action taken on
+every plan is never behind a menu.

@@ -719,7 +719,10 @@ visitor can tell what it is for without being told.
 5. **A control looks like a control and says what it does.** A button looks
    pressable, not like a link or a word. Its label names what happens,
    including the consequence the visitor cannot see ("Too hard — next pack
-   easier"), not only what they think.
+   easier"), not only what they think. And nothing stands in front of it: an
+   action a visitor takes on every plan is on the page, one press, never
+   behind a menu or a "more" button (added 2026-09-30, when a "Not this one"
+   button in front of the three answers made them harder, not clearer).
 6. **One design, finished.** The same thing looks the same everywhere on the
    site. The details are done: alignment, spacing on the scale, hover and
    keyboard-focus states, icons that are drawn (never a character such as ✓
