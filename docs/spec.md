@@ -686,16 +686,79 @@ professional work, often with WebGL, custom illustration and custom type. What
 is large confident typography, one decisive colour choice, generous space, and a
 single clear visual idea.
 
-### What causes the amateur read, on both surfaces
+### What a good page is — the checklist
 
-All static, all boring to fix:
+Set on 2026-09-30, after the author judged a mock-up of the results page in
+the card table "cheap". "Cheap" has to be something a page can be checked
+against, or every redesign repeats the argument. This replaces the earlier
+list of what causes the amateur read, which is kept inside it as rule 6.
 
-- Browser-default fonts and default form controls
-- Spacing chosen ad hoc, so nothing lines up and rhythm is absent
-- Pure `#000` on pure `#fff`, or five unrelated colours
-- Undifferentiated walls of text, no type hierarchy
-- **Unhandled states** — a Flask traceback when a handle is mistyped is the
-  single loudest tell on this list
+**The definition.** A cheap page shows that nobody decided: things were
+added one at a time, and noise, repetition and decoration stand in for the
+decisions. A good page shows that every element was chosen, and the
+visitor can tell what it is for without being told.
+
+**Every page**
+
+1. **One job, one lead.** Write the page's one job before anything else.
+   Every element serves it, or is folded away until needed, or goes. The
+   results page: pick one of the five and go and solve it. The landing
+   page: make a stranger type a handle.
+2. **Say it once.** A control never needs a sentence beside it; if it seems
+   to, the control is unclear. An explanation appears once on a page, in
+   one line; anything longer belongs on `/how`. A note that applies only to
+   this visitor (an extrapolated rating, no rating yet) is information, not
+   explanation, and appears only when it applies.
+3. **One thing is largest.** In any region one element is clearly the
+   biggest and the rest are a clear step down. At most three text styles
+   inside one component.
+4. **Decoration carries information, or goes.** Every shadow, border, rule,
+   chip, uppercase label and colour answers "what does this tell the
+   visitor?". Colour has four meanings and no others: a rank colour is a
+   rating, gold is "act here", green is accepted, `--warn` is wrong.
+5. **A control looks like a control and says what it does.** A button looks
+   pressable, not like a link or a word. Its label names what happens,
+   including the consequence the visitor cannot see ("Too hard — next pack
+   easier"), not only what they think.
+6. **One design, finished.** The same thing looks the same everywhere on the
+   site. The details are done: alignment, spacing on the scale, hover and
+   keyboard-focus states, icons that are drawn (never a character such as ✓
+   standing in for one), no element overlapping another, figures of equal
+   width where numbers line up, and no settled or empty state that looks
+   broken. The static tells from before still count here: browser-default
+   fonts or controls, spacing chosen ad hoc, unrelated colours, walls of
+   text, and an unhandled state (a traceback when a handle is mistyped is
+   the loudest of all).
+
+**The landing page** (persuade: the visitor decides to act). From the
+direction round of 2026-09-28, written down here for the first time:
+
+7. **The product works in the first three seconds.** Something it actually
+   does is on the screen before anything explains it.
+8. **The audience's own language.** Rank colours, problem ids, AC, and the
+   card games the audience already knows. Nothing a generic product page
+   would say.
+9. **One memorable moment.** One thing somebody could describe an hour
+   later: the pack opening.
+10. **It becomes theirs at once.** Typing a handle is the action that sets
+    the moment off.
+11. **Bold, and true.** Every number on it is real and comes from the code.
+
+**The tool pages** (operate: the visitor finishes a task):
+
+12. **Calm.** The same visual world at low volume. Motion only where it
+    shows a change of state (a hover, a press being answered), never for
+    effect.
+13. **The five come first.** On a 375 × 812 phone, the first of the five
+    starts in the top half of the screen. This is measured, not judged.
+14. **Scannable.** Somebody comparing the five sees all five, with rating
+    and chance, without reading a sentence.
+
+**How it is used.** Every new page and every mock-up is checked against this
+list before it is shown, the way the checks run before a commit, and a
+failure names its rule ("rule 5: the buttons look like links"). A rule that
+turns out wrong is changed here, on purpose, rather than broken quietly on
+one page.
 
 ### Design tokens — a system, chosen by the author
 
@@ -815,6 +878,11 @@ folded        what is kept but not read on every visit: why Solved
 A new sentence about the five goes into the group under the table, not
 above it. If it seems to need to be above, that is a reason to change the
 one line, not to add a second.
+
+*Amended 2026-09-30 by the checklist above (rule 2).* The group under the
+five holds only the notes that apply to this visitor. The definition of
+Rating and Chance, which applies to everybody, shrinks to the page's one
+line of explanation, and the rest of it lives on `/how`.
 
 The React rejection in §7 was re-examined against this section and stood at
 v0.2; React was adopted for interactive components only on 2026-09-13 (ADR

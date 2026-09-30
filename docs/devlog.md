@@ -5761,3 +5761,47 @@ author has not decided it is the final look. §12's question is open again,
 and ADR 0029 says "current". What the theme has not been tried on is the
 tool itself: the results page, read in a hurry on a phone. A mock-up of
 that page is the next test of it.
+
+## 2026-09-30, later — What a good page is
+
+The author judged the second mock-up of the results page in the card table
+"cheap": too much text, and buttons ("too hard", "too easy", "skip") that
+did not say what they were. Before redrawing it, "cheap" was defined, so that
+the next page is checked against something instead of argued about again.
+Spec §7.1 now has the checklist, 14 rules: six for every page, five for the
+landing page, three for the tool pages. It replaces the older list of what
+causes the amateur read, which is kept inside it.
+
+The definition: a cheap page shows that nobody decided. Things were added
+one at a time, and noise, repetition and decoration stand in for the
+decisions. The landing page's five rules had been worked out on 09-28, when
+the direction was chosen, and lived only in a conversation until now.
+
+What the second mock-up broke, rule by rule:
+
+- **One lead (1):** on a phone, 430 pixels of heading, sync details, a
+  button and its explanation came before the five.
+- **Say it once (2):** a sentence beside the update button, a paragraph
+  defining Rating and Chance, a sentence beside "swap the five", and "first
+  try accepted" printed on all five cards.
+- **One thing largest (3):** six text styles on a 190-pixel card.
+- **Decoration (4):** five thick saturated frames side by side, plus tag
+  chips, dashed rules and shadows.
+- **Controls (5):** the buttons were grey underlined words, which read as
+  links, and none of them said what it does to the next pack.
+- **One design (6):** the top of the page was still the old tool page with
+  cards pasted under it; a text ✓ stood in for an icon.
+
+The third mock-up follows the checklist. The whole card is the link to the
+problem, since that is the page's one job. The card shows three things, the
+rating, the name and the chance, with the rarity small. Under it is one
+button, "Not this one", which opens three answers, each with its effect on
+the next pack. A card put down turns face down, like a discarded card. The
+heading is one line, the explanation is one line, and topics and history sit
+below, the history folded. On a 375 × 812 phone the first card starts at
+about 295 pixels, in the top half as rule 13 asks. It is a mock-up only;
+nothing on the site has changed yet.
+
+One trade-off the author has to decide: answering a problem now takes two
+presses instead of one. In exchange the effect of each answer is stated, and
+the page is quiet until somebody wants to answer.
