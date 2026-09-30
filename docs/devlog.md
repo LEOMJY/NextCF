@@ -5700,3 +5700,55 @@ the fallback timer taken out, the timer left running after Back, the width
 read from `--cw` again, a caption that calls the sample "Your pack", the
 muted grey darkened below 4.5 to 1, a solved mark drawn in gold, a font
 file's licence deleted.
+
+## 2026-09-29, later — A press without a reload
+
+Found using the site: every "too hard", "too easy", "skip" and "undo"
+reloaded the whole results page. That was by design. Each button was a
+plain form, and the server answered with a redirect back to the row, which
+is what works with scripting off (spec §7.1, layer 1). Five presses a plan
+made five flashes of the whole page. The author chose to fix it on the
+server as well as in the page (ADR 0030).
+
+### What was built
+
+- **One route, two answers.** `feedback`, `undo` and `restore` record the
+  press as before, then read the request's `Accept` header, which says what
+  kind of answer the sender wants. A browser's form asks for HTML and still
+  gets the redirect. The page's script asks for JSON and gets the list's
+  five, from the same code the topic chart already used.
+- **The island sends the form itself** and redraws only the five. The
+  keyboard lands on the control that took the pressed one's place, and a
+  hidden status line tells a screen reader what changed. Anything but the
+  five coming back, and the form is sent the ordinary way, which is
+  harmless twice: the same answer counts once.
+- "Swap the five" and "next five" still reload. They change the target and
+  the history too.
+
+### What broke on the way
+
+- **A press whose answer equalled the screen moved no focus.** The focus
+  step ran when the five changed, and in the test for "put back" the server
+  answered with the same list, so React saw no change and never ran it. The
+  real server sends new objects every time, so the site would have worked.
+  But that was luck, not design. It now follows a count of presses drawn,
+  not the five themselves.
+- **`form.submit()` leaves out the button that was pressed**, and a
+  verdict is the button's own value, so the ordinary way sent a press with
+  no verdict: a 400. The button's name and value go into the form as a
+  hidden field first. `requestSubmit()` would carry it, but it fires the
+  submit event again, straight back into the island.
+
+### How it was checked
+
+In the browser, on the local server: "skip" and then "undo" on a row. Each
+was one POST, answered 200 with JSON. The page was never reloaded, which a
+marker left on it before the press showed. The plan's line went to "1 of 5
+done" and back. Focus moved to "undo", then to "too hard", and the status
+line said "skipped", then "back in the plan".
+
+Nine new component tests and six new plan checks: 478 checks pass.
+Sixteen mutations, each in a fresh copy, all caught the first time: among
+them the data never sent, a browser sent data instead of the redirect, the
+verdict left out of the press, a double press sent twice, and a failed
+press left silent instead of sent the ordinary way.

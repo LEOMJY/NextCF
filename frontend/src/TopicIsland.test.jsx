@@ -328,3 +328,133 @@ describe('a practice plan', () => {
     }
   })
 })
+
+// ADR 0030: the buttons on the five are sent without a reload, and the
+// server's answer -- the list's five, as data -- is drawn in place.
+describe('a press without a reload', () => {
+  // A fetch that answers like web.five_as_data: JSON, with its type said.
+  function answeringData(body) {
+    return vi.fn(async () => ({
+      ok: true, status: 200,
+      headers: { get: (name) => (name.toLowerCase() === 'content-type' ? 'application/json' : null) },
+      json: async () => body,
+    }))
+  }
+  // Draw `list` with the network and the ordinary submission stood in for.
+  function pressable(list, fetchImpl, { dismissed = 0 } = {}) {
+    const submit = vi.fn()
+    const view = render(<TopicIsland initial={{ ...initial, recs: list, dismissed }} fetchImpl={fetchImpl}
+                                     navigate={vi.fn()} submit={submit} />)
+    return { ...view, submit }
+  }
+  const sent = (fetchImpl) => {
+    const [address, options] = fetchImpl.mock.calls[0]
+    return { address, options, fields: Object.fromEntries(options.body.entries()) }
+  }
+
+  it('sends the press, with the button pressed, and draws the answer in place', async () => {
+    const after = recs(null, [problem('1A', 'Open One', { outcome: 'too_hard' }), problem('2A', 'Other One')])
+    const fetchImpl = answeringData({ recs: after, dismissed: 1 })
+    const { submit } = pressable(recs(null, [problem('1A', 'Open One'), problem('2A', 'Other One')]), fetchImpl)
+
+    fireEvent.click(screen.getByRole('button', { name: 'too hard: Open One' }))
+
+    await screen.findByRole('button', { name: 'undo: Open One' })
+    const { address, options, fields } = sent(fetchImpl)
+    expect(address).toBe('/results/somebody/feedback')
+    expect(options.method).toBe('POST')
+    expect(options.headers.Accept).toBe('application/json')
+    expect(fields).toEqual({ problem: '1A', verdict: 'too_hard' })
+    expect(screen.getByText('Open One').closest('tr').textContent).toContain('marked too hard')
+    expect(submit).not.toHaveBeenCalled()
+  })
+
+  it('tells a screen reader what changed, and puts the keyboard on the button that took its place', async () => {
+    const after = recs(null, [problem('1A', 'Open One', { outcome: 'skip' })])
+    const { container } = pressable(recs(null, [problem('1A', 'Open One')]), answeringData({ recs: after, dismissed: 1 }))
+    fireEvent.click(screen.getByRole('button', { name: 'skip: Open One' }))
+    await screen.findByRole('button', { name: 'undo: Open One' })
+    expect(container.querySelector('.recs [role="status"]').textContent).toBe('Open One: skipped.')
+    await waitFor(() => expect(document.activeElement.getAttribute('aria-label')).toBe('undo: Open One'))
+  })
+
+  it('undo takes the row back, and the keyboard lands on its first button', async () => {
+    const after = recs(null, [problem('1A', 'Pressed One')])
+    const fetchImpl = answeringData({ recs: after, dismissed: 0 })
+    const { container } = pressable(recs(null, [problem('1A', 'Pressed One', { outcome: 'too_easy' })]), fetchImpl, { dismissed: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'undo: Pressed One' }))
+    await screen.findByRole('button', { name: 'too hard: Pressed One' })
+    expect(sent(fetchImpl).address).toBe('/results/somebody/undo')
+    expect(sent(fetchImpl).fields).toEqual({ problem: '1A' })
+    expect(container.querySelector('.recs [role="status"]').textContent).toBe('Pressed One: back in the plan.')
+    await waitFor(() => expect(document.activeElement.getAttribute('aria-label')).toBe('too hard: Pressed One'))
+  })
+
+  it('a press on a topic list names the list it was made on', async () => {
+    const list = recs('dp', [problem('9A', 'A DP Problem')])
+    const fetchImpl = answeringData({ recs: recs('dp', [problem('9A', 'A DP Problem', { outcome: 'too_easy' })]), dismissed: 1 })
+    pressable(list, fetchImpl)
+    fireEvent.click(screen.getByRole('button', { name: 'too easy: A DP Problem' }))
+    await screen.findByRole('button', { name: 'undo: A DP Problem' })
+    expect(sent(fetchImpl).fields).toEqual({ problem: '9A', topic: 'dp', verdict: 'too_easy' })
+  })
+
+  it('"put back" is sent the same way, and the keyboard goes to the heading when the button has gone', async () => {
+    const list = recs(null, [problem('1A', 'Open One')])
+    const fetchImpl = answeringData({ recs: list, dismissed: 0 })
+    const { container } = pressable(list, fetchImpl, { dismissed: 3 })
+    fireEvent.click(screen.getByRole('button', { name: 'Put back all 3 problems you hid' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Put back/ })).toBeNull())
+    expect(sent(fetchImpl).address).toBe('/results/somebody/restore')
+    expect(container.querySelector('.recs [role="status"]').textContent).toBe('The problems you hid are back.')
+    await waitFor(() => expect(document.activeElement.textContent).toBe('Next'))
+  })
+
+  it('anything but the five coming back sends the form the ordinary way, with the button pressed', async () => {
+    const page = vi.fn(async () => ({ ok: true, status: 200, headers: { get: () => 'text/html; charset=utf-8' }, json: async () => ({}) }))
+    const { submit } = pressable(recs(null, [problem('1A', 'Open One')]), page)
+    fireEvent.click(screen.getByRole('button', { name: 'too easy: Open One' }))
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1))
+    const [form, pressed] = submit.mock.calls[0]
+    expect(form.getAttribute('action')).toBe('/results/somebody/feedback')
+    expect(pressed.value).toBe('too_easy')
+
+    cleanup()
+    const offline = vi.fn(async () => { throw new TypeError('Failed to fetch') })
+    const second = pressable(recs(null, [problem('1A', 'Open One')]), offline)
+    fireEvent.click(screen.getByRole('button', { name: 'skip: Open One' }))
+    await waitFor(() => expect(second.submit).toHaveBeenCalledTimes(1))
+  })
+
+  it('the ordinary way carries the pressed button, which form.submit() would leave out', async () => {
+    const page = vi.fn(async () => ({ ok: false, status: 500, headers: { get: () => 'text/html' }, json: async () => ({}) }))
+    const original = HTMLFormElement.prototype.submit
+    const submitted = []
+    HTMLFormElement.prototype.submit = function () { submitted.push(this) }
+    try {
+      render(<TopicIsland initial={{ ...initial, recs: recs(null, [problem('1A', 'Open One')]) }} fetchImpl={page} navigate={vi.fn()} />)
+      fireEvent.click(screen.getByRole('button', { name: 'too hard: Open One' }))
+      await waitFor(() => expect(submitted.length).toBe(1))
+      expect(submitted[0].querySelector('input[type="hidden"][name="verdict"]').value).toBe('too_hard')
+    } finally {
+      HTMLFormElement.prototype.submit = original
+    }
+  })
+
+  it('a second press while the first is on its way is not sent', async () => {
+    let answer
+    const fetchImpl = vi.fn(() => new Promise((resolve) => { answer = resolve }))
+    pressable(recs(null, [problem('1A', 'Open One'), problem('2A', 'Other One')]), fetchImpl)
+    fireEvent.click(screen.getByRole('button', { name: 'too hard: Open One' }))
+    fireEvent.click(screen.getByRole('button', { name: 'too hard: Other One' }))
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    answer({ ok: false, status: 500, headers: { get: () => '' }, json: async () => ({}) })
+  })
+
+  it('ending the plan still reloads the page: it changes more than the five', () => {
+    const fetchImpl = answeringData({})
+    const { container } = pressable(recs(null, [problem('1A', 'Open One')]), fetchImpl)
+    fireEvent.submit(container.querySelector('.plan-next'))
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+})

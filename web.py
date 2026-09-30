@@ -882,10 +882,29 @@ def recommendations_data(handle):
     topic = request.args.get("topic") or None
     if topic is not None and topic not in db.pool_topics(conn):
         return jsonify({"error": "no such topic"}), 404
+    return five_as_data(conn, user, topic)
+
+
+def five_as_data(conn, user, topic):
+    """A list's five as the island draws them: the same recommendation_view
+    the page calls, recorded as shown the same way (ADR 0024). The one
+    answer for a topic being chosen and for a press made without a reload."""
     recs = recommendation_view(conn, user, topic)
     if recs["state"] == "ok":
         record_shown(conn, user, recs)
-    return jsonify({"recs": recs, "dismissed": db.count_dismissals(conn, handle)})
+    return jsonify({"recs": recs, "dismissed": db.count_dismissals(conn, user["handle"])})
+
+
+def wants_data():
+    """True when the page's script sent this press and asked for the five
+    back as data, instead of a whole page to reload (ADR 0030).
+
+    A browser sending a form asks for HTML first, and gets the redirect it
+    always got; the island's fetch asks for application/json. Read from the
+    Accept header, which every browser sends, rather than from a field of
+    our own that anything could leave out or add.
+    """
+    return request.accept_mimetypes.best_match(["text/html", "application/json"]) == "application/json"
 
 
 def record_shown(conn, user, recs):
@@ -1003,8 +1022,12 @@ def feedback(handle):
     # spelling, not the typed one, so every row about this person names them
     # the same way.
     db.record_feedback(conn, user["handle"], problem_id, verdict)
-    # Back to the list the press was made on, at the row: it now says what
-    # was pressed, which is the confirmation.
+    # Pressed from the page's script: the list's five, so it redraws them
+    # in place (ADR 0030). The row now says what was pressed, which is the
+    # confirmation, either way.
+    if wants_data():
+        return five_as_data(conn, user, topic)
+    # Back to the list the press was made on, at the row.
     return redirect(url_for("results", handle=handle, topic=topic, _anchor=row_anchor(problem_id)))
 
 
@@ -1033,6 +1056,9 @@ def undo(handle):
     user = db.get_user(conn, handle)
     if user is not None:
         db.undo_feedback(conn, user["handle"], problem_id)
+        # The five as data for the page's script, as for a press (ADR 0030).
+        if wants_data() and user["last_synced"] is not None:
+            return five_as_data(conn, user, topic)
     # At the row, which has its buttons back.
     return redirect(url_for("results", handle=handle, topic=topic, _anchor=row_anchor(problem_id)))
 
@@ -1049,11 +1075,19 @@ def restore(handle):
         return render_template("error.html", handle=handle,
                                message="That does not look like a Codeforces handle."), 404
 
-    db.clear_dismissals(get_db(), handle)
+    conn = get_db()
+    db.clear_dismissals(conn, handle)
+    topic = request.form.get("topic") or None
+    # The five as data for the page's script, as for a press (ADR 0030) --
+    # and only for a list that exists: the data is drawn from the topic,
+    # where the redirect below only names it.
+    if wants_data() and (topic is None or topic in db.pool_topics(conn)):
+        user = db.get_user(conn, handle)
+        if user is not None and user["last_synced"] is not None:
+            return five_as_data(conn, user, topic)
     # Back to the list the visitor was on. Only used to build the address,
     # and url_for escapes it, so an unknown topic costs a 404 page at worst.
-    return redirect(url_for("results", handle=handle, topic=request.form.get("topic") or None,
-                            _anchor=LIST_ANCHOR))
+    return redirect(url_for("results", handle=handle, topic=topic, _anchor=LIST_ANCHOR))
 
 
 @app.route("/results/<handle>/plan", methods=["POST"])

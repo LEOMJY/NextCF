@@ -19,7 +19,7 @@ const MARKED = { too_hard: 'marked too hard', too_easy: 'marked too easy', skip:
 // One problem's row: the link, the "less evidence" note on a filled row,
 // then either how it was settled in the plan (ADR 0026) or the verdict
 // buttons as a real form, the rating and the chance.
-function ProblemRow({ problem, topic, urls }) {
+function ProblemRow({ problem, topic, urls, onPress }) {
   const settled = problem.solved || problem.outcome
   return (
     // The id is where a press on this row comes back to (web.row_anchor),
@@ -39,16 +39,17 @@ function ProblemRow({ problem, topic, urls }) {
         {problem.solved ? (
           <span className="plan-mark solved">✓ solved</span>
         ) : problem.outcome ? (
-          <form className="plan-mark" method="post" action={urls.undo}>
+          <form className="plan-mark" method="post" action={urls.undo} onSubmit={onPress}>
             {MARKED[problem.outcome]}{' '}
             <input type="hidden" name="problem" value={problem.id} />
             {topic && <input type="hidden" name="topic" value={topic} />}
             <button type="submit" aria-label={`undo: ${problem.name}`}>undo</button>
           </form>
         ) : (
-          // A form and a POST, exactly as the template's: pressing reloads
-          // the page on the same list, which is what the server redirects to.
-          <form className="verdict-form" method="post" action={urls.feedback}>
+          // A form and a POST, exactly as the template's. With the island
+          // running, onPress sends it without a reload and draws the answer
+          // (ADR 0030); without, pressing reloads the page on the same list.
+          <form className="verdict-form" method="post" action={urls.feedback} onSubmit={onPress}>
             <input type="hidden" name="problem" value={problem.id} />
             {topic && <input type="hidden" name="topic" value={topic} />}
             <button type="submit" name="verdict" value="too_hard" aria-label={`too hard: ${problem.name}`}>too hard</button>
@@ -206,7 +207,7 @@ function Empty({ recs, dismissed, urls, onChoose, handle }) {
   )
 }
 
-export default function Recommendations({ handle, recs, dismissed, dismissalsKept, urls, busy, heading, onChoose }) {
+export default function Recommendations({ handle, recs, dismissed, dismissalsKept, urls, busy, heading, onChoose, onPress, said = '' }) {
   // The rows pressed in this list. "Put back" is offered only for hidden
   // problems beyond these, as in the template -- one skip used to offer
   // both it and the row's own undo. A pressed row since solved counts too:
@@ -221,6 +222,9 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
     // the five" come back to (web.LIST_ANCHOR), as in the template.
     <section className="recs" id="next" aria-busy={busy}>
       <h2 ref={heading} tabIndex={-1}>Next{recs.topic ? ` in ${recs.topic}` : ''}</h2>
+      {/* What the last press did, read out by a screen reader (ADR 0030).
+          The template draws it empty. */}
+      <p className="sr-only" role="status">{said}</p>
 
       {recs.topic && (
         <p className="meta topic-scope">
@@ -246,7 +250,7 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
             </thead>
             <tbody>
               {recs.problems.map((problem) => (
-                <ProblemRow key={problem.id} problem={problem} topic={recs.topic} urls={urls} />
+                <ProblemRow key={problem.id} problem={problem} topic={recs.topic} urls={urls} onPress={onPress} />
               ))}
             </tbody>
           </table>
@@ -275,7 +279,7 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
 
       {dismissed > answered && (
         <>
-          <form className="restore" method="post" action={urls.restore}>
+          <form className="restore" method="post" action={urls.restore} onSubmit={onPress}>
             {recs.topic && <input type="hidden" name="topic" value={recs.topic} />}
             <button type="submit">
               {dismissed === 1 ? 'Put back the problem you hid' : `Put back all ${dismissed} problems you hid`}

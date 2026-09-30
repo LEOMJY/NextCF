@@ -79,6 +79,11 @@
        LIST_ANCHOR). #}
     <section class="recs" id="next">
       <h2>Next{% if recs.topic %} in {{ recs.topic }}{% endif %}</h2>
+      {# What a press did, for a screen reader, when the page's script made
+         it without a reload (ADR 0030): Recommendations.jsx fills it in.
+         Empty here -- a press without script reloads the page, and the row
+         itself says what was pressed. #}
+      <p class="sr-only" role="status"></p>
 
       {% if recs.topic %}
         {# A chosen topic, said plainly, with the way back. #}

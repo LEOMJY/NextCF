@@ -201,13 +201,13 @@ because the landing page has a different job from the tool — see §7.1.
 | `/progress/<job>` | Show a long job making progress without lying about it | v0.2 |
 | `/progress/<job>/status` | The same job as one line, for a results page to keep current — ADR 0018 | v0.7 |
 | `POST /results/<handle>/sync` | Fetch this handle again because the visitor asked, then back to their page — ADR 0018 | v0.7 |
-| `POST /results/<handle>/feedback` | "Too hard" or "too easy" on one problem: hide it and mark it in its plan; the plan's presses move the target when it ends — ADR 0021, 0027 | v0.7 |
-| `POST /results/<handle>/restore` | Put back every problem this visitor has hidden — ADR 0021 | v0.7 |
+| `POST /results/<handle>/feedback` | "Too hard", "too easy" or "skip" on one problem: hide it and mark it in its plan; the plan's presses move the target when it ends — ADR 0021, 0027, 0028. Sent by the page's script, it answers with the list's five as data instead of a redirect, and the page redraws them without a reload — ADR 0030 | v0.7 |
+| `POST /results/<handle>/restore` | Put back every problem this visitor has hidden — ADR 0021; as data for the page's script, like feedback — ADR 0030 | v0.7 |
 | `/results/<handle>` | Five problems, the probability on each, the topic breakdown | v0.1 crude, v0.4 real |
 | `/results/<handle>?topic=<tag>` | The same page, five problems in one topic, at that topic's own target — ADR 0025 | v0.8 |
 | `/results/<handle>/recommendations?topic=<tag>` | The five as data, for the topic chart to switch topics without reloading — ADR 0025 | v0.8 |
 | `POST /results/<handle>/plan` | End this list's plan: "next five" when it is done, "swap the five" when it is not. The page makes the next plan when it is next shown — ADR 0026 | v0.8 |
-| `POST /results/<handle>/undo` | Take back one answer about one problem — ADR 0028 | v0.8 |
+| `POST /results/<handle>/undo` | Take back one answer about one problem — ADR 0028; as data for the page's script, like feedback — ADR 0030 | v0.8 |
 | `/robots.txt` | Asks crawlers to leave `/results/` and `/progress/` alone: opening those pages makes plans and records showings | v0.8 |
 | `/how` | How the model works, and the §9 number | v0.6 |
 | `/privacy` | What data is read, what is stored, how to have it removed | v0.7 |

@@ -2,6 +2,8 @@
 
 **Date:** 2026-09-26
 **Status:** accepted. The scope change is made; the build follows.
+*Amended 2026-09-29:* the island also sends the buttons on the five without
+a reload, and the server answers them with the five as data (ADR 0030).
 
 ## Context
 

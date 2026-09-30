@@ -1180,6 +1180,108 @@ check("a plan keeps the rating it was made at", a_plan_keeps_the_rating_it_was_m
 print("\nthe landing page")
 check("the landing page can offer to continue", the_landing_page_can_offer_to_continue)
 
+
+# ------------------------------------------- a press without a reload
+# ADR 0030. The page's script sends a press asking for data, and draws the
+# five that come back; a browser sending the form gets the redirect it always
+# got. Whatever else the server says -- a refusal, a page -- the script sends
+# the form the ordinary way, so those must stay pages.
+AS_DATA = {"Accept": "application/json"}
+AS_A_BROWSER = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+
+
+def five(response):
+    """The five a press answered with, by id, and how many are hidden."""
+    assert response.status_code == 200 and response.mimetype == "application/json", \
+        (response.status_code, response.mimetype)
+    data = response.get_json()
+    return {row["id"]: row for row in data["recs"]["problems"]}, data
+
+
+def a_press_sent_by_script_is_answered_with_the_five():
+    a_visitor()
+    first = ids()
+    rows, data = five(client.post(f"/results/{HANDLE}/feedback", headers=AS_DATA,
+                                  data={"problem": first[0], "verdict": "too_hard"}))
+    assert list(rows) == first, "the five changed with a press"
+    assert rows[first[0]]["outcome"] == "too_hard", rows[first[0]]
+    assert data["dismissed"] == 1 and hidden() == {first[0]: "too_hard"}, (data["dismissed"], hidden())
+    # The same five the page draws after a reload, and the island asks for.
+    again, _ = five(client.get(f"/results/{HANDLE}/recommendations"))
+    assert again == rows, "the answer to a press is not the list the page would show"
+
+
+def a_browser_still_gets_the_redirect():
+    """No Accept header, a browser's own, or anything at all: the redirect
+    to the row, as before ADR 0030 -- the form without script depends on
+    it."""
+    a_visitor()
+    first = ids()
+    for headers in ({}, AS_A_BROWSER, {"Accept": "*/*"}):
+        response = client.post(f"/results/{HANDLE}/feedback", headers=headers,
+                               data={"problem": first[0], "verdict": "skip"})
+        assert response.status_code == 302 and response.headers["Location"].endswith(f"#p-{first[0]}"), \
+            (headers, response.status_code, response.headers.get("Location"))
+    for path, data in (("undo", {"problem": first[0]}), ("restore", {})):
+        response = client.post(f"/results/{HANDLE}/{path}", headers=AS_A_BROWSER, data=data)
+        assert response.status_code == 302, (path, response.status_code)
+
+
+def undo_and_put_back_answer_with_the_five_too():
+    a_visitor()
+    first = ids()
+    press(first[0], "skip")
+    rows, data = five(client.post(f"/results/{HANDLE}/undo", headers=AS_DATA, data={"problem": first[0]}))
+    assert rows[first[0]]["outcome"] is None and data["dismissed"] == 0, (rows[first[0]], data["dismissed"])
+    end()
+    second = ids()
+    press(second[0], "too_easy")
+    rows, data = five(client.post(f"/results/{HANDLE}/restore", headers=AS_DATA, data={}))
+    assert data["dismissed"] == 0 and hidden() == {}, hidden()
+    assert list(rows) == second, "put back changed the five"
+
+
+def a_press_on_a_topic_list_answers_with_that_list():
+    a_visitor()
+    first = ids("dp")
+    rows, data = five(client.post(f"/results/{HANDLE}/feedback", headers=AS_DATA,
+                                  data={"problem": first[0], "verdict": "too_hard", "topic": "dp"}))
+    assert data["recs"]["topic"] == "dp" and list(rows) == first, (data["recs"]["topic"], list(rows), first)
+    # A list that does not exist is not drawn from: the redirect, which ends
+    # at the page that says so.
+    response = client.post(f"/results/{HANDLE}/restore", headers=AS_DATA, data={"topic": "no such topic"})
+    assert response.status_code == 302, response.status_code
+
+
+def a_refused_press_is_still_the_page_that_says_why():
+    a_visitor()
+    first = ids()
+    response = client.post(f"/results/{HANDLE}/feedback", headers=AS_DATA,
+                           data={"problem": first[0], "verdict": "much too hard"})
+    assert response.status_code == 400 and response.mimetype == "text/html", (response.status_code, response.mimetype)
+    response = client.post(f"/results/{HANDLE}/undo", headers=AS_DATA, data={"problem": "999999Z"})
+    assert response.status_code == 404 and response.mimetype == "text/html", (response.status_code, response.mimetype)
+
+
+def the_page_has_somewhere_to_say_what_a_press_did():
+    """The island fills it (Recommendations.jsx); the template draws it
+    empty, inside the section the island replaces, so the two match."""
+    a_visitor()
+    ids()
+    html = page()
+    section = html[html.index('<section class="recs" id="next">'):]
+    assert section.index('<p class="sr-only" role="status"></p>') < section.index("</section>"), \
+        "no status line for a screen reader inside the five's section"
+
+
+print("\na press without a reload")
+check("a press sent by script is answered with the five", a_press_sent_by_script_is_answered_with_the_five)
+check("a browser still gets the redirect", a_browser_still_gets_the_redirect)
+check("undo and put back answer with the five too", undo_and_put_back_answer_with_the_five_too)
+check("a press on a topic list answers with that list", a_press_on_a_topic_list_answers_with_that_list)
+check("a refused press is still the page that says why", a_refused_press_is_still_the_page_that_says_why)
+check("the page has somewhere to say what a press did", the_page_has_somewhere_to_say_what_a_press_did)
+
 print(f"\n{passed} passed, {failed} failed")
 shutil.rmtree(SCRATCH, ignore_errors=True)
 sys.exit(1 if failed else 0)
