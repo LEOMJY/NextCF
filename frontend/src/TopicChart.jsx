@@ -23,12 +23,18 @@ function TopicLink({ tag, current, urls, onChoose }) {
 
 export default function TopicChart({ topics, otherTopics, totals, current, urls, onChoose }) {
   if (!topics.length && !otherTopics.length) return null
+  // What the Solved column adds up to. The fold under the table says only
+  // what is true of these numbers, as the template's does (audit of
+  // 2026-10-01): the column is more than the total only when it is.
+  const column = topics.reduce((sum, t) => sum + t.solved, 0)
   return (
     <section className="topics">
       <h2>Topics</h2>
       <p className="meta">
-        What you have practised. Not yet how good you are at it. Choose a topic to see five
-        problems in it.
+        {topics.length > 0
+          ? 'What you have practised. Not yet how good you are at it.'
+          : 'Nothing practised yet.'}{' '}
+        Choose a topic to see five problems in it.
       </p>
 
       {topics.length > 0 && (
@@ -68,19 +74,22 @@ export default function TopicChart({ topics, otherTopics, totals, current, urls,
           </table>
           {/* Folded, as in the template (review of 2026-09-28): the answer
               to a question most visitors never ask, one press away. */}
-          <details className="footnote">
-            <summary>Why Solved adds up to more than {totals.solved}</summary>
-            <p>
-              A problem carries about three tags and counts under each, so the Solved column adds
-              to more than the {totals.solved} problems solved
-              {totals.solved_untagged
-                ? `, and ${totals.solved_untagged} solved ${totals.solved_untagged === 1 ? 'problem has' : 'problems have'} no tags at all and appear in no row`
-                : ''}
-              . Average rating covers the rated problems solved in each topic; topics differ in how
-              hard their problems are for everybody, so the averages are not yet comparable between
-              rows.
-            </p>
-          </details>
+          {totals.solved > 0 && (
+            <details className="footnote">
+              <summary>
+                {column > totals.solved ? `Why Solved adds up to more than ${totals.solved}` : 'About these numbers'}
+              </summary>
+              <p>
+                {column > totals.solved &&
+                  `A problem carries about three tags and counts under each, so the Solved column adds to more than the ${totals.solved} problem${totals.solved !== 1 ? 's' : ''} solved. `}
+                {totals.solved_untagged > 0 &&
+                  `${totals.solved_untagged} solved ${totals.solved_untagged === 1 ? 'problem has' : 'problems have'} no tags at all and ${totals.solved_untagged === 1 ? 'appears' : 'appear'} in no row. `}
+                Average rating covers the rated problems solved in each topic; topics differ in how
+                hard their problems are for everybody, so the averages are not yet comparable
+                between rows.
+              </p>
+            </details>
+          )}
         </>
       )}
 

@@ -938,8 +938,10 @@ def what_is_kept_but_not_read_every_visit_is_folded():
     a_solve(first[0], seconds_from_now=0)
     end()
     text = page()
-    assert '<details class="footnote">' in text and "<summary>Why Solved adds up to more than" in text, \
-        "the Solved column's footnote is not folded"
+    # Its summary is one of two, by what the numbers do (check_web_flow).
+    assert '<details class="footnote">' in text and (
+        "<summary>Why Solved adds up to more than" in text
+        or "<summary>About these numbers</summary>" in text), "the Solved column's footnote is not folded"
     assert '<details class="meta other-topics"' in text and "Not practised yet:" in text, \
         "the unpractised topics are not folded"
     plans = text.split('<section class="plans">', 1)[1].split("</section>", 1)[0]

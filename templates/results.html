@@ -17,7 +17,7 @@
        web.ago's -- "5 minutes ago" -- and the exact instant is in datetime
        for machines and in title for anybody who hovers. #}
     <p class="meta">
-      {{ total }} submissions, last synced
+      {{ "{:,}".format(total) }} submission{{ "s" if total != 1 }}, last synced
       <time datetime="{{ last_synced }}" title="{{ last_synced }}">{{ last_synced | ago }}</time>.
     </p>
 
@@ -473,7 +473,11 @@
            sentence is ADR 0025's: the table is now also where a topic is
            chosen, and the page offers every topic without suggesting any. #}
         <p class="meta">
-          What you have practised. Not yet how good you are at it.
+          {% if topics %}
+            What you have practised. Not yet how good you are at it.
+          {% else %}
+            Nothing practised yet.
+          {% endif %}
           Choose a topic to see five problems in it.
         </p>
 
@@ -542,22 +546,39 @@
            summary asks the question, so whoever has it finds the answer in
            one press. <details> is the browser's own fold: it needs no script,
            and a keyboard opens it with Enter. #}
+        {# Only what is true of these numbers (audit of 2026-10-01). With
+           nothing solved there is nothing to explain, and the fold asked
+           "why Solved adds up to more than 0". The column adds to more than
+           the total only when it does: one solve with one tag adds to
+           exactly one. #}
+        {% set column = topics | sum(attribute="solved") %}
+        {% if totals.solved %}
         <details class="footnote">
-          <summary>Why Solved adds up to more than {{ totals.solved }}</summary>
-          <p>
-            A problem carries about three tags and counts under each, so the
-            Solved column adds to more than the {{ totals.solved }} problems
-            solved
-            {%- if totals.solved_untagged %}, and {{ totals.solved_untagged }}
-            solved
-            {{- ' problem has' if totals.solved_untagged == 1 else ' problems have' }}
-            no tags at all and appear in no row
+          <summary>
+            {%- if column > totals.solved -%}
+              Why Solved adds up to more than {{ totals.solved }}
+            {%- else -%}
+              About these numbers
             {%- endif -%}
-            . Average rating covers the rated problems solved in each topic; topics
+          </summary>
+          <p>
+            {% if column > totals.solved -%}
+              A problem carries about three tags and counts under each, so the
+              Solved column adds to more than the {{ totals.solved }}
+              problem{{ "s" if totals.solved != 1 }} solved.
+            {%- endif %}
+            {% if totals.solved_untagged -%}
+              {{ totals.solved_untagged }} solved
+              {{- " problem has" if totals.solved_untagged == 1 else " problems have" }}
+              no tags at all and
+              {{- " appears" if totals.solved_untagged == 1 else " appear" }} in no row.
+            {%- endif %}
+            Average rating covers the rated problems solved in each topic; topics
             differ in how hard their problems are for everybody, so the averages
             are not yet comparable between rows.
           </p>
         </details>
+        {% endif %}
         {% endif %}
 
         {# The topics this visitor has never practised, as a line of links
@@ -640,7 +661,7 @@
          slice of it. Saying so is the point: a list quietly cut short reads as
          "that is all there is". #}
       {% if total > rows | length %}
-        <p class="meta">The {{ rows | length }} most recent of {{ total }}.</p>
+        <p class="meta">The {{ rows | length }} most recent of {{ "{:,}".format(total) }}.</p>
       {% endif %}
 
       {# The wrapper is what scrolls on a narrow screen, so a wide table never

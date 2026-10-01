@@ -160,9 +160,16 @@ def the_rated_count_appears_only_when_it_differs():
 
 
 def the_footnote_explains_the_arithmetic():
-    """Somebody will add the column up. It should agree with them first."""
-    assert "adds to more than the 170 problems solved" in " ".join(HTML.split()), \
-        "the footnote does not state the real total"
+    """Somebody will add the column up. It should agree with them first.
+
+    Every problem seeded here has one tag, so the column adds to exactly the
+    170 solved. Until 2026-10-01 the fold said it added to more, and this
+    check held it to that. With a problem under two tags it does say so --
+    check_web_flow covers that case."""
+    flat = " ".join(HTML.split())
+    assert "<summary>About these numbers</summary>" in flat, "the fold under the chart is gone, or renamed"
+    assert "adds to more than" not in flat, "the fold says the column adds to more than 170, and it adds to 170"
+    assert "not yet comparable between rows" in flat
 
 
 def it_refuses_to_claim_skill():

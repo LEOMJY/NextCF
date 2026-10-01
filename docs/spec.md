@@ -197,7 +197,7 @@ because the landing page has a different job from the tool — see §7.1.
 
 | URL | Job | Milestone |
 |---|---|---|
-| `/` | The pitch, **with the handle input in the hero itself** | v0.1 |
+| `/` | The pitch, **with the handle input in the hero itself**. A POST that cannot be a handle (a space, another alphabet, a link that is not a profile) is refused at the field, with the text kept; whether a handle exists is the results page's question | v0.1 |
 | `/progress/<job>` | Show a long job making progress without lying about it | v0.2 |
 | `/progress/<job>/status` | The same job as one line, for a results page to keep current — ADR 0018 | v0.7 |
 | `POST /results/<handle>/sync` | Fetch this handle again because the visitor asked, then back to their page — ADR 0018 | v0.7 |
@@ -1070,7 +1070,7 @@ starts counting the day the disk is attached (ADR 0017).
 | v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
 | v0.6 | First real model, scored against the baseline; `/how`. **Done 09-19**: model 09-18, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh`; `/how` 09-19 | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts. **Done 09-26**: visits and `/privacy` (ADR 0017), the queue (ADR 0018), the checks in the repository (ADR 0019), the upkeep thread (ADR 0020), too hard / too easy (ADR 0021), errors and logs (ADR 0022). Two things carried, each by decision: the paid disk is bought before the first stranger arrives, not before then (ADR 0017), and component tests arrive with the first React component rather than before it (ADR 0011, amended) | early Nov |
-| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025). **Practice plans**, added 2026-09-27: the five stay until they are done, with a history (ADR 0026) | early Nov |
+| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025). **Practice plans**, added 2026-09-27: the five stay until they are done, with a history (ADR 0026). *Unhandled states: audited 2026-10-01, every unusual state rendered and read; seven small things fixed (devlog).* *Design: the card table is live as the current direction, not settled (§12).* | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
 | v2.0 | See §11 | spring |

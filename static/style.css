@@ -383,7 +383,7 @@ time {
 .site-foot {
   display: flex;
   /* Centred, not on a baseline: the brand opens with the card mark, which
-     has no text, and a baseline row put "v0.7" level with its bottom edge. */
+     has no text, and a baseline row put the version level with its bottom edge. */
   align-items: center;
   gap: var(--s2);
   max-width: var(--page);

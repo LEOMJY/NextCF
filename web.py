@@ -52,6 +52,13 @@ import sync
 # reason this argument exists.
 app = Flask(__name__)
 
+# "/how/" is "/how". Flask's default answers a trailing slash on a rule
+# written without one with 404, and somebody who types an address by hand, or
+# follows a link another site mangled, should not meet the error page over
+# one character. Set before any route is registered: it is read as each rule
+# is added.
+app.url_map.strict_slashes = False
+
 # This module's log lines. The same logger Flask itself writes to when a page
 # throws, because Flask names the app's logger after the module too -- so an
 # unhandled exception and everything else this file says land together, in
@@ -641,6 +648,20 @@ def index():
             # 400 = "your request was malformed", which is accurate.
             return landing(error="Enter a Codeforces handle."), 400
 
+        if not HANDLE_PATTERN.match(handle):
+            # Not the shape of a handle: a space, another alphabet, a link
+            # that is not a profile. Said at the field, with what was typed
+            # still in it, instead of sending the visitor to a results
+            # address that can only answer "nothing here" (found 2026-10-01:
+            # a pasted contest link got "There is nothing at this address").
+            # Shape only -- whether the handle exists is still Codeforces's
+            # to say, on the results page.
+            return landing(
+                error="That does not look like a Codeforces handle. A handle is up to 24 "
+                      "letters, digits, underscores, dots or hyphens.",
+                typed=request.form.get("handle", ""),
+            ), 400
+
         # Do not decide anything here beyond where to send them. Whether the
         # data needs fetching is the results page's question, and asking it in
         # one place means a link somebody shares behaves the same as the form.
@@ -656,8 +677,9 @@ def index():
     return landing()
 
 
-def landing(error=None):
+def landing(error=None, typed=None):
     """The landing page, with its sample pack and the numbers it quotes.
+    `typed` is what a refused form held, put back in the field to be fixed.
 
     Everything the page states about the model is computed here from the
     same constants the rest of the site uses -- EVALUATION, the target's
@@ -696,6 +718,10 @@ def landing(error=None):
     return render_template(
         "index.html",
         error=error,
+        # The form's field (_handle_form.html) shows `handle`. Cut to the
+        # field's own maxlength, so the page never carries back more than
+        # the box could have sent.
+        handle=(typed or "")[:100],
         sample=cards,
         sample_rating=SAMPLE_RATING,
         sample_aim={"percent": f"{SAMPLE_TARGET * 100:g}", "at": along(SAMPLE_TARGET * 100)},
@@ -1352,6 +1378,23 @@ def ago(stamp, now=None):
     return count(days // 365, "year")
 
 
+def verdict_words(verdict):
+    """A verdict as a person reads it: "Wrong answer", not WRONG_ANSWER.
+
+    Codeforces's API sends its own constants, and until 2026-10-01 the page
+    printed them as they came. Its own site words them, and so does this:
+    OK is "Accepted", a submission with no verdict yet is being judged, and
+    every other constant is its words with the underscores out. Written as a
+    rule rather than a table, so a verdict Codeforces adds tomorrow reads
+    properly without anybody adding it here.
+    """
+    if verdict is None:
+        return "Being judged"
+    if verdict == "OK":
+        return "Accepted"
+    return verdict.replace("_", " ").capitalize()
+
+
 def display_row(row):
     """Turn one database row into just the fields the table shows.
 
@@ -1363,7 +1406,8 @@ def display_row(row):
     know which Codeforces fields go missing; that knowledge now lives in one
     place, db.save_sync, which was the plan recorded on 08-15. What is left is
     a display decision: an unjudged submission has no verdict in the database,
-    and the word "TESTING" belongs on the page rather than in a column.
+    and the words for that belong on the page rather than in a column
+    (verdict_words).
     """
     url = None
     if row["contest_id"] is not None:
@@ -1374,7 +1418,7 @@ def display_row(row):
 
     return {
         "rating": row["rating"],
-        "verdict": row["verdict"] or "TESTING",
+        "verdict": verdict_words(row["verdict"]),
         # What counts as a solve is program logic and belongs here; which CSS
         # class that turns into is presentation and belongs in the template.
         # Assumption 3 in spec section 8: "OK" means solved, and that

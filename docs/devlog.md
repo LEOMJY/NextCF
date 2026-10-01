@@ -5828,3 +5828,66 @@ redraws, each answered with a word ("cheap", "ugly"), cost more than they
 had to. The checklist makes a verdict specific after the fact. Choosing a
 few real sites the author likes, before drawing anything, would make it
 specific before the fact.
+
+## 2026-10-01 — Every unusual state, looked at
+
+v0.8's other half: the states a visitor can arrive in that are not the
+ordinary one. Each was rendered with no network, on a copy of the real
+problemset, and read as a visitor would read it: a new account with no
+rating and no submissions, a rated account with none, five attempts and no
+solve, submissions with missing fields, markup, a 200-character name and a
+Russian one, a rating of 3650 and one of 310, every rated problem solved
+(11,128 of them), every dp problem solved, topics that do not exist, seven
+kinds of junk typed into the box, and thirteen addresses that should not
+work.
+
+The large states were already handled, from v0.7 (ADR 0022) and the queue
+(ADR 0018). Codeforces down, a handle that does not exist, a sync cut off, an
+unknown address and a rating outside the model's range each have a page that
+says what happened. Markup in a problem's name is escaped. Nothing produced a
+traceback.
+
+### What it found, and what changed
+
+Seven small things, each one a sentence that was false or unfinished:
+
+- **Junk typed into the box left the landing page.** A space, another
+  alphabet, a 40-character string or a pasted contest link was sent on to a
+  results address, which answered with the error page. The contest link got
+  "There is nothing at this address", which is not what the visitor did. The
+  box now refuses what cannot be a handle where it was typed, says what a
+  handle looks like, and keeps the text in the field. Shape only: whether a
+  handle exists is still Codeforces's to say.
+- **"Why Solved adds up to more than 0."** The fold under the topic chart
+  was drawn with nothing solved. It also said the column "adds to more than
+  the total" when it did not: one solve under one tag adds to exactly one.
+  It now appears only when something is solved, and says "more than" only
+  when the column is more.
+- **"1 submissions", "the 1 problems solved", "1 problem ... appear".**
+- **An empty history was introduced as "What you have practised."** It now
+  says "Nothing practised yet."
+- **Verdicts were Codeforces's constants**: `WRONG_ANSWER`,
+  `TIME_LIMIT_EXCEEDED`, `TESTING`. They are words now, as on Codeforces's
+  own pages: "Wrong answer", "Accepted", "Being judged". Written as a rule,
+  not a table, so a verdict added tomorrow reads properly too.
+- **"11111 submissions"** has its comma.
+- **`/how/` was a 404**, for one trailing slash.
+
+### A check that had been guarding a false sentence
+
+`check_chart` asserted that the fold says "adds to more than the 170
+problems solved". Every problem in its fixture has one tag, so the column
+adds to exactly 170. The check had been holding the page to a sentence that
+was false for its own data since the day it was written. It now asserts the
+opposite. The lesson is the one mutation testing keeps teaching: a check
+written from the page's output proves the page says what it says, not that
+what it says is true.
+
+### How it was checked
+
+Six new checks in `check_web_flow`, four new component tests, and two older
+checks corrected: 488 pass.
+Eighteen mutations, each in a fresh copy, all caught the first
+time.
+
+The header's version label, still v0.7, now says v0.8.

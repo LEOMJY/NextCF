@@ -52,7 +52,8 @@ const initial = {
   topics: [{ tag: 'dp', solved: 3, attempted: 4, rated_solved: 3, mean: 1400, width: 100 },
            { tag: 'math', solved: 1, attempted: 1, rated_solved: 1, mean: 900, width: 33.3 }],
   other_topics: ['fft'],
-  totals: { solved: 4, solved_untagged: 0 },
+  // Three problems solved, one of them under both tags: the column reads 3 + 1.
+  totals: { solved: 3, solved_untagged: 0 },
   urls,
 }
 
@@ -81,7 +82,7 @@ describe('the topic chart', () => {
     fireEvent.click(screen.getByRole('link', { name: 'fft' }))
     await screen.findByText('An FFT Problem')
     expect(container.querySelector('details.other-topics').open).toBe(true)
-    expect(container.querySelector('details.footnote summary').textContent).toBe('Why Solved adds up to more than 4')
+    expect(container.querySelector('details.footnote summary').textContent).toBe('Why Solved adds up to more than 3')
   })
 
   it('choosing a topic swaps the five in place, and the address follows', async () => {
@@ -326,6 +327,42 @@ describe('a practice plan', () => {
     } finally {
       Element.prototype.scrollIntoView = original
     }
+  })
+})
+
+// The audit of 2026-10-01: the fold under the chart says only what is true
+// of these numbers, and an empty history is not "what you have practised".
+describe('the chart in unusual states', () => {
+  const withChart = (topics, totals, other = ['fft']) =>
+    render(<TopicIsland initial={{ ...initial, topics, totals, other_topics: other }} fetchImpl={answering({})} navigate={vi.fn()} />)
+  const topic = (tag, solved) => ({ tag, solved, attempted: solved + 1, rated_solved: solved, mean: solved ? 1000 : null, width: 50 })
+
+  it('says nothing about adding up when nothing is solved', () => {
+    const { container } = withChart([topic('math', 0)], { solved: 0, solved_untagged: 0 })
+    expect(container.querySelector('details.footnote')).toBeNull()
+  })
+
+  it('does not claim the column adds to more than the total when it does not', () => {
+    const { container } = withChart([topic('math', 1)], { solved: 1, solved_untagged: 0 })
+    const fold = container.querySelector('details.footnote')
+    expect(fold.querySelector('summary').textContent).toBe('About these numbers')
+    expect(fold.textContent).not.toContain('adds to more than')
+  })
+
+  it('counts one problem as one, and one untagged problem as appearing in no row', () => {
+    const { container } = withChart([topic('math', 1), topic('dp', 1)], { solved: 1, solved_untagged: 0 })
+    expect(container.querySelector('details.footnote').textContent).toContain('more than the 1 problem solved.')
+    cleanup()
+    const second = withChart([topic('math', 2), topic('dp', 2)], { solved: 3, solved_untagged: 1 })
+    const text = second.container.querySelector('details.footnote').textContent
+    expect(text).toContain('more than the 3 problems solved.')
+    expect(text).toContain('1 solved problem has no tags at all and appears in no row.')
+  })
+
+  it('an empty history is not introduced as what was practised', () => {
+    withChart([], { solved: 0, solved_untagged: 0 })
+    expect(document.body.textContent).toContain('Nothing practised yet. Choose a topic to see five problems in it.')
+    expect(document.body.textContent).not.toContain('What you have practised')
   })
 })
 

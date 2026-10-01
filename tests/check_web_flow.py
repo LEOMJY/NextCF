@@ -238,7 +238,7 @@ def results_page_reads_the_database():
     assert response.status_code == 200, response.status_code
     assert "Watermelon" in html and "Two Buttons" in html, "the problems are missing"
     assert "codeforces.com/contest/1234/problem/A" in html, "the problem link is wrong"
-    assert "TESTING" in html, "an unjudged submission should read TESTING on the page"
+    assert "Being judged" in html, "an unjudged submission should say it is being judged"
     assert "last synced" in html
 
 
@@ -407,6 +407,118 @@ def every_page_links_to_how_and_the_pitch_is_current():
 
 check("every page links to /how, and the landing page no longer says the site does nothing",
       every_page_links_to_how_and_the_pitch_is_current)
+
+
+# ------------------------------------------------------- the unusual states
+# The audit of 2026-10-01 rendered every state a visitor can arrive in that
+# is not the ordinary one. The large ones already had pages (check_errors,
+# check_queue); these are the seven small things it found.
+
+def junk_in_the_box_is_answered_at_the_box():
+    """A space, another alphabet, a link that is not a profile: refused where
+    it was typed, with the text still in the field to be fixed. Before, each
+    went on to a results address, and a pasted contest link was answered
+    "There is nothing at this address"."""
+    import html as escaping
+    for typed in ("a b c", "<script>alert(1)</script>", "x" * 40, "Привет",
+                  "https://codeforces.com/contest/1234"):
+        response = client.post("/", data={"handle": typed})
+        page = response.get_data(as_text=True)
+        assert response.status_code == 400 and "Location" not in response.headers, \
+            (typed, response.status_code, response.headers.get("Location"))
+        assert "That does not look like a Codeforces handle." in page, f"{typed!r}: not told why"
+        assert f'value="{escaping.escape(typed)}"' in page, f"{typed!r}: what was typed is gone from the field"
+        assert "<script>alert(1)</script>" not in page, "what was typed reached the page unescaped"
+    # The shape only: a handle that could exist still goes to its page, where
+    # Codeforces says whether it does.
+    response = client.post("/", data={"handle": "nobody.has-this_handle"})
+    assert response.status_code == 302, response.status_code
+
+
+def one_is_singular_and_thousands_have_a_comma():
+    synced("solo", [api_sub(9001, name="Only One", contest_id=9001)])
+    _, html = get("/results/solo")
+    assert "1 submission," in html and "1 submissions" not in html, "one submission is plural"
+    synced("prolific", [api_sub(20000 + n, name=f"Problem {n}", contest_id=20000 + n) for n in range(1001)])
+    _, html = get("/results/prolific")
+    assert "1,001 submissions," in html, "a thousand and one has no comma"
+    assert "most recent of 1,001." in html, "the table's own count has no comma"
+
+
+def a_verdict_is_words():
+    synced("judged", [api_sub(9101, name="Right", contest_id=9101),
+                      api_sub(9102, name="Wrong", verdict="WRONG_ANSWER", contest_id=9102),
+                      api_sub(9103, name="Slow", verdict="TIME_LIMIT_EXCEEDED", contest_id=9103),
+                      api_sub(9104, name="Waiting", verdict=None, contest_id=9104)])
+    _, html = get("/results/judged")
+    for words in ("Accepted", "Wrong answer", "Time limit exceeded", "Being judged"):
+        assert f">{words}</td>" in html, f"no verdict reads {words!r}"
+    assert "WRONG_ANSWER" not in html and "TIME_LIMIT_EXCEEDED" not in html, "a verdict is still Codeforces's constant"
+    # Green is for an accepted solve and nothing else.
+    assert html.count("verdict-ok") == 1, "the accepted verdict lost its class, or another gained it"
+
+
+def the_fold_under_the_topics_says_only_what_is_true():
+    """With nothing solved it asked "why Solved adds up to more than 0", and
+    with one solve under one tag it said the column adds to more than 1."""
+    synced("tryer", [api_sub(9201, name="Tried", verdict="WRONG_ANSWER", contest_id=9201)])
+    _, html = get("/results/tryer")
+    assert '<details class="footnote">' not in html, "a fold explaining numbers when nothing is solved"
+
+    synced("onetag", [api_sub(9211, name="One Tag", contest_id=9211)])
+    _, html = get("/results/onetag")
+    fold = html[html.index('<details class="footnote">'):]
+    fold = " ".join(fold[:fold.index("</details>")].split())
+    assert "<summary>About these numbers</summary>" in fold, "one solve under one tag is said to add to more than 1"
+    assert "adds to more than" not in fold
+
+    two = api_sub(9221, name="Two Tags", contest_id=9221)
+    two["problem"]["tags"] = ["math", "dp"]
+    untagged = api_sub(9222, name="No Tags", contest_id=9222)
+    untagged["problem"]["tags"] = []
+    also = api_sub(9223, name="Two More Tags", contest_id=9223)
+    also["problem"]["tags"] = ["math", "greedy"]
+    # Three solved; the column reads math 2, dp 1, greedy 1: four.
+    synced("twotags", [two, also, untagged])
+    _, html = get("/results/twotags")
+    fold = html[html.index('<details class="footnote">'):]
+    fold = " ".join(fold[:fold.index("</details>")].split())
+    assert "<summary>Why Solved adds up to more than 3</summary>" in fold, fold[:200]
+    assert "more than the 3 problems solved." in fold, fold[:300]
+    assert "1 solved problem has no tags at all and appears in no row." in fold, fold[:400]
+
+
+def a_history_with_nothing_in_it_says_so():
+    # The section is drawn for the topics there are to choose, so there has
+    # to be a problemset: two problems are enough.
+    conn = db.connect()
+    try:
+        db.save_problemset(conn, [
+            {"contestId": 30001, "index": "A", "name": "In The Pool", "rating": 1000, "tags": ["math"]},
+            {"contestId": 30002, "index": "A", "name": "Also In The Pool", "rating": 1200, "tags": ["dp"]}])
+    finally:
+        conn.close()
+    synced("blank", [])
+    _, html = get("/results/blank")
+    assert "0 submissions," in html
+    assert "Nothing practised yet." in html and "What you have practised" not in html, \
+        "an empty history is introduced as what was practised"
+    assert "No submissions found for this handle." in html
+
+
+def a_trailing_slash_is_the_same_address():
+    for path in ("/how/", "/privacy/", "/results/gamma/"):
+        response = client.get(path)
+        assert response.status_code == 200, (path, response.status_code)
+
+
+print("\nthe unusual states")
+check("junk in the box is answered at the box", junk_in_the_box_is_answered_at_the_box)
+check("one is singular, and thousands have a comma", one_is_singular_and_thousands_have_a_comma)
+check("a verdict is words", a_verdict_is_words)
+check("the fold under the topics says only what is true", the_fold_under_the_topics_says_only_what_is_true)
+check("a history with nothing in it says so", a_history_with_nothing_in_it_says_so)
+check("a trailing slash is the same address", a_trailing_slash_is_the_same_address)
 
 shutil.rmtree(SCRATCH, ignore_errors=True)
 print(f"\n{passed} passed, {failed} failed")
