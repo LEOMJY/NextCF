@@ -145,8 +145,14 @@
       <li class="step">
         <span class="step-n">Step 2</span>
         <h3>Forecasts every problem</h3>
-        <p class="big">1.58 million</p>
-        <p>first attempts by 4,000 other players taught it how hard each problem is, and for whom. Each one gets a chance that your first submission is accepted.</p>
+        {# The count is the fitted model's own (web.trained_on), so the
+           monthly refit moves it. #}
+        {% if trained_on %}
+          <p class="big">{{ trained_on }}</p>
+          <p>first attempts by 4,000 other players taught it how hard each problem is, and for whom. Each one gets a chance that your first submission is accepted.</p>
+        {% else %}
+          <p>The first attempts of 4,000 other players taught it how hard each problem is, and for whom. Each one gets a chance that your first submission is accepted.</p>
+        {% endif %}
       </li>
       <li class="step">
         <span class="step-n">Step 3</span>

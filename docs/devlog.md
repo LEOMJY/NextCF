@@ -5891,3 +5891,62 @@ Eighteen mutations, each in a fresh copy, all caught the first
 time.
 
 The header's version label, still v0.7, now says v0.8.
+
+## 2026-10-01, later — The first monthly refresh, a few days early
+
+The dataset was last collected on 09-15 and the model fitted on it on 09-19.
+The refresh was due in early October; the author asked for it now.
+
+### What was done
+
+1. **`dataset.db` copied first** (681 MB, checksum compared). It is the one
+   file with no other copy, and the first refresh also runs the schema's
+   migrations on it.
+2. **`collect.py refresh --older-than-days 15`.** Run plain, the refresh
+   did nothing: it only fetches users last fetched more than 25 days ago, a
+   guard against running it twice in a month, and every user was 16 days old.
+   The flag is the tool's own way to say "earlier than that". 4,000 users in
+   about four and a half hours. Codeforces timed out or answered 503 or 521
+   seven times; each was retried by the client and none stopped the run.
+3. **`model.py fit-baseline` and `model.py fit-topic`**, 38 minutes for the
+   second.
+
+### What came back
+
+| | before | after |
+|---|---|---|
+| submissions | 3,875,775 | 3,948,438 |
+| problems seen | 30,082 | 30,366 |
+| rating changes | 160,633 | 163,187 |
+| first attempts the model learns from | 1,578,181 | 1,623,766 |
+| problems with a difficulty estimate | 10,996 | 11,050 |
+
+### Is the new model the old one, a little wiser?
+
+Checked before shipping, by comparing the two files. Same configuration,
+same 39 topics, no problem dropped. Every weight moved in its third decimal
+place. A problem's difficulty moved by 0.016 on average (in log-odds, the
+model's own unit), and by at most 0.35, on problems released just before the
+last fit, which had few attempts then and have more now. That is what a
+refit on two more weeks of the same world should look like. A weight that
+changed sign, or a thousand problems moving, would have been a reason to
+stop.
+
+### One thing the refit would have made false
+
+The landing page and `/how` both said the model learned from "1.58 million
+first attempts", written into the templates. The number is now 1.62
+million. Both pages read it from the fitted model's own file now
+(`web.trained_on`), so the next refit moves it without anybody remembering
+to.
+
+### How it was checked
+
+All 493 checks, the dataset tier included, with `dataset.db` untouched by
+them. `check_model` refits the baseline from the data and compares it with
+`baseline.json`, which is why the baseline had to be refitted too: a
+refreshed dataset with last month's baseline fails that check, as it should.
+
+The next refresh is due in early November. Attempts made after 09-15 are now
+in the dataset, and under ADR 0013 they are the next test set: the model
+that shipped on 09-19 never saw them.

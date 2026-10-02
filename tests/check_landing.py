@@ -153,6 +153,27 @@ def every_number_is_the_codes():
         and f"off by\n          {ev['gap_baseline']}." in html, "the calibration sentence is not EVALUATION's"
 
 
+def the_training_count_is_the_models_own():
+    """Both pages said "1.58 million", written in, and the first monthly
+    refit would have left them describing the model before it (found
+    2026-10-01, the day of that refit). The count is read from the fitted
+    model, so a different model says a different number."""
+    fitted = model.current_topic_model()
+    count = f"{fitted['attempts'] / 1_000_000:.2f} million"
+    assert f'<p class="big">{count}</p>' in landing(), "the landing page's count is not the model's"
+    how = " ".join(client.get("/how").get_data(as_text=True).split())
+    assert f"and their {count} first attempts" in how, "the count on /how is not the model's"
+
+    real = model.current_topic_model
+    model.current_topic_model = lambda: {"attempts": 2_345_678}
+    try:
+        assert '<p class="big">2.35 million</p>' in landing(), "the landing page's count is written in"
+        how = " ".join(client.get("/how").get_data(as_text=True).split())
+        assert "and their 2.35 million first attempts" in how, "the count on /how is written in"
+    finally:
+        model.current_topic_model = real
+
+
 def the_bands_are_listed_as_ranges_with_no_gap():
     html = landing()
     spans = re.findall(r'<li class="tier" style="--frame: var\(--r-(\w+)\);[^"]*"><div><b>([^<]+)</b><span>([^<]+)</span>', html)
@@ -265,6 +286,7 @@ check("the sample pack is a real plan", the_sample_pack_is_a_real_plan)
 print("\nthe numbers")
 check("every number is the code's", every_number_is_the_codes)
 check("the bands are listed as ranges with no gap", the_bands_are_listed_as_ranges_with_no_gap)
+check("the training count is the model's own", the_training_count_is_the_models_own)
 
 print("\nthe motion")
 check("the picture never holds the form", the_picture_never_holds_the_form)

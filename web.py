@@ -677,6 +677,29 @@ def index():
     return landing()
 
 
+def trained_on():
+    """How many first attempts the model on this server was fitted on, as
+    the pages say it: "1.58 million".
+
+    Read from the fitted model's own file. Until 2026-10-01 the landing page
+    and /how each had the number written in, and the first monthly refit
+    would have left both describing the model before it. Falls back to the
+    baseline's count when no topic model is fitted, and to None when nothing
+    is -- the pages then leave the number out rather than invent one.
+    """
+    fitted = model.current_topic_model()
+    if fitted is None:
+        try:
+            fitted = model.current_baseline()
+        except (OSError, ValueError):
+            # No fitted file at all. The recommender says so where it
+            # matters, on the results page; the pitch only loses a number.
+            return None
+    if not fitted.get("attempts"):
+        return None
+    return f"{fitted['attempts'] / 1_000_000:.2f} million"
+
+
 def landing(error=None, typed=None):
     """The landing page, with its sample pack and the numbers it quotes.
     `typed` is what a refused form held, put back in the field to be fixed.
@@ -727,6 +750,7 @@ def landing(error=None, typed=None):
         sample_aim={"percent": f"{SAMPLE_TARGET * 100:g}", "at": along(SAMPLE_TARGET * 100)},
         target={"start": round(model.DEFAULT_TARGET * 100), "lowest": round(lowest), "highest": round(highest)},
         ev=EVALUATION,
+        trained_on=trained_on(),
         said=said,
         happened=happened,
         tiers=tiers,
@@ -1287,6 +1311,7 @@ def how():
         gain_baseline=ev["average"] - ev["baseline"],
         gain_model=ev["average"] - ev["model"],
         unrated_start=model.UNRATED_START,
+        trained_on=trained_on(),
         # From the constant, so the page cannot describe a guard rail the
         # code does not have (ADR 0023).
         support_min=model.SUPPORT_MIN,
