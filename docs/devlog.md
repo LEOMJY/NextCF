@@ -5950,3 +5950,66 @@ refreshed dataset with last month's baseline fails that check, as it should.
 The next refresh is due in early November. Attempts made after 09-15 are now
 in the dataset, and under ADR 0013 they are the next test set: the model
 that shipped on 09-19 never saw them.
+
+## 2026-10-03 — Did the predictions come true? The forward test
+
+Section 9's number, 0.5934, was measured on a test set that has been looked
+at twice. The refresh of 10-01 brought in something better: first attempts
+made after the shipped model's data ended, which the model could not have
+seen and which nobody had tuned anything on.
+
+### The method, before the run
+
+`evaluate.py forward --shipped <revision>` reads `topic_model.json` and
+`baseline.json` out of git as they were at that revision and scores them on
+first attempts made since. Nothing is refitted. Each user is folded in once,
+from their history before the window. The method, the command and eight
+checks were committed and pushed (`7b44277`) before the command was run on
+the real window, and ADR 0013 says what would be reported whatever came out.
+
+Three things in the code are there because this kind of test fails silently:
+
+- **The file is read from git, not from disk**, so the model scored is the
+  one that shipped and not whatever copy is lying around.
+- **A file that has seen the window is refused.** The model file records how
+  recent its newest attempt was. Pointing the command at today's model,
+  which was fitted on these very attempts, would otherwise print a
+  wonderful number and no error.
+- **The interval draws people, not attempts.** One person's attempts rise
+  and fall together. Treating 31,064 attempts as independent would make the
+  "could this be luck?" interval far too narrow.
+
+The checks prove on made-up data that flipping every result in the second
+half of a window moves no prediction in the first half, that an attempt's
+own result is not an input to it, and, so that those two are not passing
+for the wrong reason, that reversing a person's history before the window
+does move their predictions.
+
+### The result
+
+31,064 first attempts by 2,537 people, 09-16 to 10-02. The rating-only
+baseline scored 0.6199 and the shipped model 0.5650, 8.8% lower, in every
+stratum. The gap is 0.0548, and between 0.0501 and 0.0598 with other people
+sampled.
+
+### What was learned that the first test could not say
+
+- **The model was pessimistic by about four points around 50%.** It said
+  45% and 50% happened; it said 55% and 59% happened. On the 2026 test the
+  same gap was about two points, and `/how` says two. The calibration gap
+  overall was 2.8 points against the test's 1.5.
+- **46% of the window's first attempts were on problems released after the
+  fit.** On those the model has no difficulty for the problem, and its lead
+  over the baseline halves (0.034 against 0.072). The validation runs had
+  put the value of a monthly refit at 0.003 over a whole year of attempts;
+  in the two weeks after a fit, on the newest problems, it is ten times
+  that. Recommendations are almost always older problems, so the site's own
+  five sit in the better half. But a visitor's history is full of new
+  contest problems, and until the next refit the model reads those with no
+  idea how hard they were.
+
+Nothing was changed because of it. That is the rule the test was run under,
+and the reason the number can be trusted. What it does suggest, for a
+decision made separately and on validation: whether `/how` should say four
+points where it says two, and whether refitting more often than monthly is
+worth four and a half hours of fetching.

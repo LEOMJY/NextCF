@@ -229,3 +229,79 @@ are folded in once, not monthly. And its model was fitted on all of 2026 up
 to September, where `final`'s had seen none of 2026. Each of those makes it
 a different measurement, and the last makes it an easier one for both
 predictors: they are predicting two weeks ahead, not up to nine months.
+
+### The result (run 2026-10-03, after commit `7b44277`)
+
+`evaluate.py forward --shipped 0d4360c`: 31,064 first attempts by 2,537
+people, 2026-09-16 to 2026-10-02.
+
+| | baseline file | **shipped model** |
+|---|---|---|
+| weighted total | 0.6199 | **0.5650** (8.8% lower) |
+| 1000–1199 | 0.6362 | 0.5788 |
+| 1200–1399 | 0.6190 | 0.5626 |
+| 1400–1599 | 0.6044 | 0.5528 |
+| 1600–1799 | 0.6029 | 0.5527 |
+| 1800–1999 | 0.5934 | 0.5472 |
+| calibration gap | 6.7 points | 2.8 points |
+
+The gap between them is 0.0548. With other people sampled it would fall
+between 0.0501 and 0.0598 (95%), so it is not the luck of the sample.
+
+Split by whether the file knew the problem:
+
+| | attempts | baseline | shipped model | gap |
+|---|---|---|---|---|
+| problems it had a difficulty for | 16,670 | 0.6574 | 0.5853 | 0.0721 |
+| problems released since the fit | 14,394 | 0.5761 | 0.5419 | 0.0342 |
+
+What the model said against what happened:
+
+| said | happened | attempts |
+|---|---|---|
+| 8.1% | 16.7% | 18 |
+| 16.4% | 15.3% | 425 |
+| 25.6% | 26.8% | 1,343 |
+| 35.3% | 39.8% | 2,223 |
+| 45.3% | 49.9% | 3,136 |
+| 55.2% | 58.6% | 4,293 |
+| 65.2% | 67.1% | 5,407 |
+| 75.2% | 78.3% | 7,063 |
+| 84.3% | 86.7% | 5,702 |
+| 93.2% | 92.0% | 1,454 |
+
+**What it says, and what it does not.**
+
+- The shipped model predicted the two weeks after it better than the
+  rating-only curve, in every stratum, by more than luck. The relative gain,
+  8.8%, is close to the 9.2% of the 2026 test.
+- **It was less well calibrated than on the test year: 2.8 points against
+  1.5, and pessimistic in the middle by three to five points.** Attempts it
+  called 45% were accepted 50% of the time, and 55% was 59%. `/how` says the
+  model is "about two points pessimistic" there; on this window it was
+  about four. The site aims at 50%, so this is the part of the range that
+  matters most.
+- **Nearly half of the window's first attempts, 46%, were on problems
+  released after the fit**, 64% of them made inside a contest and 73.0% of
+  them accepted (problems the file knew: 90% practice, 61.9% accepted).
+  There the model has no
+  difficulty for the problem and its lead over the baseline is half as
+  large (0.034 against 0.072), with a calibration gap of 4.1 points. This is
+  the cost of a month without a refit, measured for the first time, and it
+  is larger than the 0.003 the validation runs put on a monthly refit. Those
+  runs measured a whole year of attempts; a recommendation is almost always
+  an older problem, so the top row of the split is the one that describes
+  what the site offers.
+- The absolute numbers are lower than the test's (0.5650 against 0.5934)
+  and are not comparable with it. Both predictors here saw 2026 up to
+  September and predict two weeks ahead. And these two weeks were easier
+  than the year: 67.0% of the window's first attempts were accepted,
+  against 61.9% for 2026 before it, with the same share of practice (59%).
+  A rise like that is also what a model that has not seen it reads as its
+  own pessimism.
+- It is two weeks and one sample of people. It says nothing about problems
+  the site chose for somebody, which are well above their rating more often
+  than the problems people choose for themselves (ADR 0023). That is still
+  only measurable from the site's own record (ADR 0024).
+
+Nothing was changed on account of it.

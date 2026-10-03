@@ -1016,6 +1016,33 @@ v1.0 is done when all three hold:
    than the one a new account's profile shows — in ADR 0015. This test set is
    now spent: the next model is judged on the months after 2026-09-15, which
    the monthly refresh collects.
+
+   **A second measurement, 2026-10-03: the forward test.** A different
+   question from the table above. Not "how well does this kind of model
+   predict a year it never saw" but "did the predictions the site was
+   actually making come true". The model and baseline files that were live
+   from 09-19 to 10-02 were scored, untouched, on the 31,064 first attempts
+   made in the two weeks after their data ended (ADR 0013, last amendment;
+   the method was committed before it was run, and it decided nothing):
+
+   | | baseline file | **shipped model** |
+   |---|---|---|
+   | weighted total | 0.6199 | **0.5650** (8.8% lower) |
+   | 1000–1199 | 0.6362 | 0.5788 |
+   | 1200–1399 | 0.6190 | 0.5626 |
+   | 1400–1599 | 0.6044 | 0.5528 |
+   | 1600–1799 | 0.6029 | 0.5527 |
+   | 1800–1999 | 0.5934 | 0.5472 |
+   | calibration gap | 6.7 points | 2.8 points |
+
+   Lower in every stratum, and the gap of 0.0548 would fall between 0.0501
+   and 0.0598 with other people sampled, so it is not luck. Two things it
+   found that the first table could not. The model was **less well
+   calibrated than on the test year** (2.8 points against 1.5), pessimistic
+   by about four points around 50%, where the site aims. And 46% of those
+   attempts were on problems released after the fit, where its lead over the
+   baseline is half as large: the cost of a month without a refit. The two
+   tables are not comparable in absolute terms; ADR 0013 says why.
    The baseline is a logistic curve in the rating gap, **fitted** to the data
    rather than Elo's own formula, which measured several times too steep and
    would be beaten by anything (ADR 0012). Two rules follow for the harness.
