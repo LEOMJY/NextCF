@@ -11,7 +11,9 @@
      prose at the measure, the head size for the title, tables for anything
      with numbers in it -- the house style since ADR 0001's amendment -- and
      the accent nowhere it does not already mean something. Every number
-     comes from web.EVALUATION, which is the same table as spec section 9. #}
+     comes from web.EVALUATION and web.FORWARD, the same two tables as spec
+     section 9: the method tested on a year it never saw, and the model that
+     was live checked against what happened after (both since 2026-10-03). #}
   <div class="tool prose">
     <h1>How it works</h1>
     <p class="meta">
@@ -102,36 +104,87 @@
       and it is lower in every band.
     </p>
 
+    {# The forward test (ADR 0013, 2026-10-03). The table above tests the
+       method; this one tests the predictions the site was really making. #}
+    <p>
+      <strong>Then it was checked against what happened next.</strong> The
+      model that was live on this site from 19 September 2026 was scored,
+      untouched, on the {{ fw.attempts }} first attempts the same users made
+      in the two weeks after its data ended:
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Rating band</th>
+            <th class="num">Rating only</th>
+            <th class="num">This model</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for band, base, ours in fw.strata %}
+            <tr>
+              <td>{{ band }}</td>
+              <td class="num">{{ "%.4f"|format(base) }}</td>
+              <td class="num">{{ "%.4f"|format(ours) }}</td>
+            </tr>
+          {% endfor %}
+          <tr class="total">
+            <td>All, weighted by how many users each band has</td>
+            <td class="num">{{ "%.4f"|format(fw.baseline) }}</td>
+            <td class="num">{{ "%.4f"|format(fw.model) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Lower in every band again, and by more than chance: with other people
+      in the sample the gap of {{ "%.3f"|format(fw.gap) }} would fall between
+      {{ "%.3f"|format(fw.interval[0]) }} and {{ "%.3f"|format(fw.interval[1]) }}.
+      The two tables are not on the same scale &mdash; those two weeks were
+      easier than the year before them &mdash; so compare the columns, not
+      the tables. {{ fw.on_new_problems }}% of those attempts were on problems
+      released after the model was fitted, which it knows least about, and
+      there its lead over rating alone is half as large. That is why it is
+      refitted every month.
+    </p>
+
     <h2>Does 50% mean 50%?</h2>
     <p>
       A probability is only worth showing if it comes true as often as it
-      says. This is what happened in 2026 to attempts the model put in each
-      range:
+      says. This is what happened to attempts the model put in each range, in
+      the 2026 test and in the two weeks after it went live:
     </p>
     <div class="table-wrap compact">
       <table>
         <thead>
           <tr>
             <th class="num">Model said</th>
-            <th class="num">Happened</th>
+            <th class="num">In 2026</th>
+            {# Short, like the other headers: they do not wrap, and the
+               longer "After it shipped" made the table wider than a phone. #}
+            <th class="num">After launch</th>
           </tr>
         </thead>
         <tbody>
-          {% for said, happened in ev.calibration %}
+          {% for said, happened, later in calibration %}
             <tr>
               <td class="num">{{ "%.0f"|format(said) }}%</td>
               <td class="num">{{ "%.0f"|format(happened) }}%</td>
+              <td class="num">{{ "%.0f"|format(later) }}%</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
     <p class="footnote">
-      Off by {{ ev.gap_model }} points on average, against
-      {{ ev.gap_baseline }} for rating alone, which was wrong by more than
-      twenty points at the low end. In the middle the model is about two
-      points pessimistic: problems it called 50% were solved first time about
-      52% of the time.
+      In 2026: off by {{ ev.gap_model }} points on average, against
+      {{ ev.gap_baseline }} for rating alone. After it shipped:
+      {{ fw.gap_model }} points, against {{ fw.gap_baseline }}; the first row
+      there rests on {{ fw.fewest }} attempts. In the middle, where this site
+      aims, the model is pessimistic: problems it called 50% were solved
+      first time about 52% of the time in 2026, and about 54% in the two
+      weeks after it shipped.
     </p>
     {# Added after the audit of 2026-09-26, which ran the recommender for 60
        users and found a third of its picks 500 or more rating points above
@@ -172,7 +225,8 @@
       and <a href="https://github.com/LEOMJY/NextCF/tree/main/docs/decisions">decision records</a>.
       The 2026 attempts were scored twice, once for the first version of this
       model and once for this one, each time with the configuration committed
-      before the test &mdash;
+      before the test, and the check after it shipped was written down and
+      committed before it was run &mdash;
       <a href="https://github.com/LEOMJY/NextCF/blob/main/docs/decisions/0013-evaluation-protocol.md">why that matters</a>.
     </p>
   </div>

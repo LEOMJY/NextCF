@@ -6013,3 +6013,51 @@ and the reason the number can be trusted. What it does suggest, for a
 decision made separately and on validation: whether `/how` should say four
 points where it says two, and whether refitting more often than monthly is
 worth four and a half hours of fetching.
+
+## 2026-10-03, later — /how says both
+
+The author's decision on the forward test's result: `/how` shows both
+measurements, the 2026 test and the two weeks after the model shipped. The
+page said the model is "about two points pessimistic" around 50%. That is
+what the test year showed. The two weeks after showed about four, and a
+page that keeps the kinder of two numbers is choosing.
+
+What changed on the page:
+
+- **A second table under the first**, the same columns: the model that was
+  live from 19 September on the 31,064 first attempts that followed. One
+  paragraph says what it shows, that the gap is more than chance, that the
+  two tables are not on one scale, and that 46% of those attempts were on
+  problems released after the fit, which is why the model is refitted
+  monthly.
+- **The calibration table has a third column**, so "model said 45%" reads
+  48% for 2026 and 50% after launch, side by side. The note under it says
+  52% and 54% for what was called 50%, and that the first row of the new
+  column rests on 18 attempts.
+- The numbers come from one place in the code, `web.FORWARD`, and a check
+  holds them to spec §9's table, as it does for the first measurement. The
+  same check works the "52%" and "54%" out from the two rows either side
+  of 50%, so the sentence cannot drift from the table.
+
+One thing broke. The three-column table was 428 pixels wide on a 343-pixel
+phone, and the whole page scrolled sideways: 64 pixels between columns, and
+a header of sixteen characters that does not wrap. The columns close up on a
+phone now, the header is "After launch", and the table can no longer be
+wider than the page whatever goes into it.
+
+### How it was checked
+
+Seventeen mutations across the forward test and the page. Sixteen were
+caught the first time. One survived: replacing each user's fold-in with
+"nobody is different from anybody". The check meant to catch that reversed a
+person's history and asserted their predictions moved. They did move, but
+through the columns that describe recent practice, which are built from the
+same history, so the check passed for a predictor that never fitted the
+user at all. It proved something moved, not which thing. The new check
+works a user's predictions out a second time, by hand, and requires the same
+numbers to the last bit, then requires that without the user's own numbers
+they differ. The forward test's result does not change: the code it ran had
+the fold-in. What changed is that the code could not have lost it unnoticed.
+
+499 checks pass. The page was measured at 375 pixels after the fix: no
+sideways scroll, the widest table 322 pixels.

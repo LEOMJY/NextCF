@@ -244,6 +244,42 @@ EVALUATION = {
     "gap_baseline": 4.8,
 }
 
+# The second measurement on /how: `evaluate.py forward --shipped 0d4360c`,
+# run once on 2026-10-03 (ADR 0013's last amendment; spec section 9 has the
+# same table). Not a kind of model on a year it never saw, as EVALUATION is,
+# but the files that were live from 2026-09-19, scored untouched on the first
+# attempts made in the two weeks after their data ended. Like EVALUATION it
+# is a record of one run, changed only by another: each monthly refresh
+# opens a new window for the files that were live before it.
+FORWARD = {
+    "attempts": "31,064",
+    "baseline": 0.6199,
+    "model": 0.5650,
+    "strata": [
+        ("1000–1199", 0.6362, 0.5788),
+        ("1200–1399", 0.6190, 0.5626),
+        ("1400–1599", 0.6044, 0.5528),
+        ("1600–1799", 0.6029, 0.5527),
+        ("1800–1999", 0.5934, 0.5472),
+    ],
+    # The gap between the two totals, and the range it would fall in with
+    # other people sampled (95%, bootstrap over users).
+    "gap": 0.0548,
+    "interval": (0.0501, 0.0598),
+    # (model said, happened), in per cent, as EVALUATION's.
+    "calibration": [
+        (8.1, 16.7), (16.4, 15.3), (25.6, 26.8), (35.3, 39.8), (45.3, 49.9),
+        (55.2, 58.6), (65.2, 67.1), (75.2, 78.3), (84.3, 86.7), (93.2, 92.0),
+    ],
+    # How many attempts the first row above rests on: few enough to say so.
+    "fewest": 18,
+    "gap_model": 2.8,
+    "gap_baseline": 6.7,
+    # The share of those attempts made on problems released after the fit,
+    # in per cent.
+    "on_new_problems": 46,
+}
+
 # A problem's rarity on the landing page's cards (ADR 0029): its rating read
 # as the Codeforces rank of a person with that rating, and drawn in that
 # rank's colour. Master and international master share orange on Codeforces,
@@ -1299,13 +1335,19 @@ def progress(job_id):
 def how():
     """How the model works, and section 9's number (spec section 4.1).
 
-    Static apart from the numbers, which come from EVALUATION above so that
-    the page and the spec are updated from one place in the code.
+    Static apart from the numbers, which come from EVALUATION and FORWARD
+    above so that the page and the spec are updated from one place in the
+    code.
     """
     ev = EVALUATION
     return render_template(
         "how.html",
         ev=ev,
+        fw=FORWARD,
+        # The two calibration tables side by side, one row per range. They
+        # share the first column because the ranges are the same ten.
+        calibration=[(said, happened, later) for (said, happened), (_, later)
+                     in zip(ev["calibration"], FORWARD["calibration"])],
         # How far below the know-nothing guess each predictor gets: the plain
         # way to say "the model knows about four times as much as the rating".
         gain_baseline=ev["average"] - ev["baseline"],

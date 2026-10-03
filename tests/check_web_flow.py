@@ -382,8 +382,13 @@ def how_page_holds_the_section_9_number():
     ev = web.EVALUATION
     for value in (ev["baseline"], ev["model"]):
         assert f"{value:.4f}" in html, f"{value:.4f} is not on /how"
+    fw = web.FORWARD
+    for value in (fw["baseline"], fw["model"]):
+        assert f"{value:.4f}" in html, f"the forward test's {value:.4f} is not on /how"
     cells = html.count('<td class="num">')
-    expected = 2 * len(ev["strata"]) + 2 + 2 * len(ev["calibration"])
+    # Two tables of strata with a total each, and one calibration table of
+    # three columns: what the model said, 2026, and after it shipped.
+    expected = (2 * len(ev["strata"]) + 2) + (2 * len(fw["strata"]) + 2) + 3 * len(ev["calibration"])
     assert cells == expected, f"{cells} number cells on /how, expected {expected}"
     spec = Path("docs/spec.md").read_text(encoding="utf-8")
     section9 = spec[spec.index("## 9. How we will know it worked"):spec.index("## 10.")]
@@ -391,9 +396,54 @@ def how_page_holds_the_section_9_number():
         assert f"{ours:.4f}" in section9 and f"{base:.4f}" in section9, \
             f"{band}: web.EVALUATION says {base:.4f} / {ours:.4f}, spec section 9 does not"
     assert f"**{ev['model']:.4f}**" in section9, "spec section 9's headline is not web.EVALUATION's"
+    # The second measurement, the forward test (ADR 0013): the same rule.
+    for band, base, ours in fw["strata"]:
+        assert f"{ours:.4f}" in section9 and f"{base:.4f}" in section9, \
+            f"{band}: web.FORWARD says {base:.4f} / {ours:.4f}, spec section 9 does not"
+    assert f"**{fw['model']:.4f}**" in section9, "spec section 9's forward headline is not web.FORWARD's"
+    assert fw["attempts"] in section9 and fw["attempts"] in html, "the forward test's size differs between page and spec"
+    # The two calibration tables share one column of ranges, so the ranges
+    # have to be the same ten once rounded as the page rounds them.
+    assert [round(s) for s, _ in ev["calibration"]] == [round(s) for s, _ in fw["calibration"]], \
+        "the two calibration tables no longer have the same ranges"
+    # Each row of the page's table: what was said, 2026, after it shipped --
+    # the third column is FORWARD's, not EVALUATION's printed twice.
+    flat = " ".join(html.split())
+    for (said, happened), (_, later) in zip(ev["calibration"], fw["calibration"]):
+        row = " ".join(f'<td class="num">{value:.0f}%</td>' for value in (said, happened, later))
+        assert row in flat, f"no calibration row reads {said:.0f}% / {happened:.0f}% / {later:.0f}%"
+    # What the page says in words about the middle of the range comes from
+    # the two rows either side of 50%: check the words against the rows.
+    for name, rows, claimed in (("2026", ev["calibration"], 52), ("after it shipped", fw["calibration"], 54)):
+        (below_said, below), (above_said, above) = rows[4], rows[5]
+        at_half = below + (above - below) * (50 - below_said) / (above_said - below_said)
+        assert abs(at_half - claimed) < 1, f"{name}: called 50%, happened {at_half:.1f}%, the page says {claimed}%"
+        assert f"about {claimed}%" in " ".join(html.split()), f"/how does not say about {claimed}%"
 
 
 check("/how shows section 9's number, and it is the one the spec records", how_page_holds_the_section_9_number)
+
+
+def the_tables_on_how_fit_a_phone():
+    """Found 2026-10-03, when the calibration table gained a third column:
+    64 pixels between columns and a header of sixteen characters made it 428
+    pixels wide on a 343-pixel page, and the whole page scrolled sideways.
+    Headers do not wrap, so they are kept short; the columns close up on a
+    phone; and the table can never be wider than the page."""
+    import re
+    _, html = get("/how")
+    headers = re.findall(r'<th class="num">([^<]+)</th>', html)
+    long = [h for h in headers if len(h) > 12]
+    assert headers and not long, f"column headers too long for a phone: {long}"
+    css = Path("static/style.css").read_text(encoding="utf-8")
+    compact = re.search(r"\.prose \.table-wrap\.compact \{([^}]*)\}", css).group(1)
+    assert "max-width: 100%" in re.sub(r"/\*.*?\*/", "", compact, flags=re.S),         "the compact table can be wider than the page"
+    narrow = css.split("@media (max-width: 640px)", 1)[1]
+    rule = re.search(r"\.prose \.compact th,\s*\.prose \.compact td \{([^}]*)\}", narrow)
+    assert rule and "padding-right: var(--s3)" in rule.group(1), "the columns do not close up on a phone"
+
+
+check("the tables on /how fit a phone", the_tables_on_how_fit_a_phone)
 
 
 def every_page_links_to_how_and_the_pitch_is_current():

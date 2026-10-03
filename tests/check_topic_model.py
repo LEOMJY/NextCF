@@ -424,6 +424,31 @@ def what_came_before_the_window_does_count():
         "a user's whole history was reversed and their predictions did not notice"
 
 
+def each_user_is_folded_in_from_before_the_window():
+    """The check above moves predictions even for a predictor that never
+    folds the user in: reversing a history also changes the columns that
+    describe recent practice. A mutation that replaced the fold-in with
+    "nobody is different" survived it (2026-10-03). So here each user's
+    predictions are worked out a second time, by hand -- their own numbers
+    from their attempts before the window, older ones counting less -- and
+    must be the same numbers, to the last bit. And those numbers must
+    matter: without them the predictions are different ones."""
+    m = loaded()
+    checked = 0
+    for user in sorted({DATA.u[i] for i in WINDOW})[:5]:
+        past = [i for i in BEFORE if DATA.u[i] == user]
+        theirs = [i for i in WINDOW if DATA.u[i] == user]
+        weights = [0.5 ** ((SHIP - DATA.t[j]) / (180 * 86400.0)) for j in past]
+        own = m.fold_in(DATA, past, weights)
+        by_hand = [m.predict(DATA, i, own) for i in theirs]
+        assert evaluate.frozen_predictions(m, DATA, theirs, SHIP, 180) == by_hand, \
+            f"user {user}: not the predictions their own history before the window gives"
+        as_nobody = [m.predict(DATA, i) for i in theirs]
+        if max(abs(a - b) for a, b in zip(by_hand, as_nobody)) > 0.01:
+            checked += 1
+    assert checked >= 3, "the fixture's users are too average for this check to mean anything"
+
+
 def an_attempt_from_before_the_window_is_refused():
     m = loaded()
     try:
@@ -516,6 +541,7 @@ print("\nthe forward test")
 check("a result inside the window moves no earlier prediction", a_window_result_cannot_reach_back)
 check("an attempt's own result is not an input to its prediction", an_attempts_own_result_is_not_an_input)
 check("what came before the window does count", what_came_before_the_window_does_count)
+check("each user is folded in from before the window, and it matters", each_user_is_folded_in_from_before_the_window)
 check("an attempt from before the window is refused", an_attempt_from_before_the_window_is_refused)
 check("the file predicts as the model it was written from", the_file_predicts_as_the_model_it_was_written_from)
 check("a model that saw the window is refused", a_model_that_saw_the_window_is_refused)

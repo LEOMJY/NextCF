@@ -1680,6 +1680,9 @@ tbody tr:hover td {
    together; at full width they are two columns a page apart. */
 .prose .table-wrap.compact {
   width: fit-content;
+  /* Never wider than the page: past that it scrolls in its own box, like
+     every table, instead of pushing the page sideways. */
+  max-width: 100%;
 }
 
 .prose .compact table {
@@ -1831,6 +1834,13 @@ tbody tr:hover td {
      column to about 100px. "948/964" has no space in it and stays put. */
   .topics .num {
     white-space: normal;
+  }
+
+  /* The three-column table on /how: 64 pixels between its columns made it
+     428 pixels wide on a 343-pixel page (found 2026-10-03). One step down. */
+  .prose .compact th,
+  .prose .compact td {
+    padding-right: var(--s3);
   }
 
   /* One step down, not a new value. Three gutters at 16px is 48px of a phone's
