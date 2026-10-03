@@ -158,3 +158,74 @@ about.
 therefore unchanged — 0.6533 on validation, 0.6535 on test — and every model
 number before this date was measured on shown ratings, which is how the
 devlog reports them.
+
+## Amendment — 2026-10-03: the forward test, written down before it is run
+
+The amendment above said the months after 2026-09-15 become the next test
+set "the next time one is needed". The refresh of 2026-10-01 brought the
+first of them in. This is what will be done with them, written and committed
+before a single one is scored.
+
+**What is scored.** Not a kind of model this time: two files.
+`topic_model.json` and `baseline.json` as they stand at commit `0d4360c`, the
+last commit before the refit. They were committed in `186779b`, fitted on
+1,578,181 first attempts of which the newest was made at
+2026-09-15T09:13Z, and they answered every visitor from 09-19 until the
+refit of 10-02 replaced them. `final` asks how well this kind of model
+predicts a year it never saw. This asks whether the predictions the site was
+actually making came true.
+
+**The command.** `evaluate.py forward --shipped 0d4360c`. It reads the two
+files out of git, so the files scored are the files that shipped.
+
+**The window.** First attempts from 2026-09-16T00:00Z to the end of the
+refreshed dataset (each user's fetch on 10-01 or 10-02). A whole day after
+the last moment any of the model's data was collected. The unit, the event
+and the exclusions are the protocol's own, unchanged.
+
+**How each attempt is predicted.**
+
+- The crowd's part of the model is the file, untouched. Nothing is refitted.
+- A user's own numbers are folded in once, from their attempts before the
+  window opens. The site folds a visitor in again on every visit, so this is
+  staler than the site and understates it.
+- The columns describing one attempt (the rating at the time, the count of
+  earlier attempts, recent practice) come from what was strictly before
+  that attempt, as everywhere in the harness.
+- A problem released after the fit has no difficulty in the file and is
+  scored with none, as the site scores it.
+- The baseline is the file's curve on the shown rating.
+
+**What will be reported**, whatever it is:
+
+1. The headline: log loss weighted by each stratum's population, baseline
+   file against model file.
+2. The same per stratum, and the calibration table and gap for both.
+3. A 95% interval for the gap between them, from 2,000 bootstrap draws of
+   users within strata, with a fixed seed. Two weeks is about a twelfth of
+   the 2026 test set, so how much of the gap could be luck has to be said.
+4. The headline again, split into problems the file had a difficulty for
+   and problems released since.
+
+**The terms**, as before:
+
+1. **Written first.** This amendment, the command and its checks are
+   committed before the command is run on the real window. The checks prove
+   on made-up data that a result inside the window cannot change an earlier
+   prediction, that an attempt's own result is not an input to it, and that
+   a file fitted on the window's attempts is refused.
+2. **It decides nothing.** The refit has already shipped and stays, whatever
+   this says about the model before it. No setting is chosen on this window.
+3. **Reported whatever it is**, in §9 beside 0.5934 and not in place of it:
+   a second measurement, smaller, of a different thing.
+4. **One look.** A window is scored once by the file that preceded it. The
+   model fitted on 10-02 has learned from this one; its own window opens
+   where its data ends.
+
+**How it differs from `final`, so the two numbers are not read as one.** It
+scores files, not a configuration refitted inside the harness. Its baseline
+was fitted on everything up to 09-15, not on a training period. Its users
+are folded in once, not monthly. And its model was fitted on all of 2026 up
+to September, where `final`'s had seen none of 2026. Each of those makes it
+a different measurement, and the last makes it an easier one for both
+predictors: they are predicting two weeks ahead, not up to nine months.

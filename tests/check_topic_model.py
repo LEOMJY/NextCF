@@ -334,5 +334,193 @@ def the_split_is_by_date():
 check("the total is weighted by population, not attempts", the_total_is_weighted_by_population)
 check("the split is by date, at the documented boundaries", the_split_is_by_date)
 
+
+# -------------------------------------------------------- the forward test
+#
+# `evaluate.py forward` scores a shipped FILE on attempts made after its data
+# ended (ADR 0013, 2026-10-03). A leak here is the same silent kind as
+# everywhere above, so it is proved the same way: by flipping results.
+#
+# The stand-in for "a model that shipped": fitted on the first half of the
+# synthetic history with every extra column switched on, exported exactly as
+# model.py fit-topic exports topic_model.json, and loaded back by name.
+
+SHIP_DAY = evaluate.datetime.fromtimestamp(DATA.t[len(DATA) // 2], evaluate.timezone.utc).strftime("%Y-%m-%d")
+SHIP = evaluate.datetime.strptime(SHIP_DAY, "%Y-%m-%d").replace(tzinfo=evaluate.timezone.utc).timestamp()
+BEFORE = [i for i in ALL if DATA.t[i] < SHIP]
+WINDOW = [i for i in ALL if DATA.t[i] >= SHIP]
+# Names for the synthetic problems and tags: the file is keyed by name.
+DATA.problems = [f"P{p}" for p in range(len(DATA.problem_tags))]
+DATA.tag_names = [f"tag{k}" for k in range(1 + max(k for tags in DATA.problem_tags for k in tags))]
+
+SHIPPED_MODEL = model.TopicModel(model.GROUPS, LAM, extras=model.EXTRAS).fit(DATA, BEFORE)
+SHIPPED = model.export_fitted(SHIPPED_MODEL, DATA, 180)
+# export_fitted describes a model fitted on ALL of its data; this one saw
+# only BEFORE, so the two facts the forward test reads are set to match.
+SHIPPED["attempts"] = len(BEFORE)
+SHIPPED["trend_until"] = max(DATA.t[i] for i in BEFORE) + evaluate.TREND_MARGIN
+_, (A, B) = evaluate.baseline_predictions(DATA, BEFORE, WINDOW)
+SHIPPED_BASELINE = {"intercept": A, "slope": B, "attempts": len(BEFORE)}
+
+
+def loaded():
+    """The file's numbers back on the data, as run_forward places them."""
+    return model.fitted_model(SHIPPED, {pid: p for p, pid in enumerate(DATA.problems)},
+                              {name: k for k, name in enumerate(DATA.tag_names)})
+
+
+def flipped(indices, then):
+    """Run `then` with every result in `indices` reversed and the history
+    columns rebuilt from the reversed results; put everything back after."""
+    original = [DATA.y[i] for i in indices]
+    try:
+        for i in indices:
+            DATA.y[i] = 1 - DATA.y[i]
+        model.compute_history(DATA)
+        return then()
+    finally:
+        for i, y in zip(indices, original):
+            DATA.y[i] = y
+        model.compute_history(DATA)
+
+
+def a_window_result_cannot_reach_back():
+    """Flip every result in the second half of the window. Every prediction
+    in the first half must be the same number, to the last bit: a user's own
+    numbers come from before the window, and an attempt's columns from before
+    the attempt."""
+    half = DATA.t[WINDOW[len(WINDOW) // 2]]
+    early = [i for i in WINDOW if DATA.t[i] < half]
+    later = [i for i in WINDOW if DATA.t[i] >= half]
+    m = loaded()
+    predict = lambda: evaluate.frozen_predictions(m, DATA, early, SHIP, 180)
+    before = predict()
+    after = flipped(later, predict)
+    moved = sum(1 for a, b in zip(before, after) if a != b)
+    assert moved == 0, f"{moved} of {len(early)} earlier predictions moved when LATER results did"
+
+
+def an_attempts_own_result_is_not_an_input():
+    """The narrowest leak: one attempt's result changing its own prediction."""
+    m = loaded()
+    for target in (WINDOW[0], WINDOW[len(WINDOW) // 3], WINDOW[-1]):
+        predict = lambda: evaluate.frozen_predictions(m, DATA, [target], SHIP, 180)[0]
+        assert predict() == flipped([target], predict), "an attempt's result changed its own prediction"
+
+
+def what_came_before_the_window_does_count():
+    """The two checks above would pass for a predictor that ignored the user
+    altogether. This one makes sure they are not passing for that reason: flip
+    one person's results BEFORE the window and their predictions in it move."""
+    m = loaded()
+    user = DATA.u[WINDOW[0]]
+    theirs = [i for i in WINDOW if DATA.u[i] == user]
+    past = [i for i in BEFORE if DATA.u[i] == user]
+    assert len(past) > 20 and theirs, "the fixture gives this user no history to learn from"
+    predict = lambda: evaluate.frozen_predictions(m, DATA, theirs, SHIP, 180)
+    before = predict()
+    after = flipped(past, predict)
+    assert max(abs(a - b) for a, b in zip(before, after)) > 0.01, \
+        "a user's whole history was reversed and their predictions did not notice"
+
+
+def an_attempt_from_before_the_window_is_refused():
+    m = loaded()
+    try:
+        evaluate.frozen_predictions(m, DATA, [BEFORE[-1]], SHIP, 180)
+    except ValueError:
+        return
+    raise AssertionError("an attempt from before the cutoff was scored as if it were after it")
+
+
+def the_file_predicts_as_the_model_it_was_written_from():
+    """The forward test scores what topic_model.json holds, loaded by name.
+    If the round trip through the file changed the model, it would be
+    scoring something that never ran. The file rounds to six decimal places,
+    which moves a probability by about a millionth."""
+    m = loaded()
+    SHIPPED_MODEL.level_range = tuple(SHIPPED["level_range"])
+    SHIPPED_MODEL.trend_until = SHIPPED["trend_until"]
+    try:
+        direct = evaluate.frozen_predictions(SHIPPED_MODEL, DATA, WINDOW, SHIP, 180)
+    finally:
+        SHIPPED_MODEL.level_range = SHIPPED_MODEL.trend_until = None
+    through_file = evaluate.frozen_predictions(m, DATA, WINDOW, SHIP, 180)
+    worst = max(abs(a - b) for a, b in zip(direct, through_file))
+    assert worst < 1e-5, f"the file's predictions differ from the model's by up to {worst:.2e}"
+
+
+def a_model_that_saw_the_window_is_refused():
+    """The one way the forward test can lie, and it would print a splendid
+    number doing it. A file fitted on attempts inside the window is turned
+    away, by the date the file itself records."""
+    import contextlib
+    import io
+
+    def refusal(fitted, baseline, since):
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                evaluate.run_forward(DATA, fitted, baseline, since)
+        except SystemExit as stop:
+            return str(stop)
+        return ""
+
+    seen = dict(SHIPPED, trend_until=max(DATA.t) + evaluate.TREND_MARGIN)
+    assert "has seen the answers" in refusal(seen, SHIPPED_BASELINE, SHIP_DAY), \
+        "a model fitted on the window's own attempts was scored on them"
+    # One second inside the window is inside it.
+    barely = dict(SHIPPED, trend_until=SHIP + evaluate.TREND_MARGIN)
+    assert "has seen the answers" in refusal(barely, SHIPPED_BASELINE, SHIP_DAY), \
+        "a model whose newest attempt is at the window's first second was scored"
+    other = dict(SHIPPED_BASELINE, attempts=len(BEFORE) + 1)
+    assert "not from the same data" in refusal(SHIPPED, other, SHIP_DAY), \
+        "a baseline from other data was compared with the model"
+    assert "no first attempts" in refusal(SHIPPED, SHIPPED_BASELINE, "2031-01-01"), \
+        "an empty window was reported on"
+
+
+def the_command_prints_what_the_harness_computes():
+    """End to end: the total run_forward prints is report()'s total for the
+    file's predictions, and the gap it prints lies inside its own interval."""
+    import contextlib
+    import io
+    import re
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        evaluate.run_forward(DATA, SHIPPED, SHIPPED_BASELINE, SHIP_DAY)
+    text = out.getvalue()
+    ps = evaluate.frozen_predictions(loaded(), DATA, WINDOW, SHIP, 180)
+    base = [model.sigmoid(A + B * DATA.g_shown[i]) for i in WINDOW]
+    want_model = evaluate.report(DATA, WINDOW, ps)["total"]
+    want_base = evaluate.report(DATA, WINDOW, base)["total"]
+    assert f"forward: {want_base:.4f} -> {want_model:.4f}" in text, text[-600:]
+    assert f"{len(WINDOW):,} first attempts" in text, text[:200]
+    low, high = (float(x) for x in re.search(r"fall between (-?[\d.]+) and (-?[\d.]+)", text).groups())
+    gap = want_base - want_model
+    assert low <= gap <= high, f"the gap {gap:.4f} is outside its own interval {low:.4f}..{high:.4f}"
+    # The synthetic users really do differ, so the model must beat the
+    # rating-only curve here by more than luck -- or the interval is broken.
+    assert low > 0, f"the model's lead over the baseline could be luck: {low:.4f}..{high:.4f}"
+
+
+def the_interval_is_the_same_every_time_and_zero_for_equals():
+    ps = evaluate.frozen_predictions(loaded(), DATA, WINDOW, SHIP, 180)
+    base = [model.sigmoid(A + B * DATA.g_shown[i]) for i in WINDOW]
+    first = evaluate.interval(DATA, WINDOW, base, ps, rounds=200)
+    assert first == evaluate.interval(DATA, WINDOW, base, ps, rounds=200), "the interval changes from run to run"
+    assert evaluate.interval(DATA, WINDOW, ps, ps, rounds=200) == (0.0, 0.0), \
+        "a model compared with itself has a gap"
+
+
+print("\nthe forward test")
+check("a result inside the window moves no earlier prediction", a_window_result_cannot_reach_back)
+check("an attempt's own result is not an input to its prediction", an_attempts_own_result_is_not_an_input)
+check("what came before the window does count", what_came_before_the_window_does_count)
+check("an attempt from before the window is refused", an_attempt_from_before_the_window_is_refused)
+check("the file predicts as the model it was written from", the_file_predicts_as_the_model_it_was_written_from)
+check("a model that saw the window is refused", a_model_that_saw_the_window_is_refused)
+check("the command prints what the harness computes", the_command_prints_what_the_harness_computes)
+check("the interval is reproducible, and zero for equals", the_interval_is_the_same_every_time_and_zero_for_equals)
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

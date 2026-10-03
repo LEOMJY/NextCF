@@ -39,6 +39,9 @@ Usage, on the author's machine:
     .venv\\Scripts\\python.exe evaluate.py ladder
     .venv\\Scripts\\python.exe evaluate.py offsets     how far off, per person
     .venv\\Scripts\\python.exe evaluate.py final
+    .venv\\Scripts\\python.exe evaluate.py forward --shipped 0d4360c
+                the files that were live at that commit, scored on the first
+                attempts made after their data ended -- run after a refresh
 """
 
 import argparse
@@ -694,10 +697,226 @@ def run_final(data, train, valid, test):
         print(f"  {s}-{s + 199}: {base['by_stratum'][s]:.4f} -> {r['by_stratum'][s]:.4f}")
 
 
+# ------------------------------------------------- the model that shipped
+#
+# Added 2026-10-03 (ADR 0013, the forward test). `final` scores a KIND of
+# model: the configuration, refitted inside this harness, on a year it was
+# not fitted on. This scores a FILE: the topic_model.json that was serving
+# visitors, on first attempts made after the newest attempt it was fitted
+# on. Nothing is refitted. It is the plainest question the project can ask of
+# itself: the predictions the site was actually making -- did they come true?
+#
+# WHAT IS FROZEN, and what is not:
+#   * the crowd's part of the model -- every number in the file -- is exactly
+#     as committed. It is read out of git, not off the disk, so the file
+#     scored is the file that shipped, byte for byte;
+#   * each user's own numbers (b, and s per topic) are folded in ONCE, from
+#     their attempts before the window opens. The site folds a visitor in
+#     again on every visit, from everything up to that visit, so this is a
+#     little staler than the site and UNDERstates it -- the same direction
+#     as the monthly fold-in above, and for the same reason: a number that
+#     flatters the model is worth nothing;
+#   * the columns that describe one attempt -- the rating at the time, how
+#     many attempts came before, what was practised in the last hour and
+#     day -- are built from what came strictly before THAT attempt, as they
+#     are everywhere in this file. An attempt's own result is never an input
+#     to its own prediction, and a check proves it by flipping results.
+#
+# The window opens on a whole day, after every user's last fetch for the
+# data the model saw (the last one was 2026-09-15T09:24Z).
+FORWARD_FROM = "2026-09-16"
+
+# The model file records the newest attempt it was fitted on, indirectly:
+# trend_until is that moment plus this many seconds (model.export_fitted).
+TREND_MARGIN = 183 * 86400.0
+
+
+def committed(revision, name):
+    """A file as it was committed at `revision`, parsed as JSON.
+
+    `git show <revision>:<name>`, read here rather than copied to disk by
+    hand, for two reasons. A copy on disk can be edited, or be the wrong
+    one; the revision is the record of which model was scored. And on
+    Windows a shell's `>` rewrites the file in another encoding on the way.
+    """
+    import json
+    import subprocess
+    shown = subprocess.run(["git", "show", f"{revision}:{name}"], capture_output=True)
+    if shown.returncode:
+        raise SystemExit(f"git has no {name} at {revision}: {shown.stderr.decode(errors='replace').strip()}")
+    return json.loads(shown.stdout.decode("utf-8"))
+
+
+def frozen_predictions(m, data, idx, cutoff, halflife_days=None):
+    """Predict `idx` from what was known at `cutoff`: each user is folded in
+    once, from their attempts before `cutoff`, and every attempt of theirs in
+    `idx` is predicted with those numbers.
+
+    The difference from foldin_predictions is the moment of the fold-in. That
+    one refits a user on the first of every month, because it follows a model
+    through a year. Here there is one moment that matters -- the last one the
+    shipped model knew anything about -- and using a later one would let
+    results from inside the window shape the user's numbers.
+    """
+    history = defaultdict(list)
+    for i in range(len(data)):
+        if data.t[i] < cutoff:
+            history[data.u[i]].append(i)
+    users, predicted = {}, []
+    for i in idx:
+        if data.t[i] < cutoff:
+            raise ValueError("an attempt from before the cutoff was asked to be scored")
+        u = data.u[i]
+        if u not in users:
+            weights = None
+            if halflife_days is not None and history[u]:
+                decay = halflife_days * 86400.0
+                weights = [0.5 ** ((cutoff - data.t[j]) / decay) for j in history[u]]
+            users[u] = m.fold_in(data, history[u], weights)
+        predicted.append(m.predict(data, i, users[u]))
+    return predicted
+
+
+def interval(data, idx, base, ps, rounds=2000, seed=20261003):
+    """How far the gap between baseline and model could be luck: a 95%
+    interval for (baseline's total - model's total), by bootstrap.
+
+    A bootstrap asks "if a different 4,000 people had been sampled, how
+    different would this number be?" by drawing people from the ones we have,
+    with replacement, and recomputing -- here `rounds` times. The middle 95%
+    of the results is the interval. If it does not include zero, the gap is
+    larger than the luck of who happened to be in the sample.
+
+    USERS are drawn, not attempts. One person's attempts rise and fall
+    together -- a good fortnight, a hard contest -- so treating 40,000
+    attempts as 40,000 independent coin flips would make the interval far
+    too narrow. Drawn within each stratum, because the total is weighted by
+    stratum and the sample was drawn that way (ADR 0009).
+
+    The seed is fixed: the same data gives the same interval, so a number
+    written down can be reproduced.
+    """
+    import random
+    loss = lambda p, y: -math.log(min(max(p if y else 1 - p, 1e-12), 1.0))
+    # Each user's contribution, once: (their attempts, baseline loss, model loss).
+    per_user = defaultdict(lambda: [0, 0.0, 0.0])
+    stratum_of = {}
+    for i, b, p in zip(idx, base, ps):
+        if data.s[i] is None:
+            continue
+        row = per_user[data.u[i]]
+        row[0] += 1
+        row[1] += loss(b, data.y[i])
+        row[2] += loss(p, data.y[i])
+        stratum_of[data.u[i]] = data.s[i]
+    by_stratum = defaultdict(list)
+    for u, row in per_user.items():
+        by_stratum[stratum_of[u]].append(row)
+    weight = sum(data.population[s] for s in by_stratum)
+
+    rng = random.Random(seed)
+    gaps = []
+    for _ in range(rounds):
+        gap = 0.0
+        for s, rows in by_stratum.items():
+            n = base_loss = model_loss = 0.0
+            for _ in rows:
+                count, b, p = rows[rng.randrange(len(rows))]
+                n += count
+                base_loss += b
+                model_loss += p
+            gap += data.population[s] * (base_loss - model_loss) / n
+        gaps.append(gap / weight)
+    gaps.sort()
+    return gaps[int(0.025 * rounds)], gaps[int(0.975 * rounds) - 1]
+
+
+def run_forward(data, fitted, baseline, since=FORWARD_FROM, users=None):
+    """The shipped files, on the first attempts made since `since`.
+
+    `fitted` and `baseline` are topic_model.json and baseline.json as they
+    were committed. Prints the same report as `final`, then the same two
+    numbers for problems the model had a difficulty for and for problems
+    released since, and how much of the gap could be luck.
+    """
+    cutoff = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+
+    # THE ONE WAY THIS CAN LIE: scoring a model on attempts it was fitted
+    # on. The file says how recent its newest attempt was, so ask it, and
+    # refuse. Without this, pointing the command at today's model would
+    # print a splendid number and no error.
+    newest = fitted["trend_until"] - TREND_MARGIN
+    if newest >= cutoff:
+        seen = datetime.fromtimestamp(newest, timezone.utc).strftime(db.TIMESTAMP_FORMAT)
+        raise SystemExit(f"this model was fitted on attempts up to {seen}, inside the window "
+                         f"that opens {since}: it has seen the answers. Score an earlier file.")
+    if baseline.get("attempts") != fitted.get("attempts"):
+        raise SystemExit(f"the baseline was fitted on {baseline.get('attempts'):,} attempts and the "
+                         f"model on {fitted.get('attempts'):,}: they are not from the same data.")
+
+    window = [i for i in range(len(data)) if data.t[i] >= cutoff]
+    if users:
+        window = [i for i in window if data.u[i] < users]
+    if not window:
+        raise SystemExit(f"no first attempts on or after {since} in this dataset: "
+                         "has collect.py refresh been run since?")
+
+    # The file's numbers, placed on this dataset's problems and tags by name.
+    # A problem the file has no difficulty for gets none -- zero, the average
+    # -- exactly as the site scores a problem released since the last fit.
+    problem_index = {pid: p for p, pid in enumerate(data.problems)}
+    tag_index = {name: k for k, name in enumerate(data.tag_names)}
+    m = model.fitted_model(fitted, problem_index, tag_index)
+
+    ps = frozen_predictions(m, data, window, cutoff, fitted.get("halflife"))
+    # The baseline file's curve, on the rating Codeforces shows, as the
+    # baseline has always been defined (baseline_predictions).
+    a, b = baseline["intercept"], baseline["slope"]
+    base = [model.sigmoid(a + b * data.g_shown[i]) for i in window]
+
+    last = datetime.fromtimestamp(max(data.t[i] for i in window), timezone.utc)
+    people = len({data.u[i] for i in window})
+    print(f"{len(window):,} first attempts by {people:,} people, {since} to {last:%Y-%m-%d}; "
+          f"model fitted on {fitted['attempts']:,} attempts up to "
+          f"{datetime.fromtimestamp(newest, timezone.utc):%Y-%m-%d}\n")
+
+    rb, rm = report(data, window, base), report(data, window, ps)
+    print_report("baseline file (rating only), FORWARD", rb, calibration=True)
+    print()
+    print_report("shipped model, FORWARD", rm, calibration=True)
+    print(f"\nforward: {rb['total']:.4f} -> {rm['total']:.4f} "
+          f"({(rb['total'] - rm['total']) / rb['total']:.1%} lower)")
+    for s in rm["by_stratum"]:
+        print(f"  {s}-{s + 199}: {rb['by_stratum'][s]:.4f} -> {rm['by_stratum'][s]:.4f}")
+    low, high = interval(data, window, base, ps)
+    print(f"  the gap is {rb['total'] - rm['total']:.4f}; with other people sampled it would "
+          f"fall between {low:.4f} and {high:.4f} (95%)")
+
+    # The same, split by whether the file knew the problem. A problem
+    # released after the fit has no difficulty of its own until the next one:
+    # this is what a month without a refit costs.
+    known = [k for k, i in enumerate(window) if data.problems[data.p[i]] in fitted["d"]]
+    new = [k for k, i in enumerate(window) if data.problems[data.p[i]] not in fitted["d"]]
+    for name, part in (("problems the model had a difficulty for", known),
+                       ("problems released since", new)):
+        if not part:
+            continue
+        idx = [window[k] for k in part]
+        print(f"\n{name}: {len(part):,} attempts")
+        print_report("  baseline", report(data, idx, [base[k] for k in part]))
+        print_report("  shipped model", report(data, idx, [ps[k] for k in part]))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("command", choices=("baseline", "ladder", "extras", "rolling", "offsets", "final"))
+    parser.add_argument("command", choices=("baseline", "ladder", "extras", "rolling", "offsets",
+                                            "final", "forward"))
     parser.add_argument("--db", default="dataset.db")
+    parser.add_argument("--shipped", default=None,
+                        help="forward: the git revision whose topic_model.json and "
+                             "baseline.json are scored, e.g. 0d4360c")
+    parser.add_argument("--since", default=FORWARD_FROM,
+                        help="forward: the first day of the window, YYYY-MM-DD")
     parser.add_argument("--users", type=int, default=None,
                         help="keep only the first N users -- a quick run that "
                              "exercises everything, for checking the code, never "
@@ -747,6 +966,14 @@ def main():
 
     if args.command == "final":
         run_final(data, train, valid, test)
+        return
+
+    if args.command == "forward":
+        if not args.shipped:
+            raise SystemExit("forward needs the revision that was live: --shipped <git revision>, "
+                             "the commit before the refit that followed it.")
+        run_forward(data, committed(args.shipped, "topic_model.json"),
+                    committed(args.shipped, "baseline.json"), args.since, users=args.users)
 
 
 if __name__ == "__main__":
