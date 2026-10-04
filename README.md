@@ -167,7 +167,7 @@ then about forty minutes of fitting:
 
 ## Tests
 
-About 370 checks in 23 scripts. Each one tests a claim by making the failure happen:
+About 500 checks in 26 scripts. Each one tests a claim by making the failure happen:
 a constraint is proved by violating it, a data leak by changing a later result
 and demanding that the earlier prediction does not move by a single bit.
 
@@ -175,7 +175,7 @@ and demanding that the earlier prediction does not move by a single bit.
 .venv\Scripts\python.exe tests/run.py
 ```
 
-That is everything that needs nothing outside this repository — about a minute.
+That is everything that needs nothing outside this repository — about a minute and a half.
 Three of the checks have a second half that reads `dataset.db`, the 680 MB
 collection that lives only on the author's machine, and they skip it unless it
 is asked for:

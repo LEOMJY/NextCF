@@ -1530,6 +1530,12 @@ tbody tr:hover td {
   .verdict-form button,
   .plan-mark button {
     min-width: 44px;
+    /* "skip" and "undo" are narrower than 44 pixels, and a button centres
+       its words, so the extra width went half to each side: measured on a
+       phone, 26 pixels before "skip" where "too easy" had 16 (review of
+       2026-09-28). The words start at the button's left edge instead, and
+       the extra room to press is all on the right. */
+    text-align: left;
   }
 
   .verdict-form {

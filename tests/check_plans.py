@@ -822,6 +822,13 @@ def the_buttons_are_targets_a_finger_can_hit():
     fine = re.search(r"\.verdict-form button,\s*\.restore button,\s*\.plan-mark button \{(.*?)\}", css, re.S)
     assert fine and "padding-top: 4px" in fine.group(1) and "margin-top: -4px" in fine.group(1), \
         "the 24-pixel target for a mouse is gone"
+    # "skip" and "undo" are narrower than 44 pixels. Widened, a button
+    # centres its words, and the gap before "skip" was 26 pixels where the
+    # gap before "too easy" was 16 (measured 2026-10-04: now 16 and 16).
+    wide = re.search(r"\.verdict-form button,\s*\.plan-mark button \{([^{}]*min-width: 44px[^{}]*)\}",
+                     re.sub(r"/\*.*?\*/", "", coarse, flags=re.S))
+    assert wide and "text-align: left" in wide.group(1), \
+        "a short button's words are centred in its 44 pixels again: uneven gaps between the answers"
 
 
 def a_press_comes_back_to_where_it_was_made():

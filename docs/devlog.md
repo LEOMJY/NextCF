@@ -6061,3 +6061,16 @@ the fold-in. What changed is that the code could not have lost it unnoticed.
 
 499 checks pass. The page was measured at 375 pixels after the fix: no
 sideways scroll, the widest table 322 pixels.
+
+## 2026-10-04 — Two small things from the list
+
+- **The gap before "skip" on a phone.** Left over from the review of
+  09-28: on a touch screen the three answers under a problem sat 16 pixels
+  apart, except "skip", which had 26 before it. A button is at least 44
+  pixels wide there so a finger can land on it, "skip" is 24 pixels of
+  word, and a button centres its words, so the extra 20 went half to each
+  side. The words now start at the button's left edge and the extra room is
+  on the right. Measured after: 16 and 16, each button still 44 by 44. The
+  same for "undo".
+- **The README's count of checks**, which said about 370 in 23 scripts.
+  About 500 in 26.
