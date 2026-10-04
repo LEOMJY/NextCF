@@ -6144,3 +6144,63 @@ named, lines that arrive and scenes tied to scrolling. The first screen's
 living object is real 3D, which brings spec §7.1's three layers into force
 for the first time. And the cards probably go. The brief records all four;
 what comes next is two directions as working pages.
+
+## 2026-10-04, evening — Two directions, as working pages
+
+The brief's §9, step one. Each direction is two pages: a landing first
+screen with its 3D object and one control that really works, and the first
+screen of the results page, at 1440 and at 375 pixels wide. They are kept
+outside the repository as throwaway pages. Nothing here is the theme yet.
+
+- **A, "Ridge".** The ground is yellow and the type is ink, in one condensed
+  face. The lower half of the first screen is a field: every rated problem
+  that can be recommended (10,781) as a dot, across by rating, back by
+  contest, newest in front. A ridge rises where rating alone puts a 50%
+  chance, and five poles hold the sample's five.
+- **B, "Stair".** The ground is ultramarine and the type is bone. One white
+  flight of 28 steps, 800 to 3500, a hundred points a step, each edge in its
+  rank's colour. The five stand on the steps their ratings are.
+
+Both are driven by the same real thing: the rating-only curve in
+`baseline.json`, two numbers, worked out in the browser. Move a rating and
+the five re-pick themselves.
+
+What making them showed:
+
+- **Rating alone picks five problems of one rating.** `recommend()` ranks by
+  distance from the target, and the curve knows nothing but the rating, so
+  the five nearest 50% are the five newest problems at one hundred, about
+  200 points above the visitor, all with the same chance. The sample, from
+  the full model, runs from 800 to 1700. On both pages moving the rating
+  shows that without a sentence: five flags spread over nine hundred points
+  close up onto one pole, or one step. It is spec §3's argument as
+  something to hold.
+- **The curve is flat.** From 700 points easier to 2,000 harder, the
+  rating-only chance goes only from about 75% to 10%: three points a
+  hundred. A surface as tall as the chance would be a gentle ramp. What
+  moves when the rating moves is *where* 50% is, so both objects are built
+  on position, not height.
+- **Eight times the body text does not fit a phone.** The brief's rule 6
+  asks for it. At 375 pixels, two lines of five words come to 4.5 times in
+  A's condensed face and 3.8 in B's. At 1440 both pass, at 11 and 9.
+- **A phone's first screen holds the object or the whole list, not both
+  with room to spare.** A's five rows end on the last pixel of 812; B's
+  fifth row starts 12 below it. The flags on the object carry every id and
+  chance, so the answer is on the screen either way.
+- **Rank colours on yellow.** As a swatch against A's ground, orange is 1.5
+  to 1 and cyan 1.9. An ink edge keeps the shape, but the colour is hard to
+  tell. That is A's weakness, and B does not have it: there a rank colour
+  always sits on bone.
+
+Measured: no text under 6.0 to 1 on either ground; the results page's first
+problem starts at 227 and 223 pixels of 812; nothing scrolls sideways at
+375.
+
+Not built, on purpose, until a direction is chosen: the still image a
+device gets when it cannot run the 3D (layer 2 of spec §7.1), the
+frame-rate check that steps down, fonts and libraries served from this
+site (the throwaway pages load them from elsewhere, and none has been
+downloaded), the progress page, and any error state.
+
+Next the author chooses, and the five-second test follows on the one
+preferred.
