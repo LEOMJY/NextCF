@@ -6074,3 +6074,36 @@ sideways scroll, the widest table 322 pixels.
   same for "undo".
 - **The README's count of checks**, which said about 370 in 23 scripts.
   About 500 in 26.
+
+## 2026-10-04, later — The theme first, and a brief before any drawing
+
+Asked whether to release with the card table or change the theme first, the
+author chose the theme. The reference is gsap.com, and the wish list is
+short: creative, more interaction, the main thing standing out, and clear at
+first sight what the site does. The author also asked for the brief to be
+written before anything is drawn, which is the lesson of the last round
+turned into a step: five redraws were judged one word at a time because
+nothing had said beforehand what "good" was.
+
+gsap.com was looked at rather than remembered. Its background is near-black,
+its text cream, its headline two words about 200 pixels tall, its buttons
+one outline and one fill, and every saturated colour is on a shape that
+moves. The page is 9,000 pixels long with one object per screen.
+
+The useful finding is what does not transfer. GSAP sells motion, so a page
+that moves is its demonstration. NextCF sells a prediction. Floating shapes
+here would be decoration, which the checklist forbids. What transfers is
+the principle under it: show the product working, and let the visitor play
+with it before asking for anything. For this site that is a page that makes
+predictions in front of the visitor, with controls that change the inputs.
+One candidate needs nothing new: the rating-only curve is two numbers and
+can run in the browser, so a visitor can drag a rating and watch five real
+problems re-pick themselves.
+
+`docs/design-brief.md` is the result: the product in a sentence, who
+arrives, each page's one job, 26 characteristics written so they can be
+checked, what a design has to survive (no script, no CDN, a phone), what it
+is not, and the order of work with a one-week limit. Three decisions are
+left for the author before any drawing: the canvas (near-black was rejected
+on 09-29 and is what the reference uses), whether to take GSAP as a
+dependency, and whether the card stays.
