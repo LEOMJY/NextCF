@@ -1,9 +1,9 @@
 # NextCF — design brief for the next theme
 
-**Status: draft, 2026-10-04 (second version).** Written at the author's
-request before any design work on the theme that replaces the card table
-(ADR 0029). Nothing in here is decided until the author says so; the open
-decisions are at the end. Once a direction is chosen from prototypes, it
+**Status: the working brief, 2026-10-04 (second version).** Written at the
+author's request before any design work on the theme that replaces the card
+table (ADR 0029). The author answered its four open questions the same day
+(§10); the next step is the two directions of §9. Once a direction is chosen from prototypes, it
 gets its own ADR and this file becomes the record of what it was asked to
 do.
 
@@ -291,23 +291,29 @@ A time limit, set before starting: **one week** from the choice of
 direction to the landing page live. The last theme cost five redraws of one
 page.
 
-## 10. For the author to decide before any drawing
+## 10. Decided by the author, 2026-10-04
 
-1. **The canvas.** The showcase sites are black and white. The author
-   rejected black on 2026-09-29 as "too dim, too serious, too
-   computer-science". Those sites are black and are none of the three,
-   because of the scale of the type and the one living thing on screen.
-   Black with white type, the navy that was kept, or a light page with
-   black type?
-2. **GSAP itself.** The reference sites are built with it. Line and letter
-   reveals and scroll-tied scenes are its two best-known jobs, it has been
-   free since 2025, and it would be served from this site: about 50 KB
-   compressed for the core, ScrollTrigger and SplitText. Spec §7.1 already
-   names it as the choice if the landing page wants motion. It is a new
-   dependency, so it is the author's call.
-3. **How far the living object goes.** Drawn with ordinary elements and
-   SVG, it is cheap, sharp on any screen and works on every phone. Real 3D
-   (WebGL) is what several showcase sites use; it is the three-layer rule,
-   a library of about 150 KB on its own, and most of the week.
-4. **The cards.** Start again from nothing, or keep the idea that a problem
-   is a card? Rank colours stay either way: they are Codeforces's own.
+The four questions this brief ended with, and the author's answers.
+
+1. **The canvas: not pure black, and not a safe choice.** "Don't pure
+   black. Be more creative." So the showcase's black-and-white is not
+   taken as it stands. What is kept from it is the discipline: two
+   neutrals carry the page and saturated colour means something (rule 8).
+   What the two neutrals are is open, and is one of the things the two
+   directions must differ in. A dark page that is not black, a light one,
+   or a page whose ground is itself a strong colour are all candidates.
+2. **GSAP: yes.** Served from this site: the core, ScrollTrigger for
+   scenes tied to scrolling, SplitText for lines and letters that arrive.
+   These two effects are what the author asked for by name.
+3. **The living object: real 3D.** WebGL, not only elements and SVG. So
+   spec §7.1's three layers apply in full: the effect, a still of it, and
+   plain HTML under both, chosen as the page loads; the library loaded only
+   by a device that will run it; a frame-rate check that steps down. The
+   object is still the product (rule 13): what is drawn in 3D is the five
+   problems and their chances, not an ornament beside them. The weight
+   limit in §7 is for what every visitor downloads; the 3D library is on
+   top of it, and only for devices that get layer 3.
+4. **The cards: probably start again from nothing.** Said as "maybe". The
+   directions are free of the card idea. Rank colours stay.
+
+The characteristics in §5 stand as written, with rule 8 read as in point 1.

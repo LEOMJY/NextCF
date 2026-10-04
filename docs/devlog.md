@@ -6134,3 +6134,13 @@ Four decisions are the author's before anything is drawn: the canvas (black
 is the showcase's colour and was rejected here on 09-29), GSAP as a
 dependency, how far the living object goes (elements and SVG, or real 3D),
 and whether a problem is still a card.
+
+### The four answers
+
+The canvas is not pure black, and "be more creative": the showcase's
+black-and-white is not copied, only its discipline of two neutrals with
+colour that means something. GSAP is in, for the two things the author
+named, lines that arrive and scenes tied to scrolling. The first screen's
+living object is real 3D, which brings spec §7.1's three layers into force
+for the first time. And the cards probably go. The brief records all four;
+what comes next is two directions as working pages.
