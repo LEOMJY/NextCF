@@ -1,10 +1,16 @@
 # NextCF — design brief for the next theme
 
-**Status: draft, 2026-10-04.** Written at the author's request before any
-design work on the theme that replaces the card table (ADR 0029). Nothing in
-here is decided until the author says so; the open decisions are listed at
-the end. Once a direction is chosen from prototypes, it gets its own ADR and
-this file becomes the record of what it was asked to do.
+**Status: draft, 2026-10-04 (second version).** Written at the author's
+request before any design work on the theme that replaces the card table
+(ADR 0029). Nothing in here is decided until the author says so; the open
+decisions are at the end. Once a direction is chosen from prototypes, it
+gets its own ADR and this file becomes the record of what it was asked to
+do.
+
+The first version of this brief took gsap.com itself as the reference. The
+author meant the sites in GSAP's **showcase**: the studio and portfolio
+sites built with it. §4 is rewritten for those, and what follows from it
+changed with it.
 
 This is the prompt a designer is handed. It should be possible to build from
 it without having read anything else.
@@ -50,35 +56,74 @@ They give the page about five seconds.
 | `/results` | Pick one of five problems and go and solve it |
 | `/how` | A sceptic checks the claim and finds it holds |
 
-## 4. The reference: gsap.com
+## 4. The reference: the sites in GSAP's showcase
 
-The author's reference, looked at on 2026-10-04. What it does:
+The author's reference. Four were looked at on 2026-10-04 (Unseen Studio,
+Huy Phan, Revelatio Studio, Ravi Klaassens), along with the showcase's own
+gallery of about forty, by opening the pages and reading what they are made
+of, not from memory.
 
-- **Two words say what it is.** "Animate Anything", about 200 pixels tall.
-  The one line under it says who it is for.
-- **The page is the product.** GSAP animates things, so every section of
-  the page is an animation you can watch or play with. Nothing is described
-  that could be shown.
-- **Colour lives in the objects, not in the interface.** The background is
-  near-black (`rgb(14,16,15)`), the text is cream, buttons are a cream
-  outline or a cream fill. Every saturated colour is on a shape that moves.
-- **One thing per screen.** Each section has one large object and a few
-  words. It is 9,000 pixels long and never crowded.
-- **It reacts.** To the cursor, to scrolling, to hovering. The visitor is
-  doing something every few seconds, not reading.
+**What they have in common:**
 
-**What transfers, and what does not.** GSAP's product is motion, so motion
-is its demonstration. NextCF's product is a prediction. Copying the surface
-— floating shapes, letters flying in — would be decoration, which this
-project's own checklist forbids (spec §7.1, rule 4). The lesson that
-transfers is the principle: **show the product working instead of describing
-it, and let the visitor play with it before asking for anything.** For
-NextCF that means the page makes predictions in front of the visitor, and
-the visitor can change the inputs and watch the answer move.
+- **Almost no colour.** Black and white, or one dark and one light. Three of
+  the four have a pure black page with white type. Colour, where there is
+  any, is one accent or the work being shown.
+- **Type is the picture.** One grotesque typeface with a voice (Neue
+  Montreal, Neue Haas Grotesk), set very large, and very small beside it.
+  Nothing in between.
+- **One living thing on the first screen.** A WebGL canvas or a video: at
+  least three of the four draw on a canvas. The page is built around it.
+- **Words are performed, not printed.** Lines rise from behind a mask,
+  letters arrive one at a time, text scrambles and resolves.
+- **The page is a film.** Smooth-scrolling libraries (two of the four load
+  one), scenes that pin and play as they are scrolled, transitions between
+  pages, a loader before anything shows.
+- **A custom cursor.** One of the four hides the system's pointer and draws
+  its own; things that follow the pointer are common.
+- **Precision in the corners.** Index numbers (01 / 19), a live clock,
+  small mono labels, registration marks. The detail says "made by someone
+  who cares" before a word is read.
+- **Very few words.** Unseen's whole first page is about a hundred. But
+  one sentence does say what they are.
 
-One more difference. GSAP's page can leave content invisible until it
-scrolls into view; captured without scrolling, most of it is blank. NextCF's
-cannot: it has to be complete with scripting off (§9 below).
+**What they are for, and why that matters.** Every one is a studio or a
+portfolio. Its job is to impress another designer into making contact, and
+making the visitor wait or work a little is part of the effect. NextCF's
+first job is the opposite: a stranger knows what it does in five seconds.
+The author asked for both, in the same message, and that is the brief:
+
+> **Showcase craft, tool clarity.** The page should feel made like those
+> sites, and be understood faster than any of them.
+
+**What is taken from them:**
+
+1. The near-monochrome canvas, with colour only where it means something.
+2. One typeface with a voice, at two sizes: enormous and small.
+3. One living object on the first screen that the page is built around.
+4. Words that arrive: line and letter reveals, numbers that count and
+   settle.
+5. Scenes that play as they are scrolled to.
+6. A response to the cursor and the finger on everything that can be
+   pressed.
+7. The corners: mono labels, real ids, live numbers, exact alignment.
+
+**What is not taken, and why:**
+
+- **A loader.** It spends the five seconds on nothing. The first screen is
+  in the HTML and readable before any script runs.
+- **Scroll that is taken over.** Smooth-scroll libraries replace the
+  browser's own scrolling and feel wrong on a phone or a trackpad that is
+  not the designer's. Scrolling stays the browser's; animation is tied to
+  it.
+- **A replaced cursor.** It hides the system's pointer, which some people
+  cannot do without. Things may follow the cursor; nothing replaces it.
+- **Being cryptic.** Scrambled text and unlabeled icons are part of the
+  showcase's charm and the opposite of rule 1 below.
+- **Weight.** Video, large images and 3D engines. See §7.
+- **Weeks.** Spec §7.1 already says it: those sites are weeks of
+  professional work with custom 3D, illustration and type. What can be had
+  in one week is the first five items of the list above, done exactly. That
+  is most of the impression.
 
 ## 5. What the site must be like
 
@@ -88,151 +133,153 @@ Each of these is written so it can be checked, not just agreed with.
 
 1. **The five-second test.** A Codeforces user who has never heard of the
    site looks at the first screen for five seconds, then says what it does
-   and what they would do next. Both answers are right. This is tested on
-   real people, not judged.
+   and what they would do next. Both answers are right. Tested on real
+   people, not judged.
 2. **A literal headline.** It says what the visitor gets, in words they use
-   themselves: problems, solve, next, chance. No metaphor that has to be
-   decoded first. Eight words at most.
+   themselves: problems, solve, next, chance. Nothing to decode. Eight words
+   at most.
 3. **The answer is on the first screen.** Not a description of the result:
-   the result. Five real problems with real chances, visible before
-   scrolling, on a phone too.
-4. **The field is on the first screen**, next to the answer, with one
-   button whose label says what happens.
+   the result. Real problems with real chances, before scrolling, on a
+   phone too.
+4. **The field is on the first screen**, with one button whose label says
+   what happens.
 
 ### The main thing stands out
 
-5. **One focal object per screen.** On the first screen it is the five
-   problems. Everything else — headline, field — is arranged around it and
-   is clearly smaller or quieter.
-6. **Scale does the work.** One element is very large, most are small.
-   Nothing is medium. The largest type on the page is at least six times
-   the size of the body text.
+5. **One focal object per screen.** On the first screen it is the living
+   object of rule 13, and it is made of the product: the five problems and
+   their chances. The headline and the field are arranged around it.
+6. **Two sizes.** Enormous and small. The largest type is at least eight
+   times the body text, as on the reference sites, and nothing is medium.
 7. **Few words.** No section has more than 40 words of running text. What
    needs more lives on `/how`.
-8. **Colour is spent on the main thing.** The interface itself is two
-   neutrals. Saturated colour appears only on what the visitor should look
-   at or touch.
+8. **Near-monochrome.** Two neutrals carry the interface. Saturated colour
+   appears only on what means something: a rank colour is a rating, one
+   accent is "act here".
 
 ### It reacts — and every reaction teaches
 
 9. **Play before the handle.** A visitor can do something meaningful
-   without typing anything: move a control and watch five problems change.
-   The first interaction is available within the first screen.
-10. **Every interaction shows how the product works.** Not decoration. The
-    test for each one: after using it, the visitor knows something true
-    about NextCF that they did not know before. Candidates:
+   without typing anything, on the first screen.
+10. **Every interaction shows how the product works.** After using it, the
+    visitor knows something true about NextCF that they did not before.
+    Candidates:
     - *Move your rating*: drag a rating from 800 to 2400 and the five
       re-pick themselves, from the real rating-only curve
       (`baseline.json`, two numbers, runs in the browser).
     - *Move the aim*: drag from "too hard" to "too easy" and watch the
-      five get harder or easier. This is the site's own difficulty control,
-      explained by letting someone hold it.
-    - *Rating alone against the model*: the same problem, two chances side
-      by side, for a real sample history.
-    - *The calibration plot*: hover a point and read "said 45%, 48%
+      five get harder or easier. The site's own control, explained by
+      holding it.
+    - *Rating alone against the model*: one problem, two chances, for a
+      real sample history.
+    - *The calibration plot*: move along it and read "said 45%, 48%
       happened"; switch between the test year and the two weeks after
       launch.
-11. **It answers the cursor and the finger.** Hover, press, drag and focus
-    each have a visible, immediate response, under 100 milliseconds. Every
-    interaction works by touch; nothing depends on hover alone.
-12. **Scrolling tells the story once.** History in, model, five out: three
-    beats, each a picture that assembles as it is scrolled to. The page is
-    never hijacked: scrolling always scrolls.
+11. **Everything pressable answers at once**, under 100 milliseconds, to
+    hover, press, drag and focus. All of it works by touch; nothing
+    depends on hover alone.
+12. **Scenes, on the browser's own scroll.** History in, model, five out:
+    three scenes that play as they are scrolled through and can be
+    scrolled back. Scrolling is never taken over.
 
 ### Motion
 
-13. **One signature moment**, the thing somebody describes an hour later.
-    It happens on the first screen and it is the product doing its job (the
-    five arriving), not an ornament.
-14. **Motion explains or confirms.** It shows where something came from,
-    what changed, or that a press was received. Anything that does neither
-    is removed.
-15. **Fast and physical.** 150–400 milliseconds for responses, eased out.
-    Transforms and opacity only, 60 frames a second on a mid-range phone.
-16. **Still for those who ask.** With reduced motion set, everything is in
-    its final place and nothing moves; nothing is lost.
+13. **One living object** on the first screen, as the reference sites
+    have, and it is the product working: numbers settling, problems
+    arriving, the answer changing when the visitor moves something.
+14. **Words arrive.** Headlines rise line by line from behind a mask;
+    numbers count to their value. Once, on entry, never again on the same
+    visit.
+15. **Motion explains or confirms.** Where something came from, what
+    changed, that a press was received. Anything that does neither goes.
+16. **Fast and exact.** 150–400 milliseconds for a response, up to about a
+    second for an entrance, one easing curve for the whole site. Transforms
+    and opacity only, 60 frames a second on a mid-range phone.
+17. **Still for those who ask.** With reduced motion set, everything is in
+    its final place and nothing is missing.
 
 ### Identity
 
-17. **Unmistakably Codeforces-native.** Rank colours, problem ids such as
-    1850C, verdicts, the A–G letters of a contest. Somebody from that world
-    recognises their own things; a generic SaaS page could not have them.
-18. **Not a template.** No gradient-text headline, no three-card feature
-    row, no glass panels, no dashboard mock-up tilted in 3D, no emoji
-    bullets.
-19. **A typeface with a voice** for the display, a quiet one for reading,
-    a mono for data. Three roles, one job each.
-20. **Dark, but not dim.** If the canvas is dark it is carried by large
-    areas of saturated colour and very large type, so it reads as lively,
-    not as a terminal. (The author rejected black as "too dim, too serious"
-    on 2026-09-29, and gsap.com is near-black: see the open decisions.)
+18. **Unmistakably Codeforces-native.** Rank colours, problem ids such as
+    1850C, verdicts, the A–G letters of a contest. The corners of the page
+    (rule 20) are filled with the product's real data, not decoration.
+19. **A typeface with a voice** for display and reading, and a mono for
+    data. Served from this site.
+20. **The corners are finished.** Small mono labels, real ids, counts that
+    are true, alignment to a grid that can be seen. This is where "made
+    with care" is read.
+21. **Not a template.** No gradient-text headline, no three-card feature
+    row, no glass panels, no tilted dashboard mock-up, no emoji bullets.
 
 ### True
 
-21. **Every number is real** and comes from the code or the model file.
+22. **Every number is real** and comes from the code or the model file.
     Sample data is real data from a real history and is labelled a sample.
-22. **Bold, not louder than the evidence.** The claim is "better than
-    rating alone, and here is how we checked", not "AI-powered".
+23. **Bold, not louder than the evidence.** "Better than rating alone, and
+    here is how it was checked", not "AI-powered".
 
 ### The tool pages
 
-23. **The same world, quiet.** Same type, colour and shapes as the landing
-    page; no motion except to answer a press or show a change.
-24. **The five come first**: on a 375 × 812 phone the first problem starts
+24. **The same world, quiet.** Same type, neutrals and corners as the
+    landing page; no motion except to answer a press or show a change.
+25. **The five come first**: on a 375 × 812 phone the first problem starts
     in the top half of the screen (spec §7.1, rule 13).
-25. **Scannable.** Rating and chance for all five can be compared without
+26. **Scannable.** Rating and chance for all five can be compared without
     reading a sentence.
-26. **One press per answer**, on the page, with what it does said once.
-    Nothing behind a menu (rule 5).
+27. **One press per answer**, on the page, with what it does said once.
+    Nothing behind a menu (rule 5 of the spec's checklist).
 
-## 6. The landing page, beat by beat
+## 6. The landing page, scene by scene
 
-1. **First screen.** Headline; the five problems for a sample history,
-   arriving; the handle field and its button; one line saying whose five
-   these are. On a phone, all of that above the fold.
-2. **Play.** One control the visitor can move, and the five changing with
-   it.
-3. **How.** History in, model, five out: three pictures, about 30 words
-   each.
-4. **Proof.** The calibration plot and the two measurements, each one
-   sentence, linked to `/how`.
-5. **Again.** The field, once more, with nothing else on the screen.
+1. **First screen.** The headline arrives. The living object: five real
+   problems and their chances for a sample history. The handle field and
+   its button. One small line saying whose five these are. On a phone, all
+   of it above the fold.
+2. **Play.** One control the visitor can move, and the object answering.
+3. **How.** History in, model, five out: three scenes, about 30 words each.
+4. **Proof.** The calibration plot and the two measurements, one sentence
+   each, linked to `/how`.
+5. **Again.** The field, once more, alone on the screen.
 
 ## 7. What it must survive
 
-These are not preferences. A design that breaks one is not a candidate.
+Not preferences. A design that breaks one is not a candidate.
 
 - **Complete without JavaScript.** Every word, the five sample problems and
-  the form are in the HTML and laid out by the stylesheet. Script only adds
-  motion and play.
+  the form are in the HTML and laid out by the stylesheet. Script adds
+  motion and play. (Most showcase sites are blank without it.)
+- **The three layers** of spec §7.1 for anything heavy: the effect, a still
+  of it, plain HTML under both; which one a device gets is decided as the
+  page loads.
 - **Nothing from another server.** Fonts and any library are served from
-  this site (mainland China; spec §7.1).
-- **375 pixels wide**, no sideways scroll, touch targets of 44 pixels.
+  this site.
+- **375 pixels wide**, no sideways scroll, touch targets of 44 pixels. The
+  first screen works on a phone as well as on a laptop, which few showcase
+  sites manage.
 - **4.5 to 1** for every text colour on every surface it sits on; visible
-  keyboard focus; reduced motion honoured.
-- **Light enough.** The first screen is readable before any script has
-  run. Script and fonts for the landing page stay under about 150 KB
-  compressed.
+  keyboard focus; reduced motion honoured; the system cursor left alone.
+- **Light.** Script and fonts for the landing page under about 150 KB
+  compressed. No video. No image over 100 KB.
 - **The pieces that exist.** Flask and Jinja for pages, one stylesheet of
-  tokens, the React island on the results page. A new theme changes the
-  tokens, the templates and their checks; it does not add a framework.
+  tokens, the React island on the results page. A theme changes tokens,
+  templates and checks; it does not add a framework.
 - **Spec §7.1's checklist**, all fourteen rules, before anything is shown.
 
 ## 8. What it is not
 
-- Not a game of chance. Nothing that looks like a lottery, a loot box or a
-  slot machine. The pack of cards was close to that line.
+- Not a game of chance. Nothing like a lottery, a loot box or a slot
+  machine. The pack of cards was close to that line.
 - Not a leaderboard, not a profile to show off (spec §5).
-- Not decorated. No shape floats, spins or follows the cursor unless it is
-  information.
+- Not a portfolio. It may be made like one; it does not behave like one.
+  Nothing makes the visitor wait, hunt or decode.
 - Not a second design for the tool pages. One identity, two volumes.
 
 ## 9. What gets made, in what order
 
 1. **Two directions, as working pages**, not pictures. Each has the full
-   first screen, one interaction a visitor can really use, and the first
-   screen of the results page, at desktop and phone width. They differ in
-   their visual idea, not in their colours.
+   first screen with its living object, one interaction a visitor can
+   really use, and the first screen of the results page, at desktop and
+   phone width. They differ in their visual idea, not in their colours.
 2. Each is checked against §5 and spec §7.1 before the author sees it, and
    says which rule it bends, if any.
 3. **The five-second test** on two or three Codeforces users who are not
@@ -240,19 +287,27 @@ These are not preferences. A design that breaks one is not a candidate.
 4. The author chooses. Then, and only then: an ADR, the tokens, the
    templates, the checks, in that order.
 
-A time limit, set before starting: **one week** from the choice of direction
-to the landing page live. The last theme cost five redraws of one page.
+A time limit, set before starting: **one week** from the choice of
+direction to the landing page live. The last theme cost five redraws of one
+page.
 
 ## 10. For the author to decide before any drawing
 
-1. **The canvas.** Near-black as on gsap.com, the navy that was kept on
-   09-29, or light. Black was rejected once as dim; gsap.com is black and
-   is not dim, because of how much colour and scale sits on it. Which is
-   wanted?
-2. **The animation library.** Scroll-driven storytelling and drag are
-   possible by hand in small amounts. Past that, GSAP itself is the
-   standard tool; it has been free since 2025, and would be served from
-   this site (about 40 KB compressed for the core and the scroll plugin).
-   It is a new dependency, so it is the author's call.
-3. **The cards.** Start again from nothing, or keep the idea that a problem
+1. **The canvas.** The showcase sites are black and white. The author
+   rejected black on 2026-09-29 as "too dim, too serious, too
+   computer-science". Those sites are black and are none of the three,
+   because of the scale of the type and the one living thing on screen.
+   Black with white type, the navy that was kept, or a light page with
+   black type?
+2. **GSAP itself.** The reference sites are built with it. Line and letter
+   reveals and scroll-tied scenes are its two best-known jobs, it has been
+   free since 2025, and it would be served from this site: about 50 KB
+   compressed for the core, ScrollTrigger and SplitText. Spec §7.1 already
+   names it as the choice if the landing page wants motion. It is a new
+   dependency, so it is the author's call.
+3. **How far the living object goes.** Drawn with ordinary elements and
+   SVG, it is cheap, sharp on any screen and works on every phone. Real 3D
+   (WebGL) is what several showcase sites use; it is the three-layer rule,
+   a library of about 150 KB on its own, and most of the week.
+4. **The cards.** Start again from nothing, or keep the idea that a problem
    is a card? Rank colours stay either way: they are Codeforces's own.

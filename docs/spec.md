@@ -1296,12 +1296,14 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   ("What a good page is", §7.1) does not depend on the theme and applies to
   whatever replaces it.
   *10-04:* the author decided the theme is replaced **before** the public
-  release, not after, and named a reference: gsap.com. What is asked of the
-  new theme, in the author's words: creative, more interaction, the main
-  thing standing out, and a visitor understanding what the site does the
-  moment they see it. `docs/design-brief.md` turns that into 26 checkable
-  characteristics and the order of work; it is a draft until the author
-  approves it, and three decisions in it are the author's to make first.
+  release, not after, and named a reference: the sites in GSAP's showcase,
+  the studio and portfolio sites built with it. What is asked of the new
+  theme, in the author's words: creative, more interaction, the main thing
+  standing out, and a visitor understanding what the site does the moment
+  they see it. `docs/design-brief.md` turns that into 27 checkable
+  characteristics, what is and is not taken from the reference, and the
+  order of work; it is a draft until the author
+  approves it, and four decisions in it are the author's to make first.
 - **3D balloons as the landing page's visual idea?** Proposed 2026-09-13: one 3D
   balloon per topic in the centre; clicking one makes it rise with the camera
   following, into that topic's recommendations. Material quality (light,

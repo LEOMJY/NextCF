@@ -6107,3 +6107,30 @@ is not, and the order of work with a one-week limit. Three decisions are
 left for the author before any drawing: the canvas (near-black was rejected
 on 09-29 and is what the reference uses), whether to take GSAP as a
 dependency, and whether the card stays.
+
+### A correction the same day: the showcase, not gsap.com
+
+The reference was misread. The author meant the sites in GSAP's showcase,
+the studio and portfolio sites built with it, not GSAP's own home page. Four
+were opened and read (Unseen Studio, Huy Phan, Revelatio Studio, Ravi
+Klaassens), with the gallery of about forty. They are a different kind of
+page: black and white, one grotesque typeface at two sizes, a WebGL canvas
+as the first screen's one object, words that arrive letter by letter, smooth
+scrolling, a loader, and small exact details in the corners.
+
+The brief's second version is built on them. The useful part was again what
+does not transfer, and this time it is the author's own two wishes pulling
+apart. Those sites exist to impress another designer, and making a visitor
+wait or decode is part of how they do it. The author also asked that a
+stranger understands the site at once. So the brief says both, in one line:
+showcase craft, tool clarity. Taken: the near-monochrome page, type as the
+picture, one living object, words that arrive, scenes tied to scrolling,
+finished corners. Not taken: the loader, taking over the scroll, replacing
+the cursor, being cryptic, video and 3D weight. And a plain statement of
+cost, which spec §7.1 already made: those sites are weeks of professional
+work, and what one week buys is the first five of those, done exactly.
+
+Four decisions are the author's before anything is drawn: the canvas (black
+is the showcase's colour and was rejected here on 09-29), GSAP as a
+dependency, how far the living object goes (elements and SVG, or real 3D),
+and whether a problem is still a card.
