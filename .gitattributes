@@ -1,2 +1,7 @@
 # Font files are binary. Never let a line-ending conversion touch them.
 *.woff2 binary
+
+# Library files are committed exactly as their publishers ship them, and
+# static/vendor/SOURCES.txt records each one's fingerprint. A line-ending
+# conversion would change the bytes and make the fingerprint a lie.
+static/vendor/*.js -text

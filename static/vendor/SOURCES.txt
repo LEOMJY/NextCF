@@ -1,0 +1,30 @@
+What is in this folder, and where each file came from.
+
+Nothing here is edited. Each file is its publisher's own, fetched once and
+committed, so the site never asks another server for it (spec section 7.1:
+everything a page needs is served from this site). To update one, replace
+the file and its lines here in the same commit.
+
+Fetched 2026-10-11. Each file's bytes were compared with the sha512 value
+cdnjs publishes for it (api.cdnjs.com, field "sri") and matched.
+
+GSAP 3.13.0
+  licence   GreenSock's standard licence, no charge: https://gsap.com/standard-license
+            (each file carries the notice at its top)
+  gsap.min.js            72,435 bytes
+    from    https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js
+    sha256  96c01b81f44a3290e2b4532f55e2c9534b2adc43273a19f3756b2cb41f0fd0b6
+  ScrollTrigger.min.js   44,157 bytes
+    from    https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js
+    sha256  308219390e5e3b84cda0c481e70caa9820883ae10bda44e6e9a149a81aac4b3f
+  SplitText.min.js        7,247 bytes
+    from    https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js
+    sha256  5e519ea2470faa15ca4d4f27e9263e5906c07c034a9b4771164dee108136563a
+
+three.js 0.160.0 (r160)
+  licence   MIT: LICENSE-three.txt, beside this file
+  three.module.min.js   670,681 bytes
+    from    https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js
+    sha256  3e690ac7d180b0aadf0891bea39eec643e29e2d3e75c99b18689518665f69ba6
+    Loaded only by a device that will draw the 3D field, and only after
+    the page itself is on screen (spec section 7.1, the three layers).
