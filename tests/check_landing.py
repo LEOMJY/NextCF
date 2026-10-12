@@ -198,6 +198,10 @@ def the_axis_is_the_ranks_end_to_end():
     assert slider, "the rating is not a real slider"
     low, high, _, value = map(int, slider.groups())
     assert low == web.RATING_LOWEST and low <= value == web.SAMPLE_RATING <= high <= web.RATING_HIGHEST, slider.groups()
+    # The slider moves in tens and the sample's rating is not a ten, so what
+    # a screen reader is told is written out rather than left to the value.
+    assert f'aria-label="Your rating" aria-valuetext="{web.SAMPLE_RATING}"' in html, "the slider does not say its rating"
+    assert 'slider.setAttribute("aria-valuetext", rating);' in SCRIPT, "the slider's spoken rating never changes"
 
 
 # ------------------------------------------------------------ the numbers

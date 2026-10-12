@@ -166,6 +166,10 @@
     state.mode = mode; state.rating = rating; state.five = five; state.key = key;
     fill(five);
     youN.textContent = rating;
+    // What a screen reader says for the slider. The slider moves in tens, so
+    // on the sample its own value is 1490 while the flag, rightly, says the
+    // history's real 1491; this makes the two say the same thing.
+    slider.setAttribute("aria-valuetext", rating);
     says.textContent = "";
     if (mode === "sample") {
       says.appendChild(document.createTextNode("Sample: one real "));

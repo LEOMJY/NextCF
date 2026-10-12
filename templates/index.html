@@ -209,7 +209,7 @@
         {# The slider stops at 2400, where the last rank begins, though the
            axis runs on to 3500: problems are rated that high, and almost no
            visitor is. #}
-        <input type="range" id="rating" min="{{ ranks[0].from }}" max="2400" step="10" value="{{ sample_rating }}" aria-label="Your rating">
+        <input type="range" id="rating" min="{{ ranks[0].from }}" max="2400" step="10" value="{{ sample_rating }}" aria-label="Your rating" aria-valuetext="{{ sample_rating }}">
         <span class="you-pole" id="you-pole" aria-hidden="true"></span>
         <div class="you" id="you" aria-hidden="true">
           <svg viewBox="0 0 6 10"><path d="M5 1 1 5l4 4"/></svg>
