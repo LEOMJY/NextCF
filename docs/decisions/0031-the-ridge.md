@@ -156,10 +156,12 @@ once it was used everywhere.
 **Decided:** go back to the version before that redraw and change one
 thing at a time, each change shown and judged before the next.
 
-**The first change, made and awaiting the author's verdict:** the sentence,
-the handle field and the five are moved from the far-right column to
-directly under the headline, on its left edge. Same blocks, same sizes;
-nothing else touched.
+**The first change was refused too.** The sentence, the handle field and
+the five were moved from the far-right column to directly under the
+headline, same blocks and same sizes. The author's answer: no, change
+everything back. So the prototype is again exactly the version of the
+screenshots, right-hand column and all, and nothing is changed in it until
+the author says what to change.
 
 **Open again, so not to be built from the Decision above:**
 

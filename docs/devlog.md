@@ -6378,3 +6378,15 @@ blocks at the same sizes, moved from the far-right column to directly
 under the headline. Nothing else. The five-redraw afternoon of 09-30 and
 tonight teach the same thing from two sides: guessing at one word wastes
 a redraw, and so does answering three complaints in one.
+
+## 2026-10-12 — Everything back
+
+The one small change was shown: the right-hand blocks moved under the
+headline. "No, change everything back." The prototype is the version of
+the screenshots again, down to the column the author had called isolated.
+
+Three attempts in one night, and each started from a guess about what the
+complaint asked for. The complaints were true and the answers were wrong,
+which says the next step is not a fourth attempt. Nothing changes until
+the author says what should, in their own words or by pointing at a page
+they like.
