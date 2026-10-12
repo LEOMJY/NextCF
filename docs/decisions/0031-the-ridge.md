@@ -4,7 +4,9 @@
 **Status:** accepted, and **being built**. The card table (ADR 0029) is what
 the live site shows until these templates replace it, and is superseded on
 that day. The brief set one week from the choice to the landing page live:
-**2026-10-18**.
+**2026-10-18**. **Amended the same evening** (below): the arrangement of
+the first screen and of the three steps, and the tool pages' pale ground,
+which is withdrawn.
 
 ## Context
 
@@ -135,6 +137,62 @@ back sees no tick, and the button that would fix it was at the foot of the
 page, named for what the system does: "Update from Codeforces". It moves to
 directly under the five and is named for what the visitor wants: "Check
 what I solved". "Couldn't solve" already exists as "too hard".
+
+## Amendment, the same evening: one path, steps, and no pale page
+
+The author looked at the pages again and named three faults. Each was a
+fault of arrangement, and they had one cause: things had been set in
+columns rather than next to what they belong to.
+
+**The first screen had three islands.** The sentence, the handle field and
+the five sat in a narrow column at the far right, a screen's width from the
+headline they explain: "isolated, put on the edge". The handle field is the
+page's one job and was its smallest part. Now there is one reading path
+down one left edge: the headline; directly under it the field, at 64
+pixels tall the largest thing after the headline, with the sentence beside
+it; then the five across the whole page as five columns, the chance the
+largest thing in each; then the field of dots. Each column's rule runs on
+down as a line to that problem's own dot, so the list is the field's
+labels and not a second copy of them. When the rating is moved, the five
+lines swing to meet at one dot. On a narrow screen the five are a list
+under the field and each dot carries a small flag, as before.
+
+**The three steps did not read as steps.** Three titles ran down the left
+and their sentences sat far to the right, with nothing to say they are a
+sequence. Now each step has its number, its title and its sentence
+together, in three columns in the order they happen, on one rule that the
+scroll itself draws from left to right. Each shows what it works on in its
+own material: a row of verdicts, the count of first attempts, the line
+from 30% to 65% with the aim on it.
+
+**The pale results page is withdrawn.** Chosen at midday, seen whole in the
+evening: "I don't like it." Asked which of four things, the author picked
+two: nothing leads and it is too empty; and the pale ground itself. Asked
+what a results page should be like, the answer was the showcase again:
+different from other sites of its kind, something that catches, and clear.
+So the results page is the landing page's world at full strength. The
+handle is as large as the landing headline. Each of the five is one line
+across the page: its chance and its name both in the display face, id and
+rating small under the name, and "too hard / too easy / skip" as one
+joined control at the end. A whole line turns ink when pointed at, and is
+the link to its problem. Under the five is the landing page's rating line,
+drawn without script, with the visitor and their five standing on it. The
+five arrive once per visit: lines rise, chances count up, poles stand.
+
+This overrides the tokens above: **one ground, yellow, on every page, and
+"act here" is ink.** It also relaxes spec §7.1's rule 12 (calm) for the
+results page, by the author's choice. Rules 13 and 14 hold and were
+measured: on a 375 by 812 phone the first problem starts at 159 pixels and
+all five begin on the first screen.
+
+What this gives back: the two doubts about full yellow on a page used
+daily still stand, and were said. Rank colours and green are weakest on
+it, and it is not calm. The author has heard both and chose the page that
+catches.
+
+Problem names are now set in the display face, which is served in Latin
+only. A Russian title would fall back to another face, so the display
+face's Cyrillic file (9.8 KB, same source) is needed before release.
 
 ## Alternatives
 

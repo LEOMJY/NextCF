@@ -6295,3 +6295,58 @@ came from.
 
 Nothing on the live site has changed yet. Next: the stylesheet's tokens,
 then the templates, then the checks.
+
+## 2026-10-11, night — Three faults of arrangement, and a decision taken back
+
+The author looked at the prototype again and did not like it. Three things
+were named, and a fourth could not be: the results page, "I don't like it,
+I can't tell why", and "boring". And one instruction: learn how a good
+website is built first.
+
+The three that were named turned out to be one fault. Everything had been
+laid out in columns, and nothing next to what it belongs to.
+
+- **The first screen.** Headline on the left; sentence, handle field and
+  the five in a narrow column at the far right; the field along the
+  bottom. Three islands. The handle field, the one job of the page, was
+  its smallest part. It now reads down one left edge: headline, then the
+  field at 64 pixels tall with its sentence beside it, then the five as
+  five columns across the page, then the dots. Each column's rule carries
+  on down as a line to its problem's dot. Moving the rating swings all
+  five lines onto one dot, which is the page's argument made visible more
+  plainly than the five flags on one pole were.
+- **The three steps.** Titles down the left, sentences far to the right,
+  no numbers. Now a number, a title and a sentence together, three
+  columns in order, on one rule that the scroll draws left to right.
+- **The results page.** Asked which of four things was wrong, the author
+  picked two at once: nothing leads and it is empty; and the pale ground
+  itself. Asked what such a page should be like: the showcase again,
+  different from other sites of its kind, something that catches, and
+  clear. So it is redrawn as loudly as the landing page: the handle as
+  large as the headline, each of the five one large line with its chance
+  first, and the landing page's rating line under them.
+
+**The pale ground lasted half a day.** It was recommended at midday for
+reasons that are still true (a page used daily, rank colours weak on
+yellow), chosen with both versions side by side, and rejected in the
+evening when the whole page was looked at rather than its ground. The
+lesson is about how the choice was offered: two grounds under the same dull
+table were compared, when the table was the problem. A quiet page was
+never going to be judged fairly while it had nothing on it.
+
+**On learning first.** One of the reference sites was opened and read
+again rather than remembered, and one thing in it was enough to explain
+the first fault: every block on its first screen, the navigation, the
+statement, the one link, sits on the same few column lines, and nothing
+stands alone at an edge. The others showed only their loading screens to
+a browser nobody was looking at, so that is one site, not a study.
+
+What is measured: at 1440 by 900 the first screen ends on the axis; on a
+375 by 812 phone the results page's first problem starts at 159 pixels and
+all five begin on the first screen, and the landing page's list runs 23
+pixels past it. Two parts were checked by their positions and not by eye,
+because the screenshots stopped: the three steps, and the rating line
+under the results.
+
+ADR 0031 has the amendment, and spec §7.1 no longer says the tool pages
+are pale.
