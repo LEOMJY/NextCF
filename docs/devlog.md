@@ -6390,3 +6390,46 @@ complaint asked for. The complaints were true and the answers were wrong,
 which says the next step is not a fourth attempt. Nothing changes until
 the author says what should, in their own words or by pointing at a page
 they like.
+
+## 2026-10-12, later — Placed by hand
+
+After "everything back" the author pointed at one block, the sentence, the
+handle field and the five, and named one change: a little left and bigger.
+Then a bit more. Then a bit smaller. Then the whole page was handed over to
+be measured and placed, and the block came back level with the headline's
+first line: "move this down." Moved down: "way too down."
+
+Five rounds of words for one position. "A bit" has no size, and a guess at
+its size costs a round whether it is right or wrong. So the prototype got a
+small editor: every block can be dragged and scaled on the page itself, and
+what is saved is numbers, each block's rectangle before and after and the
+size of the window it was set in.
+
+What came back, for a window 2178 by 1149: three blocks moved and none
+scaled. The sentence 17 right and 56 up, the handle field 17 right and 68
+up, the five 17 right and 90 up. So the block sits a little higher and its
+three parts sit closer together. Nothing on the results page was moved.
+
+The editor moves a block with a transform, which shifts the picture of a
+box and leaves the box where it was: the page still keeps the old place
+free, and the offset is in pixels, so it is right at one window size only.
+The positions were therefore turned back into rules tied to things that
+change with the window: the block starts 0.6 of the headline's type size
+below the top of the headline row, and the gaps inside it are 0.32 and 0.39
+of the block's own size unit. Measured at the author's window, the sentence
+and the handle field land on the saved rectangles exactly and the five
+within three pixels; the headline, the field, the axis and the three steps
+measure the same as before. The author has not yet looked at it.
+
+Two things the numbers corrected. The window had been taken for about 1750
+wide, measured off a screenshot; it is 2178. A screenshot is in the
+screen's pixels and the page is laid out in its own, and on this screen one
+of the page's is 1.75 of the screen's, so a size read off an image is not a
+size on the page. And the last guess was not far off: 17 pixels sideways,
+under a hundred up, and tighter gaps. Close, and still a round lost.
+
+The results page: the author does not want yellow as its ground. That is a
+verdict on yellow there, not yet a choice of what replaces it. The
+prototype shows white, with yellow kept for the top bar, the mark behind
+each chance and the one button, and light grey and dark beside it on a
+switch.

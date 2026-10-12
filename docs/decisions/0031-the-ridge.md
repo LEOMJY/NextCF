@@ -163,10 +163,20 @@ everything back. So the prototype is again exactly the version of the
 screenshots, right-hand column and all, and nothing is changed in it until
 the author says what to change.
 
+**2026-10-12: the right-hand block is where the author put it.** After
+several rounds of "a bit left", "down", "too far down", the prototype was
+given an editor for dragging and scaling its blocks, and the author placed
+the sentence, the handle field and the five by hand: a little higher and
+closer together, no change of size. The layout rules now produce that
+placement at any window size (devlog, 2026-10-12, later).
+
 **Open again, so not to be built from the Decision above:**
 
 - the ground of the tool pages. The pale one is withdrawn; the full yellow
-  one was part of the rejected redraw. The tokens' "tool" line is unsettled;
+  one was part of the rejected redraw, and on 2026-10-12 the author said
+  plainly that the results page is not to be yellow. What replaces it is
+  not chosen: white, light grey and dark are side by side on the
+  prototype. The tokens' "tool" line is unsettled;
 - how the three steps are shown as steps;
 - what the results page leads with;
 - where the display face is used besides the headline. Heavy and narrow,
