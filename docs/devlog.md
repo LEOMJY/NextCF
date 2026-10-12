@@ -6204,3 +6204,38 @@ downloaded), the progress page, and any error state.
 
 Next the author chooses, and the five-second test follows on the one
 preferred.
+
+## 2026-10-11 — A is preferred, and two things in it were wrong
+
+The author prefers A, the yellow field, and named two faults.
+
+**The mark for the visitor's rating was "ugly and cheap".** Asked which
+black rectangle, with four of them on the page to choose from, the answer
+was one: the slider's thumb on the rank bar. It was a plain black block, 14
+by 26 pixels, and next to it a second black block said "your rating 1491".
+Two shapes for one thing, and neither drawn. The five problems already had
+a vocabulary, a pole and a flag, so the visitor's mark now uses it: a
+hairline through the bar that carries on up the field as the line at their
+rating, and one flag hanging under the axis, which is the thing to hold.
+The browser's own slider is still there, invisible and exactly as wide as
+the flag, so a keyboard and a screen reader get a real control and a press
+anywhere on the flag drags it.
+
+**The headline was hard to read**, "because it is big and uppercase". That
+is right, and for a reason that can be said: capitals are all one height,
+so a word loses its outline, and in a heavy, very narrow face at 180 pixels
+with the lines almost touching, the letters close up into a wall. Three
+treatments are in the prototype behind a switch, because the choice is the
+author's: sentence case in the same face, the capitals made lighter with
+room between letters and lines, and sentence case in the family's wider
+cut. Each has letters of a different width, so the size that fills the
+column is measured in the page rather than fixed, and never exceeds what
+the capitals had.
+
+What it cost elsewhere: lowercase needs more room between its lines, so on
+a 375 by 812 phone the fifth of the five rows now ends 8 pixels below the
+first screen, where the capitals ended on its last pixel.
+
+The lesson from the last theme held. One word was not redrawn from: one
+question with the page's own parts as the answers, and the answer came back
+at once.
