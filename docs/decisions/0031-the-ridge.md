@@ -190,8 +190,8 @@ attempt, and belongs in the devlog until it has a verdict.
 
 The landing page is written as real code: `templates/index.html`,
 `static/ridge.js`, a section of `static/style.css`, and
-`static/field.json`. Not deployed yet. Building it settled six things the
-Decision above left open or had wrong.
+`static/field.json`. Live since the evening of 2026-10-12. Building it
+settled six things the Decision above left open or had wrong.
 
 1. **The ridge is a second set of values, not a second stylesheet.** The
    tokens keep their names. The ridge's values for them are one `.ridge`

@@ -820,7 +820,7 @@ drawn as flat cards is the next step, not yet built.
 `docs/decisions/0031-the-ridge.md`. It replaces the card table, which stays
 live until the new templates are (due 2026-10-18). *2026-10-12:* the landing
 page is built in it (`templates/index.html`, `static/ridge.js`,
-`static/field.json`) and passes its checks; it is not deployed yet, and
+`static/field.json`), passes its checks, and is live since that evening;
 every other page is still the card table. The ridge's values are a second
 set for the same token names, in a `.ridge` block of `static/style.css`
 that a page asks for with one class on `<html>`, so the two can stand side
@@ -1360,8 +1360,9 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   and sentence case over capitals for the headline. The tool pages are
   not settled: a pale ground was chosen and withdrawn the same day, and a
   loud redraw was rejected that night (ADR 0031's amendment). Due live by
-  10-18. *10-12:* the landing page is built and checked, waiting for the
-  author to look at it and say when it goes live. Still owed:
+  10-18. *10-12:* the landing page is built, checked and live, six days
+  inside the week. The tool pages are not, and their ground is not chosen.
+  Still owed:
   the brief's five-second test on two or three Codeforces users, which was
   meant to come before the choice.
 - **Should the results page ask Codeforces by itself?** Raised 2026-10-11,

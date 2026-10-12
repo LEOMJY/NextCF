@@ -6512,3 +6512,43 @@ all. A visitor to the page downloads 140 KB compressed against the brief's
 Still owed: the five-second test; the results page's ground; whether the
 landing page goes live before the tool pages are redrawn; the short-window
 case above.
+
+## 2026-10-12, live — The landing page is deployed
+
+The author's word was "do some check and push it". What was checked first:
+
+- Every check, with the tier that reads the dataset: 514 pass, none skipped.
+- The class names the new page introduced, searched for in every other
+  template and in the React components: none is used anywhere else, so no
+  rule written for the landing page can reach another page. The other pages
+  were then opened and measured: still navy, still the card table's faces,
+  the error page's button still "Open pack".
+- The landing page at 320, 375, 768, 861, 900, 1366, 1440, 1920 and 2178
+  wide: no sideways scroll at any of them, and beside each other the
+  headline and the block are never closer than 75 pixels (at 1366; 313 in
+  the author's window). At 900 by 700 the block is tight: a problem's
+  name has 122 pixels and wraps to three lines. It reads, and the narrow
+  layout starting a little wider would read better.
+- The slider from the keyboard: the arrow keys move the rating in tens and
+  the five follow. That found one thing. The slider moves in tens and the
+  sample's rating is 1491, so a screen reader was told 1490 under a flag
+  that says 1491. It is told the flag's number now.
+- How the live server sends static files: `no-cache` with a fingerprint, so
+  a browser asks every time whether its copy is still good. That mattered
+  more than usual today: a new page drawn with last week's stylesheet would
+  have been the old layout's rules on the new page's markup.
+
+Then the push, and the same questions put to the live site a minute later:
+the page asks for the ridge; the stylesheet, the script, the field file,
+the libraries and the fonts are byte for byte the committed ones; the form
+still sends a handle on to its results page and still refuses a bad one
+with its sentence; `/how` and `/privacy` are unchanged. In a browser the
+live page loads with nothing in the console, draws the field in WebGL, and
+ends its arrival with everything in place.
+
+The push emptied the live database again, as every deploy does until there
+is a disk.
+
+Not checked, and worth an hour: Firefox and Safari, a real phone in the
+hand, a slow machine, and the arrival watched at its own speed rather than
+read off the page when it had finished.
