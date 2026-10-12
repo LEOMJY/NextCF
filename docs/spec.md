@@ -716,8 +716,9 @@ visitor can tell what it is for without being told.
    chip, uppercase label and colour answers "what does this tell the
    visitor?". Colour has four meanings and no others: a rank colour is a
    rating, gold is "act here", green is accepted, `--warn` is wrong.
-   (*2026-10-11, ADR 0031:* in the ridge, "act here" is ink, on the yellow
-   ground every page has. The four meanings stand.)
+   (*2026-10-11, ADR 0031:* in the ridge, "act here" is ink on the yellow
+   landing page; the tool pages' accent is not settled. The four meanings
+   stand.)
 5. **A control looks like a control and says what it does.** A button looks
    pressable, not like a link or a word. Its label names what happens,
    including the consequence the visitor cannot see ("Too hard — next pack
@@ -827,23 +828,21 @@ rating axis the visitor can hold, and moving it re-picks the five.
 type     Sofia Sans Extra Condensed 800 (display) · Sofia Sans (reading)
          · IBM Plex Mono (data); sentence case, no capitals
 space    five steps, kept: 8 / 16 / 32 / 64 / 96
-colour   yellow and ink, on every page; "act here" is ink
+colour   yellow and ink; on the landing page "act here" is ink
+         the tool pages' ground and accent: not settled (see below)
          green = accepted, warn = wrong, seven rank colours = a rating,
          always a mark with an ink edge
 radius   none; no shadow
-motion   the landing page: lines that arrive, numbers that count, the
-         field arriving, and two things tied to the scroll (GSAP)
-         the results page: the five arriving, once per visit
+motion   the landing page only: lines that arrive, numbers that count, the
+         field arriving, and the field tied to the scroll (GSAP)
 ```
 
-*Changed the same evening* (ADR 0031's amendment). A pale ground for the
-tool pages was chosen at midday and withdrawn once the author saw the
-results page whole: "nothing leads, too empty", and the pale itself. The
-results page is now drawn as the landing page is, on the same yellow: each
-of the five is one large line, its chance the largest thing on it. That
-relaxes rule 12 below for the results page, on the author's word: it gets
-an entrance, once per visit. Rules 13 and 14 are untouched, and are what
-the page was measured against.
+*Not settled, as of the evening of 2026-10-11* (ADR 0031's amendment): the
+tool pages. A pale ground was chosen at midday and withdrawn when the
+author saw the results page whole. A loud redraw on full yellow was built
+that night and rejected as worse. What the results page leads with, and on
+what ground, is being settled on the prototype one change at a time, and
+the rules for tool pages below stand as written until it is.
 
 Because every value is a token in one file, changing type, colour and
 spacing later is a one-file change. Layout can change too, at any point. It
@@ -1340,10 +1339,10 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   approves it, and four decisions in it are the author's to make first.
   *10-11:* **answered: the ridge (ADR 0031).** Two directions were built as
   working pages; the author chose the yellow field over the blue stair,
-  and sentence case over capitals for the headline. A pale ground for the
-  tool pages was chosen and withdrawn the same day: every page is yellow,
-  and the results page is drawn as loudly as the landing page (ADR 0031's
-  amendment). Due live by 10-18. Still owed:
+  and sentence case over capitals for the headline. The tool pages are
+  not settled: a pale ground was chosen and withdrawn the same day, and a
+  loud redraw was rejected that night (ADR 0031's amendment). Due live by
+  10-18. Still owed:
   the brief's five-second test on two or three Codeforces users, which was
   meant to come before the choice.
 - **Should the results page ask Codeforces by itself?** Raised 2026-10-11,

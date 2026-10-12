@@ -6350,3 +6350,31 @@ under the results.
 
 ADR 0031 has the amendment, and spec §7.1 no longer says the tool pages
 are pale.
+
+## 2026-10-11, late — "Even worse", and one change at a time
+
+The redraw of that night was shown, and the author's answer was one word
+and a long vowel: worse. Asked which parts, all four. Asked in what way,
+all four again: too full and loud, too messy, like a table, and the
+typeface itself ugly.
+
+What went wrong is plain in hindsight. The complaints had been "isolated",
+"not steps" and "empty, boring", and the redraw answered each by turning it
+up: the five became five big bordered columns with lines drawn to the
+dots, the steps got numerals 135 pixels tall, the results page became five
+lines of type at 130 pixels. Empty was answered with full. And one narrow,
+heavy face, chosen for a headline, was set on names, numerals and titles
+all at once, where its weight has nothing lighter to stand against. Three
+faults were fixed and four made.
+
+It was also written into ADR 0031 as an amendment before the author had
+seen it, and the spec was changed to match. Both now say what is true:
+those questions are open. A redraw is an attempt until it has a verdict.
+
+The author chose how to go on: back to the version before, small changes,
+one at a time, each one looked at before the next. The first is the one
+asked for first: the sentence, the handle field and the five, the same
+blocks at the same sizes, moved from the far-right column to directly
+under the headline. Nothing else. The five-redraw afternoon of 09-30 and
+tonight teach the same thing from two sides: guessing at one word wastes
+a redraw, and so does answering three complaints in one.
