@@ -818,7 +818,13 @@ drawn as flat cards is the next step, not yet built.
 
 **The ridge, chosen 2026-10-11** — see
 `docs/decisions/0031-the-ridge.md`. It replaces the card table, which stays
-live until the new templates are (due 2026-10-18). It was chosen from two
+live until the new templates are (due 2026-10-18). *2026-10-12:* the landing
+page is built in it (`templates/index.html`, `static/ridge.js`,
+`static/field.json`) and passes its checks; it is not deployed yet, and
+every other page is still the card table. The ridge's values are a second
+set for the same token names, in a `.ridge` block of `static/style.css`
+that a page asks for with one class on `<html>`, so the two can stand side
+by side until the tool pages are decided. It was chosen from two
 directions built as working pages against `docs/design-brief.md`. The
 landing page's lower half is a field, every rated problem as a dot, with a
 ridge where rating alone puts a 50% chance; the field's front edge is a
@@ -942,6 +948,18 @@ layer 1   plain HTML: the form, and    always present; needs no JavaScript
           a real link for everything
           clickable in the effect
 ```
+
+*2026-10-12, the first heavy thing built to this rule:* the landing page's
+field (ADR 0031). Two things came out differently from the wording above,
+both on purpose. **Layer 2 is a still drawn in the browser, not an image
+file**: the same dots, laid out by the same arithmetic, drawn once on a 2D
+canvas with no library. A file would be a picture of last month's
+problemset after every refresh, and the rating axis under the field has to
+line up with it at every width, which a stretched image does not. **"Under
+30" is tested as under 28**, because a screen or a power-saving mode that
+holds a page to exactly 30 measures as 29.9 one second and 30.1 the next.
+The order of the four steps is as written, and `tests/check_landing.py`
+holds the script to it.
 
 Each layer works when the one above it fails. The handle input lives in layer
 1, so §4.1's promise that the tool is always one action away never depends on
@@ -1342,7 +1360,8 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   and sentence case over capitals for the headline. The tool pages are
   not settled: a pale ground was chosen and withdrawn the same day, and a
   loud redraw was rejected that night (ADR 0031's amendment). Due live by
-  10-18. Still owed:
+  10-18. *10-12:* the landing page is built and checked, waiting for the
+  author to look at it and say when it goes live. Still owed:
   the brief's five-second test on two or three Codeforces users, which was
   meant to come before the choice.
 - **Should the results page ask Codeforces by itself?** Raised 2026-10-11,

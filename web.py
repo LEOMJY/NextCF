@@ -32,6 +32,8 @@ Usage:
 """
 
 import datetime
+import functools
+import json
 import logging
 import os
 import re
@@ -280,11 +282,13 @@ FORWARD = {
     "on_new_problems": 46,
 }
 
-# A problem's rarity on the landing page's cards (ADR 0029): its rating read
-# as the Codeforces rank of a person with that rating, and drawn in that
-# rank's colour. Master and international master share orange on Codeforces,
-# and every grandmaster rank is red, so seven colours, not ten. Each entry
-# holds the rating the band stops below; the last has no ceiling.
+# A problem's rating read as the Codeforces rank of a person with that
+# rating, and marked in that rank's colour: on the landing page's five and
+# along its rating axis (ADR 0031), as on the card table before it (ADR 0029,
+# where the name "rarity" comes from). Master and international master share
+# orange on Codeforces, and every grandmaster rank is red, so seven colours,
+# not ten. Each entry holds the rating the band stops below; the last has no
+# ceiling.
 RARITIES = [
     (1200, "newbie", "Newbie"),
     (1400, "pupil", "Pupil"),
@@ -296,6 +300,25 @@ RARITIES = [
 ]
 
 
+# The lowest and highest rating Codeforces gives a problem: the two ends of
+# the landing page's rating axis.
+RATING_LOWEST, RATING_HIGHEST = 800, 3500
+
+
+def rank_spans():
+    """RARITIES as stretches of the rating axis, lowest first:
+    [{"key": "newbie", "from": 800, "to": 1200}, ...], each starting where
+    the one before stops and the last ending at RATING_HIGHEST. What the
+    landing page draws its axis from, and what its script reads a rating's
+    rank from, so neither holds a copy of the boundaries."""
+    spans, floor = [], RATING_LOWEST
+    for below, key, _ in RARITIES:
+        ceiling = RATING_HIGHEST if below is None else below
+        spans.append({"key": key, "from": floor, "to": ceiling})
+        floor = ceiling
+    return spans
+
+
 def rarity(rating):
     """(key, name) of the band a rating falls in: 1491 -> ("spec", "Specialist").
     The key names the colour tokens in style.css, --r-spec and --t-spec."""
@@ -304,20 +327,26 @@ def rarity(rating):
             return key, name
 
 
-# The landing page's sample pack (ADR 0029): the first plan a real history,
-# rated 1491, was dealt on this site on 2026-09-27, with the chances the
-# model gave then and the target it was aimed at. Real rather than made up,
-# so the page shows what the site actually does. The handle is left out: it
-# belongs to a person, and the page is not about them. Never presented as the
-# visitor's own five -- those are on the results page.
+# The landing page's sample five (ADR 0029, kept by ADR 0031): the first plan
+# a real history, rated 1491, was given on this site on 2026-09-27, with the
+# chances the model gave then and the target it was aimed at. Real rather
+# than made up, so the page shows what the site actually does. The handle is
+# left out: it belongs to a person, and the page is not about them. Never
+# presented as the visitor's own five -- those are on the results page.
+#
+# Each row: id, contest id, index, name, rating, chance. The contest id and
+# the index are written out beside the id although the id looks like the two
+# joined, because an id must never be split back into them (schema.sql,
+# problems.id: contest 921's "92114" does not say where to cut), and the page
+# needs both to link a problem.
 SAMPLE_RATING = 1491
 SAMPLE_TARGET = 0.525
 SAMPLE_PACK = [
-    ("2253C", "Sum of Distinct Values in a Matrix", 1500, ("greedy", "sortings", "two pointers"), 0.537),
-    ("2250A", "Threshold Movement", 800, ("brute force", "implementation", "math"), 0.538),
-    ("2167G", "Mukhammadali and the Smooth Array", 1600, ("data structures", "dp"), 0.501),
-    ("2123F", "Minimize Fixed Points", 1700, ("constructive algorithms", "number theory"), 0.508),
-    ("2073L", "Boarding Queue", 1300, (), 0.510),
+    ("2253C", 2253, "C", "Sum of Distinct Values in a Matrix", 1500, 0.537),
+    ("2250A", 2250, "A", "Threshold Movement", 800, 0.538),
+    ("2167G", 2167, "G", "Mukhammadali and the Smooth Array", 1600, 0.501),
+    ("2123F", 2123, "F", "Minimize Fixed Points", 1700, 0.508),
+    ("2073L", 2073, "L", "Boarding Queue", 1300, 0.510),
 ]
 
 # Create the tables if they are missing, then fail any job left behind by a
@@ -713,9 +742,9 @@ def index():
     return landing()
 
 
-def trained_on():
-    """How many first attempts the model on this server was fitted on, as
-    the pages say it: "1.58 million".
+def trained_attempts():
+    """How many first attempts the model on this server was fitted on, or
+    None when no fitted file can be read.
 
     Read from the fitted model's own file. Until 2026-10-01 the landing page
     and /how each had the number written in, and the first monthly refit
@@ -731,49 +760,87 @@ def trained_on():
             # No fitted file at all. The recommender says so where it
             # matters, on the results page; the pitch only loses a number.
             return None
-    if not fitted.get("attempts"):
+    return fitted.get("attempts") or None
+
+
+def trained_on():
+    """trained_attempts() as the pages say it in a sentence: "1.58 million"."""
+    attempts = trained_attempts()
+    if attempts is None:
         return None
-    return f"{fitted['attempts'] / 1_000_000:.2f} million"
+    return f"{attempts / 1_000_000:.2f} million"
+
+
+@functools.cache
+def field_count():
+    """How many problems the landing page's field draws, or None.
+
+    Read from the file the browser is sent (static/field.json, written by
+    `collect.py field`), so the number in the page's words is the number of
+    dots under them. Read once per start: the file only changes with a
+    deploy, and a deploy is a restart. None when the file is missing or
+    unreadable -- the page then leaves the number and the field out rather
+    than invent either.
+    """
+    try:
+        with open(os.path.join(app.static_folder, "field.json"), encoding="utf-8") as f:
+            return int(json.load(f)["count"]) or None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def landing(error=None, typed=None):
-    """The landing page, with its sample pack and the numbers it quotes.
-    `typed` is what a refused form held, put back in the field to be fixed.
+    """The landing page (ADR 0031, the ridge), with its sample five and the
+    numbers it quotes. `typed` is what a refused form held, put back in the
+    field to be fixed.
 
     Everything the page states about the model is computed here from the
-    same constants the rest of the site uses -- EVALUATION, the target's
-    limits in model.py -- so the pitch cannot drift from what /how says or
-    from what the code does.
+    same constants the rest of the site uses -- EVALUATION, FORWARD, the
+    target's limits in model.py, the fitted files -- so the pitch cannot
+    drift from what /how says or from what the code does.
     """
-    lowest, highest = model.TARGET_HARDEST * 100, model.TARGET_EASIEST * 100
+    five = []
+    for problem_id, contest_id, index, name, rating, chance in SAMPLE_PACK:
+        five.append({
+            "id": problem_id,
+            "name": name,
+            "rating": rating,
+            # The same rounding the results page gives a chance.
+            "percent": round(chance * 100),
+            "rank": rarity(rating)[0],
+            "url": f"https://codeforces.com/problemset/problem/{contest_id}/{index}",
+        })
 
-    def along(percent):
-        # Where a chance sits on the line from the hardest target to the
-        # easiest, as a CSS left offset.
-        return f"{(percent - lowest) / (highest - lowest) * 100:.1f}%"
+    # What the page's script (static/ridge.js) needs to draw the field and to
+    # re-pick five as the visitor moves their rating. The script repeats
+    # model.baseline_probability() and model.recommend()'s rule in the
+    # browser, and these are their inputs, read from where the server reads
+    # them, so the page and the recommender cannot disagree about a number.
+    # No curve or no field file means no field: the page is then its words,
+    # its form and the sample, which is all of what it has to do.
+    try:
+        baseline = model.current_baseline()
+    except (OSError, ValueError):
+        baseline = None
+    problems = field_count()
+    ranks = rank_spans()
+    ridge = None
+    if baseline and problems:
+        ridge = {
+            "ranks": ranks,
+            "curve": {"intercept": baseline["intercept"], "slope": baseline["slope"], "scale": model.SCALE},
+            "aim": model.DEFAULT_TARGET,
+            "band": model.BAND,
+            "sampleRating": SAMPLE_RATING,
+            "sample": [
+                {"contest": contest_id, "index": index, "name": name, "rating": rating, "p": chance}
+                for _, contest_id, index, name, rating, chance in SAMPLE_PACK
+            ],
+            "field": url_for("static", filename="field.json"),
+            "three": url_for("static", filename="vendor/three.module.min.js"),
+        }
 
-    cards = []
-    for problem_id, name, rating, tags, chance in SAMPLE_PACK:
-        key, band = rarity(rating)
-        cards.append({"id": problem_id, "name": name, "rating": rating, "tags": tags,
-                      "percent": round(chance * 100), "band": key, "rarity": band, "at": along(chance * 100)})
-
-    # The calibration bin nearest the target a first plan is aimed at: the
-    # one sentence the page quotes from the ten.
-    said, happened = min(EVALUATION["calibration"],
-                         key=lambda pair: abs(pair[0] - model.DEFAULT_TARGET * 100))
-    tiers = []
-    floor = None
-    for below, key, band in RARITIES:
-        if floor is None:
-            span = f"below {below}"
-        elif below is None:
-            span = f"{floor} and up"
-        else:
-            span = f"{floor}–{below - 1}"
-        tiers.append({"key": key, "name": band, "span": span})
-        floor = below
-
+    attempts = trained_attempts()
     return render_template(
         "index.html",
         error=error,
@@ -781,15 +848,21 @@ def landing(error=None, typed=None):
         # field's own maxlength, so the page never carries back more than
         # the box could have sent.
         handle=(typed or "")[:100],
-        sample=cards,
+        five=five,
         sample_rating=SAMPLE_RATING,
-        sample_aim={"percent": f"{SAMPLE_TARGET * 100:g}", "at": along(SAMPLE_TARGET * 100)},
-        target={"start": round(model.DEFAULT_TARGET * 100), "lowest": round(lowest), "highest": round(highest)},
+        ridge=ridge,
+        ranks=ranks,
+        target={
+            "start": round(model.DEFAULT_TARGET * 100),
+            "lowest": round(model.TARGET_HARDEST * 100),
+            "highest": round(model.TARGET_EASIEST * 100),
+        },
         ev=EVALUATION,
+        forward=FORWARD,
         trained_on=trained_on(),
-        said=said,
-        happened=happened,
-        tiers=tiers,
+        # Both counts with their thousands marked, as the top bar states them.
+        attempts=f"{attempts:,}" if attempts else None,
+        problems=f"{problems:,}" if problems else None,
     )
 
 

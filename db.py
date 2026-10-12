@@ -746,6 +746,30 @@ def pool_topics(conn):
         """)]
 
 
+def field_rows(conn):
+    """Every problem anybody could be recommended, one row each: what the
+    landing page's field draws as dots (ADR 0031).
+
+    recommendation_pool()'s pool before a person is subtracted from it -- in
+    the problemset, rated, not *special -- so the field shows exactly what
+    the recommender chooses from, and its count is the count the pages state.
+
+    Ordered the way model.recommend() breaks its ties: within one rating the
+    newest contest first, then by id. The first five rows at a rating are
+    therefore the five a rating-only curve picks there.
+    """
+    return conn.execute(
+        """
+        SELECT p.id, p.contest_id, p.problem_index, p.name, p.rating
+          FROM problems p
+         WHERE p.in_problemset = 1
+           AND p.rating IS NOT NULL
+           AND p.id NOT IN (SELECT problem_id FROM problem_tags WHERE tag = '*special')
+         ORDER BY p.rating, p.contest_id DESC, p.id
+        """
+    ).fetchall()
+
+
 def get_job(conn, job_id):
     """One job's row, or None. What /progress/<job> polls."""
     return conn.execute(

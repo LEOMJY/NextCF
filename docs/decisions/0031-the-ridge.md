@@ -186,6 +186,61 @@ The first version of this amendment recorded the redraw as decided before
 the author had seen it. That was the mistake to note: a redraw is an
 attempt, and belongs in the devlog until it has a verdict.
 
+## Amendment, 2026-10-12: the landing page as built
+
+The landing page is written as real code: `templates/index.html`,
+`static/ridge.js`, a section of `static/style.css`, and
+`static/field.json`. Not deployed yet. Building it settled six things the
+Decision above left open or had wrong.
+
+1. **The ridge is a second set of values, not a second stylesheet.** The
+   tokens keep their names. The ridge's values for them are one `.ridge`
+   block, and a page asks for it with `class="ridge"` on `<html>`. Only the
+   landing page does. The tool pages keep the card table's values until
+   their ground is decided, and then the block moves into `:root`. The
+   alternative, a stylesheet of its own for the landing page, would have
+   been two files to keep in step and a second set of names for the same
+   things.
+2. **The dots are a file made on the author's machine.**
+   `collect.py field` writes `static/field.json` from the problemset in the
+   dataset, and `collect.py refresh` does it every month by itself. The
+   server cannot make it: its own database is empty after every restart
+   (ADR 0017), which is exactly when a first visitor is looking at this
+   page. The file holds what `db.recommendation_pool()` chooses from before
+   a person is subtracted, so the field is the recommender's pool and its
+   count is the number the page states.
+3. **Layer 2 is drawn, not a picture.** Spec §7.1 says "a still image".
+   Somebody who asks for less motion, has no WebGL or is saving data gets
+   the same field drawn once on a 2D canvas, by the same camera arithmetic,
+   with no library fetched. An image file would show last month's
+   problemset and would not line up with the axis at every width. The two
+   layers put the five's flags within half a pixel of each other.
+4. **The frame rate is measured.** Over the first second of drawing: under
+   28 frames a second (30, with room for a screen held to exactly 30), the
+   field draws at one device pixel per pixel and fewer than half the dots,
+   and is measured again; still under, it becomes the still.
+5. **Nothing here touches the form.** The card table delayed the form a
+   second and a half to play its pack. The ridge's script never reaches for
+   it. The only thing held back before the page is drawn is the headline,
+   for the moment before its lines rise, and for three seconds at most.
+6. **The list lies in front of the field.** Found by looking at window
+   sizes nobody had looked at: at 1366 by 768 the last of the five sat on
+   the field's far edge, and a rating moved to the top of the slider stood
+   five flags on a pole under the list and drew them across the problem
+   names. The prototype had both. Now the ground takes only the room under
+   the list, poles that stand under it end below it, and the list has the
+   ground's colour behind it for the windows too short for either. In the
+   author's window none of the three changes anything that can be seen.
+   **Still wrong:** in a short window (1366 by 768, for one), a rating at
+   the top of the slider puts most of the five flags behind the list. The other answer is a
+   first screen taller than the window on short screens, which puts the
+   axis below the fold; that is the author's to choose.
+
+What every visitor to the landing page downloads, compressed: 50 KB of
+GSAP, 14 of `ridge.js`, 10 of `field.json`, and 66 of fonts (the two Sofia
+faces the first screen uses, and IBM Plex Mono's two weights). 140 KB
+against the brief's 150. A device that draws layer 3 adds 167.
+
 ## Alternatives
 
 **B, the stair.** A rank colour always sat on bone there, so none was ever

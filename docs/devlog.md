@@ -6433,3 +6433,82 @@ verdict on yellow there, not yet a choice of what replaces it. The
 prototype shows white, with yellow kept for the top bar, the mark behind
 each chance and the one button, and light grey and dark beside it on a
 switch.
+
+## 2026-10-12, last — The landing page, as real code
+
+The author looked at the hand-placed prototype, said the right-hand block is
+good, and gave the order of work again: tokens, templates, checks. The
+landing page is now the ridge in the repository, built in that order. It is
+not live.
+
+**Tokens.** The stylesheet's tokens keep their names and get a second set of
+values, in one block that a page asks for with a class on `<html>`. A
+stylesheet of its own for the landing page would have been quicker to start
+and two files to keep in step ever after. Only the landing page asks for the
+ridge; the tool pages keep the card table's values, since their ground is
+not decided, and the day it is the block moves up and the class goes. The
+old landing section, 570 lines of cards, fan and pack, came out whole:
+before deleting it every class in it was searched for in every other
+template and in the React source, and none was used anywhere else.
+
+**Where the dots come from.** The prototype had 10,781 contest ids pasted
+into the page. The real page cannot ask the server's database for them,
+because that database is empty after every restart, which is when a first
+visitor arrives. So `collect.py` writes `static/field.json` from the
+dataset's problemset, and the monthly refresh does it by itself. The file
+is the recommender's pool before a person is subtracted from it, in the
+order `model.recommend()` breaks ties. Its first run came out identical to
+the prototype's data, which says the prototype had been drawing the real
+pool all along.
+
+**Layer 2.** The spec asks for a still image of anything heavy. It was built
+as a still drawn in the browser: the same dots through the same camera sums,
+on a 2D canvas, with no 3D library fetched. A picture file would have been
+last month's problemset after every refresh, and the axis under the field
+has to line up with it at any width. Measured, the five's flags land within
+half a pixel of where the 3D layer puts them. The frame-rate step was tried
+by slowing the page's clock to ten frames a second: it drew less, measured
+again, and became the still.
+
+**What other windows found.** Everything so far had been judged in two
+windows, the author's and one at 1440 by 900. At 1366 by 768, the commonest
+laptop size, the last of the five sat on the far edge of the field with 42
+pixels of dots under a problem's name. And a rating dragged to the top of
+the slider stood five flags on one pole under the list and drew them across
+it. Both had been in the prototype the whole time. Now the ground takes
+only the room under the list, poles that stand under the list end below it,
+and the list has the page's colour behind it. In the author's window all
+three do nothing that can be seen, and the sentence and the field are on
+the rectangles the author dragged them to, to the pixel, the list within
+three. One case is still wrong: in a window
+768 tall, a rating at the top of the slider leaves most of the five flags
+hidden behind the list. The other answer is a taller first screen on short
+windows, with the axis under the fold. That one is a choice, not a fix.
+
+The lesson is a cheap one. A layout is checked at the sizes people have,
+not at the size it was drawn in.
+
+**Small things that broke.**
+
+- "Continue astourist". The button was made a flex box to hold its arrow,
+  which made "Continue as" and the handle two flex items, and the space
+  between two flex items is not kept. One `<span>` around the words.
+- The arrow was a character the display face does not have, so it came from
+  whatever font the system fell back to. Drawn now, like the two on the
+  rating flag.
+- A check counted the paragraphs above the field by looking for `<p`, and
+  counted the arrow's `<path>`.
+- One check wrote a `field.json` into the scratch folder, and the next
+  check used the same folder as "a folder with no field file". The second
+  could never have passed after the first. It has a folder of its own.
+- The sample five need a contest id and an index to link to their problems,
+  and the schema forbids cutting an id back into them. They are written
+  out beside each id.
+
+25 checks hold the landing page where 14 held the card table's, 510 pass in
+all. A visitor to the page downloads 140 KB compressed against the brief's
+150; a device that draws the 3D field adds 167.
+
+Still owed: the five-second test; the results page's ground; whether the
+landing page goes live before the tool pages are redrawn; the short-window
+case above.

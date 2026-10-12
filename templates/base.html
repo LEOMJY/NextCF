@@ -14,7 +14,12 @@
    the sentence is printed onto the page for every visitor to read. That is
    exactly what this comment did, on the live site, from 08-15 to 09-12. #}
 <!doctype html>
-<html lang="en">
+{# The root block is for a class on the whole document. The landing page
+   fills it with class="ridge", which swaps the stylesheet's token values for
+   the ridge's (ADR 0031; the .ridge block in style.css). On <html> and not
+   <body>, because the page's ground is painted from <html>: on a phone the
+   strip shown when a page is pulled past its end is that colour. #}
+<html lang="en"{% block root %}{% endblock %}>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -29,9 +34,15 @@
        the browser has read it and found them named: the page's text appears
        in its own face sooner, with less of a jump from the fallback.
        crossorigin is required for a font preload, even from this server;
-       without it the browser fetches the file twice. #}
+       without it the browser fetches the file twice.
+
+       A block, because a page in the ridge draws in two other faces and
+       names those instead: a preload is a download whether or not the page
+       ever uses the file. #}
+    {% block fonts %}
     <link rel="preload" href="{{ url_for('static', filename='fonts/Onest-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="{{ url_for('static', filename='fonts/Unbounded-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    {% endblock %}
 
     {# url_for('static', ...) rather than a hardcoded "/static/style.css":
        Flask knows where it serves static files from, and this follows it. #}
@@ -52,6 +63,9 @@
       {# The small card is the mark: a specialist's frame, tipped over. #}
       <a class="brand" href="{{ url_for('index') }}"><span class="brand-card" aria-hidden="true"></span>NextCF</a>
       <span class="version">v0.8</span>
+      {# One line between the name and the links, for a page that has one:
+         the landing page states its two counts here. #}
+      {% block head_note %}{% endblock %}
       {# Spec section 4.1: the section 9 number one click from every page,
          and /privacy beside it from v0.7 -- a site that writes down that you
          were here should say so somewhere you can find without looking. #}

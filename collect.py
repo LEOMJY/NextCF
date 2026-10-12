@@ -3,7 +3,7 @@
 Runs on the author's machine, into dataset.db, and never on the server
 (ADR 0007). Who is drawn, and why this way: ADR 0009.
 
-Four commands, in the order they are used:
+Five commands, in the order they are used:
 
     .venv\\Scripts\\python.exe collect.py draw [--seed N] [--per-stratum N]
         Fetch the list of active rated users, shuffle each rating stratum with
@@ -26,6 +26,11 @@ Four commands, in the order they are used:
         cleanly; run it again to carry on (users refreshed in the last N days,
         25 by default, are skipped).
 
+    .venv\\Scripts\\python.exe collect.py field
+        Write static/field.json, the landing page's dots, from the problemset
+        already in the dataset. `refresh` does this itself after fetching the
+        problemset; this is for writing the file without refreshing anybody.
+
     .venv\\Scripts\\python.exe collect.py status
         How far it has got, per stratum.
 
@@ -36,6 +41,7 @@ together they go twice as fast as Codeforces allows.
 """
 
 import argparse
+import json
 import os
 import random
 import secrets
@@ -53,6 +59,17 @@ HERE = Path(__file__).resolve().parent
 # from the environment the way db.py's NEXTCF_DB is, so a trial run can go to a
 # throwaway file without touching the real dataset.
 DATASET_PATH = Path(os.environ.get("NEXTCF_DATASET", HERE / "dataset.db"))
+
+# The landing page's field (ADR 0031): one dot per problem that can be
+# recommended. Under static/ because the browser fetches it, and committed
+# like baseline.json because it is made here, from the dataset's problemset,
+# and never on the server -- whose own database is empty after every restart
+# (ADR 0017), exactly when a first visitor is looking at the landing page.
+FIELD_PATH = HERE / "static" / "field.json"
+
+# How many problems the page keeps at each rating to re-pick five from: what
+# model.recommend() would return there under a rating-only curve.
+FIELD_NEWEST = 5
 
 # ADR 0009: ratings 1000-1999 in five strata of 200, 800 users from each --
 # drawn at 400 on 2026-09-15 and raised to 800 the same night with `extend`.
@@ -287,9 +304,65 @@ def run(path=DATASET_PATH):
         conn.close()
 
 
-def refresh(path=DATASET_PATH, older_than_days=25):
+def write_field(conn, path=FIELD_PATH):
+    """Write the landing page's field from the problemset in this database.
+    Returns how many problems went into it.
+
+    The page draws every recommendable problem as a dot and re-picks five in
+    the browser when the visitor moves their rating. Four things are enough
+    for both:
+
+        count    how many problems: also the number the page states in words
+        top      the newest contest's id. A dot's distance back is its
+                 contest's share of this.
+        newest   per rating, the first FIELD_NEWEST problems in
+                 db.field_rows()'s order: [contest id, index, name]
+        field    per rating, every problem's contest id, newest first, each
+                 written as the gap down from the one before it:
+                 "2269,3,0,12" is contests 2269, 2266, 2266, 2254. A gap is
+                 one or two digits where an id is four, which is most of why
+                 the file is 29 KB and not 60.
+
+    A problem with no contest id has nowhere to stand and no address to link
+    to, so it is left out; today no rated problemset problem lacks one.
+
+    Written to a temporary name and renamed, so a page being served never
+    reads half a file.
+    """
+    newest, contests = {}, {}
+    count = top = 0
+    for row in db.field_rows(conn):
+        if row["contest_id"] is None:
+            continue
+        rating = str(row["rating"])
+        contests.setdefault(rating, []).append(row["contest_id"])
+        if len(newest.setdefault(rating, [])) < FIELD_NEWEST:
+            newest[rating].append([row["contest_id"], row["problem_index"], row["name"]])
+        count += 1
+        top = max(top, row["contest_id"])
+
+    field = {}
+    for rating, ids in contests.items():
+        gaps = [ids[0]] + [before - after for before, after in zip(ids, ids[1:])]
+        field[rating] = ",".join(str(gap) for gap in gaps)
+
+    blob = {"made": db.utc_now()[:10], "count": count, "top": top, "newest": newest, "field": field}
+    path = Path(path)
+    scratch = path.with_suffix(".json.tmp")
+    # No spaces after the separators, and names written as they are rather
+    # than as escapes: both only make the file bigger.
+    scratch.write_text(json.dumps(blob, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+    os.replace(scratch, path)
+    return count
+
+
+def refresh(path=DATASET_PATH, older_than_days=25, field_path=None):
     """Re-fetch every collected user whose data is older than `older_than_days`.
     Returns an exit code, as run() does.
+
+    With `field_path`, the landing page's field is written there as soon as
+    the problemset is in (write_field). Off unless asked for, so a trial run
+    into a throwaway dataset cannot overwrite the real page's dots.
 
     The monthly refit (ADR 0014) needs this: a model refitted on a dataset
     nobody refreshes is a frozen model with extra steps, and the monthly refit
@@ -320,6 +393,9 @@ def refresh(path=DATASET_PATH, older_than_days=25):
             return _stopped(f"could not fetch the problemset: {exc}", "refresh")
         stored, aliases = db.save_problemset(conn, problems)
         print(f"problemset: {stored} problems, {aliases} aliases", flush=True)
+        if field_path is not None:
+            dots = write_field(conn, field_path)
+            print(f"field: {dots:,} problems written to {field_path}; commit it with the refit", flush=True)
 
         cutoff = db.utc_ago(older_than_days * 86400)
         due = conn.execute(
@@ -466,6 +542,7 @@ def main(argv=None):
     # 25, not 30: a month is 28 to 31 days, and a refresh started a day early
     # must still include everybody refreshed last month.
     refresh_cmd.add_argument("--older-than-days", type=int, default=25)
+    commands.add_parser("field", help="write static/field.json from the problemset in the dataset")
     commands.add_parser("status", help="show progress per stratum")
 
     args = parser.parse_args(argv)
@@ -496,7 +573,15 @@ def main(argv=None):
         if args.command == "run":
             return run(DATASET_PATH)
         if args.command == "refresh":
-            return refresh(DATASET_PATH, args.older_than_days)
+            return refresh(DATASET_PATH, args.older_than_days, field_path=FIELD_PATH)
+        if args.command == "field":
+            conn = db.connect(DATASET_PATH)
+            try:
+                dots = write_field(conn, FIELD_PATH)
+            finally:
+                conn.close()
+            print(f"field: {dots:,} problems written to {FIELD_PATH}")
+            return 0
         return status(DATASET_PATH)
     except (SampleExists, ResizeRefused) as exc:
         print(exc)

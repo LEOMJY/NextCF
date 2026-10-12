@@ -986,12 +986,21 @@ def the_stylesheet_carries_the_review():
     css = Path("static/style.css").read_text(encoding="utf-8")
     # The field's edge is its fill since v0.8 (ADR 0029): cream on the navy.
     # Whatever the two tokens become, that edge is held to WCAG's 3 to 1 for
-    # a control's boundary -- the review found it at 1.3.
-    field = re.search(r"\.handle-form input \{([^}]*)\}", css).group(1)
+    # a control's boundary -- the review found it at 1.3. The rule that
+    # starts its own line is the card table's, which the error page wears.
+    field = re.search(r"\n\.handle-form input \{([^}]*)\}", css).group(1)
     fill = re.search(r"background: var\((--[\w-]+)\)", field)
     assert fill, "the handle field has no fill of its own"
     ratio = contrast(token(css, fill.group(1)), token(css, "--bg"))
     assert ratio >= 3, f"the handle field's edge is {ratio:.2f} to 1 against the page"
+    # In the ridge (ADR 0031) the landing page's field is a lighter yellow on
+    # yellow, 1.2 to 1, so there its edge is a drawn one: a border in ink,
+    # held to the same 3 to 1 against the ground.
+    ridge = re.search(r"\n\.ridge \{\n(.*?)\n\}", css, re.S).group(1)
+    drawn = re.search(r"\n\.ridge \.handle-form input \{([^}]*)\}", css).group(1)
+    assert "border: 2px solid var(--ink);" in drawn, "the ridge's handle field has no drawn edge"
+    ratio = contrast(token(ridge, "--ink"), token(ridge, "--bg"))
+    assert ratio >= 3, f"the ridge's handle field's edge is {ratio:.2f} to 1 against the page"
     busy = re.search(r'\.recs\[aria-busy="true"\] \{([^}]*)\}', css)
     assert busy and "opacity" in busy.group(1), "nothing shows that a topic's five are loading"
     notes = re.search(r"\.notes \{([^}]*)\}", css).group(1)
@@ -1007,20 +1016,24 @@ def the_stylesheet_carries_the_review():
 def the_field_comes_before_the_argument():
     """The handle field was 830 pixels down a phone's 812-pixel screen on a
     first visit, under the two paragraphs; spec 4.1 puts it in the hero so
-    a returning visitor types at once. Since v0.8 (ADR 0029) one sentence
-    stands between the headline and the field -- measured at 375 by 812,
-    the field's top is at 335 pixels and the button's bottom at 458, 602
-    with "Continue as" above them -- and the argument is the sections after
-    the hero."""
+    a returning visitor types at once. One sentence stands between the
+    headline and the field -- in the ridge (ADR 0031), measured at 375 by
+    812, the field's top is at 281 pixels and the button's bottom at 333,
+    389 with "Continue as" above them -- and the argument is the section
+    after the first screen."""
     import re
     html = client.get("/").get_data(as_text=True)
-    assert html.index('<h1>') < html.index('class="lede"') < html.index('class="handle-form"') \
-        < html.index('<section class="band"'), "the form is not in the hero, under the headline"
+    assert html.index('<h1 class="headline">') < html.index('class="lede"') < html.index('class="handle-form"') \
+        < html.index('<section class="how"'), "the form is not on the first screen, under the headline"
     lede = re.search(r'<p class="lede">(.*?)</p>', html, re.S).group(1)
     words = " ".join(re.sub(r"<[^>]+>|&\w+;", " ", lede).split())
     assert len(words) <= 200, f"the sentence above the field has grown to {len(words)} characters"
-    between = html[html.index('<h1>'):html.index('class="hero-form"')]
-    assert between.count("<p") == 1, "more than the one sentence between the headline and the field"
+    # Two paragraphs between the headline and the field, and one of them is
+    # the offer to continue, which is hidden until a script finds a handle.
+    between = html[html.index('<h1 class="headline">'):html.index('class="handle-form"')]
+    # "<p " with its space: the offer's arrow is drawn with a <path>.
+    assert between.count("<p ") == 2 and '<p class="continue" id="continue" hidden>' in between, \
+        "more than the one sentence between the headline and the field"
     assert "Enter your handle." not in html, "the lede still tells somebody to fill in a field above it"
 
 

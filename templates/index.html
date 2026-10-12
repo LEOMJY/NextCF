@@ -1,386 +1,261 @@
 {% extends "base.html" %}
 
-{% block title %}NextCF &mdash; open your next five Codeforces problems{% endblock %}
+{% block title %}NextCF &mdash; five Codeforces problems to solve next{% endblock %}
+
+{# This page is drawn in the ridge (ADR 0031): the same stylesheet, with the
+   ridge's values for its tokens. The leading space is part of the attribute
+   list this lands in. #}
+{% block root %} class="ridge"{% endblock %}
+
+{# The ridge's two faces instead of the card table's. The condensed display
+   face is the headline, the largest thing on the page and the first read;
+   the reading face is the sentence under it. The mono face is small text
+   further down and can arrive a moment later. #}
+{% block fonts %}
+    <link rel="preload" href="{{ url_for('static', filename='fonts/SofiaSansExtraCondensed-ExtraBold-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/SofiaSans-Regular-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+{% endblock %}
+
+{% block head %}
+    {# `ridge` is what the page's script needs (web.landing). Without it --
+       no fitted curve, or no field file -- no script is sent at all, and the
+       page is its words, its form and the five. #}
+    {% if ridge %}
+    {# THE ONE SCRIPT THAT RUNS BEFORE THE PAGE IS DRAWN, kept to what must be
+       decided that early. On a first visit in this tab, by somebody who has
+       not asked for less motion, the headline's lines rise into place
+       (static/ridge.js). That script runs after the page has been drawn
+       once, so without this the headline would be seen standing, then gone,
+       then rising. The class holds it back (style.css, .arriving), and the
+       timer takes the class off after three seconds whatever happens: a
+       script that never arrives must not cost the page its headline.
+
+       sessionStorage is this tab's own memory, gone when the tab closes:
+       the lines arrive once per visit, not on every return to the page. It
+       throws in a private window with storage blocked, hence the try. #}
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var seen = false;
+        try {
+          seen = sessionStorage.getItem("nextcf_arrived") === "1";
+          sessionStorage.setItem("nextcf_arrived", "1");
+        } catch (e) {}
+        if (seen || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        root.classList.add("arriving");
+        window.setTimeout(function () { root.classList.remove("arriving"); }, 3000);
+      })();
+    </script>
+    {# Served from this site, never a CDN (spec section 7.1; static/vendor/
+       SOURCES.txt says where each file came from). `defer` downloads a
+       script alongside the page and runs it when the page has been read, in
+       the order written here -- so none of these holds up the first screen,
+       and ridge.js finds GSAP already there. The 3D library is not in this
+       list: ridge.js fetches it itself, and only on a device that will
+       draw with it. #}
+    <script defer src="{{ url_for('static', filename='vendor/gsap.min.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='vendor/ScrollTrigger.min.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='vendor/SplitText.min.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='ridge.js') }}"></script>
+    {% endif %}
+{% endblock %}
+
+{# The two counts the page rests on, in the top bar. Each is read from the
+   file it describes (web.field_count, web.trained_attempts), and the line
+   is left out rather than written with a number missing. #}
+{% block head_note %}
+  {% if problems and attempts %}
+    <p class="facts">{{ problems }} rated problems &middot; learned from {{ attempts }} first attempts</p>
+  {% endif %}
+{% endblock %}
 
 {% block content %}
-  {# The loud surface, spec section 7.1, and since v0.8 a card table
-     (ADR 0029): the five problems a plan deals are five cards, framed in the
-     Codeforces rank colour of their rating. The hero deals a real sample
-     pack; each section after it answers one question somebody would ask
-     about that pack. The tool pages use the same tokens quietly. #}
-  <div class="hero">
-    <div class="hero-text">
-      {# For a browser whose visitor has typed a handle into the box before
-         (results.html saves only those): one press back to that page, at
-         the very top, where a phone shows it without scrolling
-         (spec section 5, reconsidered 2026-09-27: remembering a visitor
-         needs no account). Hidden until the script below finds a handle, so
-         a first visit, or a browser without script, sees the page as it
-         always was. The address is built from url_for with a placeholder,
-         so the route is never spelled out twice. No pack opens for it
-         (ADR 0029): it is the way back to five cards already dealt. #}
-      {# The handle form below stays empty while this is shown: this is the
-         way back for the handle this browser knows, and the form is for any
-         other. Both filled in with the same name was two bright buttons
-         doing one thing (_handle_form.html). #}
-      <p class="continue" id="continue" hidden>
-        <a id="continue-link" href="{{ url_for('results', handle='__HANDLE__') }}">
-          Continue as <strong id="continue-handle"></strong> &rarr;
-        </a>
-        <button type="button" id="continue-forget">Use another handle</button>
-      </p>
-      <script>
-        (function () {
-          var box = document.getElementById("continue");
-          var link = document.getElementById("continue-link");
-          var name = document.getElementById("continue-handle");
-          var forget = document.getElementById("continue-forget");
-          if (!box || !link || !name || !forget) return;
-          var saved = null;
-          try {
-            saved = localStorage.getItem("nextcf_handle");
-          } catch (e) {
-            return;
-          }
-          if (!saved) return;
-          link.href = link.getAttribute("href").replace("__HANDLE__", encodeURIComponent(saved));
-          name.textContent = saved;
-          box.hidden = false;
+  {# The loud surface, spec section 7.1, and since 2026-10 the ridge
+     (ADR 0031). The first screen is the whole pitch: what this is (the
+     headline), the one thing to do (the field for a handle), and the product
+     already working (five real problems with their chances, and under them
+     every problem they were chosen from). #}
+  <div class="hero" id="hero">
+    {# Two lines, broken here on purpose. The inner span is what the script
+       splits into lines to animate; the h1 itself is left alone, so the
+       heading a screen reader announces never changes. #}
+    <h1 class="headline"><span id="headline">Five problems<br>to solve next</span></h1>
 
-          // Somebody else on this device, or a handle they no longer use:
-          // forget it here, and send them to the field.
-          forget.addEventListener("click", function () {
+    {# The right-hand block: the sentence, the field, the five. On a narrow
+       page this wrapper is dissolved and the dots go between the field and
+       the list (style.css, "the first screen on a narrow page"). #}
+    <div class="side">
+      <div class="pitch">
+        {# For a browser whose visitor has typed a handle into the box before
+           (results.html saves only those): one press back to that page
+           (spec section 5, reconsidered 2026-09-27: remembering a visitor
+           needs no account). Hidden until the script below finds a handle, so
+           a first visit, or a browser without script, sees the page as it
+           always was. The address is built from url_for with a placeholder,
+           so the route is never spelled out twice. #}
+        {# The handle form below stays empty while this is shown: this is the
+           way back for the handle this browser knows, and the form is for any
+           other. Both filled in with the same name was two buttons doing one
+           thing (_handle_form.html). #}
+        {# The arrow is drawn, like the two on the rating flag: the display
+           face has no arrow of its own, and one borrowed from whatever font
+           the system falls back to is a different arrow on every machine. #}
+        <p class="continue" id="continue" hidden>
+          <a id="continue-link" href="{{ url_for('results', handle='__HANDLE__') }}"><span>Continue as <strong id="continue-handle"></strong></span><svg viewBox="0 0 14 10" aria-hidden="true"><path d="M1 5h11M8 1l4 4-4 4"/></svg></a>
+          <button type="button" id="continue-forget">Use another handle</button>
+        </p>
+        <script>
+          (function () {
+            var box = document.getElementById("continue");
+            var link = document.getElementById("continue-link");
+            var name = document.getElementById("continue-handle");
+            var forget = document.getElementById("continue-forget");
+            if (!box || !link || !name || !forget) return;
+            var saved = null;
             try {
-              localStorage.removeItem("nextcf_handle");
-            } catch (e) {}
-            box.hidden = true;
-            var input = document.getElementById("handle");
-            if (input) input.focus();
-          });
-        })();
-      </script>
+              saved = localStorage.getItem("nextcf_handle");
+            } catch (e) {
+              return;
+            }
+            if (!saved) return;
+            link.href = link.getAttribute("href").replace("__HANDLE__", encodeURIComponent(saved));
+            name.textContent = saved;
+            box.hidden = false;
 
-      <h1>Open your next five.</h1>
+            // Somebody else on this device, or a handle they no longer use:
+            // forget it here, and send them to the field.
+            forget.addEventListener("click", function () {
+              try {
+                localStorage.removeItem("nextcf_handle");
+              } catch (e) {}
+              box.hidden = true;
+              var input = document.getElementById("handle");
+              if (input) input.focus();
+            });
+          })();
+        </script>
 
-      {# One sentence between the headline and the field, and no more. The
-         field was once 830 pixels down a phone's 812-pixel screen under two
-         paragraphs (review of 2026-09-28); the argument for the site is the
-         sections further down, for whoever wants it. #}
-      <p class="lede">
-        NextCF reads your Codeforces history and deals you five problems, each
-        about a coin flip on your first submission &mdash; hard enough to
-        teach you something.
-      </p>
+        {# One sentence between the headline and the field, and no more
+           (review of 2026-09-28: the field was once 830 pixels down a
+           phone's 812-pixel screen under two paragraphs). Its second half
+           is left off on a narrow page, where the field matters more. #}
+        <p class="lede">
+          From your Codeforces history: five problems, each with the chance
+          that your first submission is accepted.
+          <span class="more">Aimed at about {{ target.start }}%, hard enough to teach you something.</span>
+        </p>
 
-      {# `error` is only passed in when the POST was rejected, and an
-         undefined name is falsy in Jinja rather than an error -- so this
-         block is simply skipped on a normal page load. role="alert" makes a
-         screen reader announce it instead of leaving it to be found by
-         chance. #}
-      {% if error %}
-        <p class="form-error" role="alert">{{ error }}</p>
-      {% endif %}
+        {# `error` is only passed in when the POST was rejected, and an
+           undefined name is falsy in Jinja rather than an error -- so this
+           block is simply skipped on a normal page load. role="alert" makes a
+           screen reader announce it instead of leaving it to be found by
+           chance. #}
+        {% if error %}
+          <p class="form-error" role="alert">{{ error }}</p>
+        {% endif %}
 
-      <div class="hero-form">
+        {# The form is the browser's own: it is sent with or without script,
+           and nothing on this page delays it. An included file sees the
+           variables of the template that includes it, which is how the
+           button gets its words. #}
+        {% set submit_label = "Find my five" %}
         {% include "_handle_form.html" %}
       </div>
 
-      <p class="motto">The pack isn&rsquo;t random. Your first submission is.</p>
+      {# THE SAMPLE. Five real problems from a real history (web.SAMPLE_PACK),
+         written here by the server, so they are on the page without
+         JavaScript and the checks can read them. The caption says whose they
+         are not. Each row is a link to its problem. When the visitor moves
+         their rating on the axis below, the script rewrites these same five
+         rows and the caption, and "Back to the sample" appears. #}
+      <section class="five" aria-labelledby="five-title">
+        <h2 id="five-title">
+          <span id="five-says">Sample: one real <b>{{ sample_rating }}</b>-rated history.</span>
+          <button class="reset" id="reset" type="button" hidden>Back to the sample</button>
+        </h2>
+        <ol id="five">
+          {% for problem in five %}
+            <li><a class="rank-{{ problem.rank }}" href="{{ problem.url }}"><span class="sw"></span><span class="id">{{ problem.id }}</span><span class="name">{{ problem.name }}</span><span class="rt">{{ problem.rating }}</span><b class="ch">{{ problem.percent }}%</b></a></li>
+          {% endfor %}
+        </ol>
+      </section>
     </div>
 
-    {# THE SAMPLE PACK. Five real cards from a real history (web.SAMPLE_PACK),
-       drawn by the server, so the fan is there without JavaScript and the
-       checks can read it. Each card's --k is its place in the hand, -2 to 2,
-       and the stylesheet turns that into the fan; the script below only
-       animates between places. The caption says whose they are not. #}
-    <figure class="stage" id="stage">
-      <ul class="fan">
-        {% for card in sample %}
-          <li class="card" style="--k: {{ loop.index0 - 2 }}; --frame: var(--r-{{ card.band }}); --mark: var(--t-{{ card.band }})">
-            <div class="tilt">
-              <div class="flip">
-                <div class="face front">
-                  <div class="card-inner">
-                    <p class="card-meta"><span class="card-rarity">{{ card.rarity }}</span><span class="card-id">{{ card.id }}</span></p>
-                    <p class="card-rating">{{ card.rating }}</p>
-                    <p class="card-name">{{ card.name }}</p>
-                    <p class="card-tags">
-                      {% for tag in card.tags %}<span>{{ tag }}</span>{% else %}<span>no tags</span>{% endfor %}
-                    </p>
-                    <p class="card-chance"><b>{{ card.percent }}<span>%</span></b><small>first try<br>accepted</small></p>
-                    <div class="holo" aria-hidden="true"></div>
-                  </div>
-                </div>
-                <div class="face back" aria-hidden="true"><span>NextCF</span></div>
-              </div>
-            </div>
-          </li>
-        {% endfor %}
-      </ul>
-      <figcaption class="fan-caption">Sample pack &middot; a real {{ sample_rating }}-rated history</figcaption>
-      {# The pack the five go into when the form is sent: drawn only then,
-         and never with anybody's cards coming out of it here -- the
-         visitor's own five are on the next page. #}
-      <div class="pack" id="pack" hidden aria-hidden="true">
-        <div class="pack-top" id="pack-top"></div>
-        <div class="pack-body" id="pack-body">
-          <span class="pack-logo">NextCF</span>
-          <span class="pack-five">5 problems</span>
-          <span class="pack-who" id="pack-who"></span>
+    {# THE FIELD AND ITS AXIS, both drawn by static/ridge.js, and both a
+       picture of what is already on the page as text: the flags repeat the
+       list above, so they and the canvas are hidden from a screen reader.
+       The one real control in here is the slider. It is an ordinary
+       <input type="range"> made invisible and laid over a drawn pole and
+       flag, so a keyboard's arrow keys, a finger and a screen reader all
+       move the rating the same way a mouse does.
+
+       The rank stretches and the labels under them come from web.RARITIES
+       (rank_spans), the same list the script reads a rank from. #}
+    <div class="stage" id="stage">
+      <div class="land" id="land">
+        <canvas id="field" aria-hidden="true"></canvas>
+        <div class="flags" id="flags" aria-hidden="true"></div>
+      </div>
+
+      <div class="axis" id="axis">
+        <div class="ranks" aria-hidden="true">
+          {% for span in ranks %}<i class="rank-{{ span.key }}" data-from="{{ span.from }}" data-to="{{ span.to }}"></i>{% endfor %}
+        </div>
+        {# "wide" marks the two labels a phone has no room for. #}
+        <div class="ticks" aria-hidden="true">
+          <span data-r="{{ ranks[0].from }}">{{ ranks[0].from }}</span>
+          {% for span in ranks %}<span data-r="{{ span.to }}"{% if span.to in (1400, 1900) %} class="wide"{% endif %}>{{ span.to }}</span>{% endfor %}
+        </div>
+        {# The slider stops at 2400, where the last rank begins, though the
+           axis runs on to 3500: problems are rated that high, and almost no
+           visitor is. #}
+        <input type="range" id="rating" min="{{ ranks[0].from }}" max="2400" step="10" value="{{ sample_rating }}" aria-label="Your rating">
+        <span class="you-pole" id="you-pole" aria-hidden="true"></span>
+        <div class="you" id="you" aria-hidden="true">
+          <svg viewBox="0 0 6 10"><path d="M5 1 1 5l4 4"/></svg>
+          <span>your rating <span id="you-n">{{ sample_rating }}</span></span>
+          <svg viewBox="0 0 6 10"><path d="M1 1l4 4-4 4"/></svg>
         </div>
       </div>
-    </figure>
+    </div>
   </div>
 
-  <section class="band">
-    <h2>How a pack is made</h2>
-    <p class="band-lead">Three steps, in this order, every time you open one.</p>
-    <ol class="steps">
-      <li class="step">
-        <span class="step-n">Step 1</span>
-        <h3>Reads your history</h3>
-        <p class="verdicts" aria-hidden="true"><span class="ac">OK</span><span>WA 3</span><span class="ac">OK</span><span>TLE 17</span><span>WA 2</span><span class="ac">OK</span><span class="ac">OK</span><span>RE 5</span><span class="ac">OK</span></p>
-        <p>Every submission you have made, from the public Codeforces API: which problems you solved, and which took more than one try.</p>
-      </li>
-      <li class="step">
-        <span class="step-n">Step 2</span>
-        <h3>Forecasts every problem</h3>
-        {# The count is the fitted model's own (web.trained_on), so the
-           monthly refit moves it. #}
-        {% if trained_on %}
-          <p class="big">{{ trained_on }}</p>
-          <p>first attempts by 4,000 other players taught it how hard each problem is, and for whom. Each one gets a chance that your first submission is accepted.</p>
-        {% else %}
-          <p>The first attempts of 4,000 other players taught it how hard each problem is, and for whom. Each one gets a chance that your first submission is accepted.</p>
-        {% endif %}
-      </li>
-      <li class="step">
-        <span class="step-n">Step 3</span>
-        <h3>Deals the five nearest its aim</h3>
-        {# The sample pack's own aim and its five chances, on the line from
-           the hardest target to the easiest (model.TARGET_HARDEST and
-           TARGET_EASIEST): the picture is the data above, not a drawing. #}
-        <div class="aim" aria-hidden="true">
-          <div class="aim-line"></div>
-          <div class="aim-target" style="left: {{ sample_aim.at }}"></div>
-          {% for card in sample %}<div class="aim-tick" style="left: {{ card.at }}"></div>{% endfor %}
-          <span class="aim-label aim-start">{{ target.lowest }}%</span>
-          <span class="aim-label" style="left: {{ sample_aim.at }}">aim {{ sample_aim.percent }}%</span>
-          <span class="aim-label aim-end">{{ target.highest }}%</span>
-        </div>
-        <p>The first is aimed at {{ target.start }}%. Say a pack was too hard or too easy, and the next one aims somewhere else, from {{ target.lowest }}% to {{ target.highest }}%.</p>
-      </li>
-    </ol>
-  </section>
-
-  <section class="band">
-    <h2>A forecast you can check</h2>
-    <div class="proof">
-      {# Section 9's calibration, from web.EVALUATION: each dot is one of
-         the ten groups on /how, at what the model said (across) and what
-         happened (up). The dashed line is where they would sit if every
-         forecast came true exactly as often as it said. #}
-      <svg viewBox="0 0 280 280" role="img" aria-label="Ten groups of forecasts, each drawn at what the model said against how often those first submissions were accepted. Every group sits close to the diagonal where the two are equal.">
-        <rect class="cal-frame" x="30" y="10" width="240" height="240"></rect>
-        <line class="cal-diagonal" x1="30" y1="250" x2="270" y2="10"></line>
-        <g class="cal-dots">
-          {% for s, h in ev.calibration %}<circle cx="{{ '%.1f'|format(30 + s * 2.4) }}" cy="{{ '%.1f'|format(250 - h * 2.4) }}" r="5"></circle>{% endfor %}
-        </g>
-        <g class="cal-text">
-          <text x="30" y="266">0%</text><text x="150" y="266" text-anchor="middle">forecast</text><text x="270" y="266" text-anchor="end">100%</text>
-          <text x="22" y="250" text-anchor="end">0</text><text x="22" y="16" text-anchor="end">100</text>
-          <text transform="translate(12 130) rotate(-90)" text-anchor="middle">accepted</text>
-        </g>
-      </svg>
-      <div>
-        <p class="said">When it said about {{ "%.0f"|format(said) }}%, {{ happened }}% were accepted.</p>
-        <p>
-          It was checked on {{ ev.attempts }} first attempts from 2026 that it
-          never learned from. On average its forecasts were off by
-          {{ ev.gap_model }} points; rating alone was off by
-          {{ ev.gap_baseline }}.
-          <a href="{{ url_for('how') }}">How it works, and how that was measured</a>
-        </p>
-      </div>
+  {# After the first screen: how the five are made, in three statements, and
+     the proof. Every number is the code's own (web.landing): the count of
+     attempts from the fitted model's file, the count of problems from the
+     field's, the aim and its limits from model.py, the four measurements
+     from the two runs /how reports. #}
+  <section class="how" id="how">
+    <div class="step">
+      <h2>Reads your history</h2>
+      <p>Every submission you have made, from the public Codeforces API: what you solved, and what took more than one try.</p>
     </div>
+    <div class="step">
+      <h2>Forecasts every problem</h2>
+      <p>
+        {% if trained_on %}{{ trained_on }} first attempts{% else %}The first attempts{% endif %}
+        by 4,000 other users taught it how hard each problem is, and for whom.
+        {% if problems %}All {{ problems }} get a chance.{% else %}Every rated problem gets a chance.{% endif %}
+      </p>
+    </div>
+    <div class="step">
+      <h2>Picks the five nearest its aim</h2>
+      <p>The first five aim at {{ target.start }}%. Call one too hard or too easy and the next five aim somewhere else, from {{ target.lowest }}% to {{ target.highest }}%.</p>
+    </div>
+    <p class="proof">
+      Checked on a year it never saw: log loss <b>{{ "%.4f"|format(ev.model) }}</b>,
+      against <b>{{ "%.4f"|format(ev.baseline) }}</b> for rating alone. And on the
+      two weeks after it went live: <b>{{ "%.4f"|format(forward.model) }}</b>
+      against <b>{{ "%.4f"|format(forward.baseline) }}</b>.
+      <a href="{{ url_for('how') }}">How that was measured</a>
+    </p>
   </section>
 
-  <section class="band">
-    <h2>Rarity is just rating</h2>
-    <p class="band-lead">A card&rsquo;s frame is its problem&rsquo;s rating, in the colour Codeforces gives a handle with that rating.</p>
-    <ul class="rarity">
-      {% for tier in tiers %}
-        <li class="tier" style="--frame: var(--r-{{ tier.key }}); --mark: var(--t-{{ tier.key }})"><div><b>{{ tier.name }}</b><span>{{ tier.span }}</span></div></li>
-      {% endfor %}
-    </ul>
-  </section>
-
-  <script>
-    // The card table's motion (ADR 0029): the hand is dealt once on arrival,
-    // a card leans towards a mouse, and sending the form packs the five away
-    // before the page moves on. All of it is decoration. The fan stands
-    // without this script, the form sends without it, and somebody whose
-    // system asks for less motion gets none of it.
-    (function () {
-      var stage = document.getElementById("stage");
-      var form = document.querySelector(".hero-form form");
-      var pack = document.getElementById("pack");
-      if (!stage || !form || !pack || !stage.animate) return;
-      if (!stage.querySelector(".card")) return;
-
-      var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      var mouse = window.matchMedia("(pointer: fine)").matches;
-      var EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
-      var busy = false;
-      var sent = false;
-      var timer = null;
-      var played = [];
-      var cards = Array.prototype.map.call(stage.querySelectorAll(".card"), function (card) {
-        return {
-          card: card,
-          tilt: card.querySelector(".tilt"),
-          flip: card.querySelector(".flip"),
-          k: parseFloat(card.style.getPropertyValue("--k"))
-        };
-      });
-
-      function token(name) {
-        return parseFloat(getComputedStyle(stage).getPropertyValue(name));
-      }
-      // A card's width in pixels, measured. Not read from --cw: that is a
-      // clamp() on a wide screen, and a custom property is handed to script
-      // as the text it was written with, not as the width it works out to.
-      function cardWidth() {
-        return cards[0].card.offsetWidth;
-      }
-      // Where card k sits in the hand, for a card w pixels wide: the same
-      // transform the stylesheet gives .card, in pixels, so an animation
-      // that ends here ends exactly where the page already draws it.
-      function fan(k, w) {
-        return "translateX(" + (-w / 2 + k * w * token("--spread")) + "px) translateY(" +
-          (k * k * w * 0.025) + "px) rotate(" + (k * token("--turn")) + "deg)";
-      }
-      function stacked(w) {
-        return "translateX(" + (-w / 2) + "px) translateY(0px) rotate(0deg)";
-      }
-      function play(target, frames, options) {
-        var a = target.animate(frames, options);
-        played.push(a);
-        return a;
-      }
-
-      if (still) return;
-
-      // 1. The deal: from one stack into the hand, a card at a time.
-      var w = cardWidth();
-      cards.forEach(function (c, i) {
-        play(c.card, [{ transform: stacked(w) }, { transform: fan(c.k, w) }],
-          { duration: 900, delay: 250 + i * 90, easing: EASE, fill: "backwards" });
-      });
-
-      // 2. A card leans towards a mouse, and its foil catches the light.
-      // Only for a mouse or a pen: on a touch screen there is no pointer to
-      // follow, and a tap is a tap.
-      if (mouse) {
-        cards.forEach(function (c) {
-          c.card.addEventListener("pointermove", function (e) {
-            if (busy) return;
-            var r = c.card.getBoundingClientRect();
-            var x = (e.clientX - r.left) / r.width;
-            var y = (e.clientY - r.top) / r.height;
-            c.tilt.style.transform = "translateY(-" + (r.height * 0.1) + "px) rotateY(" + ((x - 0.5) * 16) +
-              "deg) rotateX(" + ((0.5 - y) * 16) + "deg) translateZ(20px)";
-            c.card.style.setProperty("--mx", (x * 100) + "%");
-            c.card.style.setProperty("--my", (y * 100) + "%");
-            c.card.classList.add("lit");
-          });
-          c.card.addEventListener("pointerleave", function () {
-            c.tilt.style.transform = "";
-            c.card.classList.remove("lit");
-          });
-        });
-      }
-
-      // 3. Sending the form: the hand closes, turns face down, goes into a
-      // pack with the handle on it, and the pack tears -- about a second and
-      // a half, and then the form is sent as it would have been. The cards
-      // going in are the sample; nothing comes out here, because the
-      // visitor's own five are on the page this sends them to.
-      function handleShown() {
-        var typed = document.getElementById("handle").value.trim().replace(/^@/, "");
-        var profile = typed.match(/profile\/([^\/?#\s]+)/);
-        return (profile ? profile[1] : typed).slice(0, 24);
-      }
-
-      form.addEventListener("submit", function (event) {
-        // The browser's own check (the field is required) has already
-        // passed by the time this runs. A second press while the pack is
-        // opening is swallowed.
-        event.preventDefault();
-        if (busy) return;
-        busy = true;
-        var button = form.querySelector("button[type=submit]");
-        if (button) button.disabled = true;
-        // The form is sent when the pack has torn -- or after two seconds
-        // whatever happened, because a browser pauses animations in a tab
-        // nobody is looking at, and a lookup must never wait on a picture.
-        timer = window.setTimeout(send, 2000);
-        try {
-          packAway();
-        } catch (e) {
-          send();
-        }
-      });
-
-      function send() {
-        window.clearTimeout(timer);
-        if (sent) return;
-        sent = true;
-        form.submit();
-      }
-
-      function packAway() {
-        document.getElementById("pack-who").textContent = "for " + handleShown();
-        var w = cardWidth();
-        cards.forEach(function (c, i) {
-          c.tilt.style.transform = "";
-          c.card.classList.remove("lit");
-          play(c.card, [{ transform: fan(c.k, w) }, { transform: stacked(w) }],
-            { duration: 380, delay: i * 30, easing: EASE, fill: "forwards" });
-          play(c.flip, [{ transform: "rotateY(0deg)" }, { transform: "rotateY(180deg)" }],
-            { duration: 240, delay: 260, easing: EASE, fill: "both" });
-        });
-        pack.hidden = false;
-        play(pack, [
-          { transform: "translateX(-50%) translateY(40px) scale(0.9)", opacity: 0 },
-          { transform: "translateX(-50%) translateY(0) scale(1)", opacity: 1 }
-        ], { duration: 300, delay: 480, easing: EASE, fill: "both" });
-        play(pack, [
-          { transform: "translateX(-50%) rotate(0deg)" }, { transform: "translateX(calc(-50% - 6px)) rotate(-3deg)" },
-          { transform: "translateX(calc(-50% + 6px)) rotate(3deg)" }, { transform: "translateX(-50%) rotate(0deg)" }
-        ], { duration: 320, delay: 780, easing: "ease-in-out" });
-        var tear = play(document.getElementById("pack-top"), [
-          { transform: "translate(0, 0) rotate(0deg)", opacity: 1 },
-          { transform: "translate(60px, -110px) rotate(24deg)", opacity: 0 }
-        ], { duration: 380, delay: 1100, easing: EASE, fill: "forwards" });
-        tear.finished.then(send, send);
-      }
-
-      // Back from the results page, a browser may show this page exactly as
-      // it was left: packed away, the button off, and any timer it had still
-      // counting. Stop the timer -- it would send the form again -- and put
-      // the hand back.
-      window.addEventListener("pageshow", function (event) {
-        if (!event.persisted) return;
-        window.clearTimeout(timer);
-        played.forEach(function (a) { a.cancel(); });
-        played = [];
-        pack.hidden = true;
-        var button = form.querySelector("button[type=submit]");
-        if (button) button.disabled = false;
-        busy = false;
-        sent = false;
-      });
-    })();
-  </script>
+  {# What ridge.js reads, as data rather than as script: a block of this type
+     is not run by the browser, only kept. tojson writes it as JSON and
+     escapes the characters that could end the block early, so a problem's
+     name can never become markup. #}
+  {% if ridge %}
+    <script type="application/json" id="ridge-data">{{ ridge|tojson }}</script>
+  {% endif %}
 {% endblock %}
