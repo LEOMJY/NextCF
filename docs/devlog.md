@@ -6239,3 +6239,59 @@ first screen, where the capitals ended on its last pixel.
 The lesson from the last theme held. One word was not redrawn from: one
 question with the page's own parts as the answers, and the answer came back
 at once.
+
+## 2026-10-11, later — The ridge is chosen, and two questions it raised
+
+The author chose A, with the headline in sentence case. The week the brief
+allows runs to 10-18. ADR 0031 is the decision; this is what happened on
+the way to it.
+
+**"Do you like the yellow?"** On the landing page, yes: black on yellow is
+12 to 1, a yellow screenshot in a Codeforces blog post cannot be mistaken
+for Codeforces, and yellow is the one hue no rank uses. On the results page
+there were three doubts, and they were said. It is the page somebody comes
+back to daily, often at night, and a full yellow screen is the opposite of
+the calm spec §7.1 asks of it. Rank colours are weakest on it, and so is
+green, which will mean "accepted". And black on yellow reads to some people
+as a warning sign or a price tag, which nobody can settle by looking at
+their own page.
+
+So the results page was built both ways behind a switch. In the second the
+two colours swap jobs: the ground is a pale tint of the yellow, and yellow
+becomes the accent, on the top bar, the main button and a highlighter's
+stroke under each chance. The author chose that. It also closes a gap the
+first self-check had found, that neither direction had an accent colour at
+all.
+
+**"There is no button for 'I solved it'."** There is not, on purpose: ADR
+0026 reads solved from the history and stores nothing. But the question
+was right about what a visitor meets. `FRESH_FOR_SECONDS` is 600, so a
+problem solved in eight minutes is not ticked on return, and the one
+control that fixes it sat at the foot of the page under the name "Update
+from Codeforces", which says what the system does and not what the visitor
+wants. It becomes "Check what I solved", directly under the five. The
+better half of the answer is the page asking by itself when its tab is
+looked at again; that changes when a sync starts, so it is written into
+spec §12 as the first thing after the theme, not squeezed into this week.
+
+One more thing the question showed: the author did not recognise "too
+hard" as the button for "I couldn't solve it". That goes into the
+five-second test as a question of its own.
+
+**The test was skipped.** The brief put it before the choice. The author
+chose first. It is owed this week, on the prototype.
+
+**What was downloaded**, with the author's yes to a list of names, sources
+and sizes: GSAP's three files and three.js into `static/vendor/`, five
+Sofia Sans files into `static/fonts/`. Two things were learned doing it.
+A variable font file, which holds every weight, was 40 KB for the display
+face; the single weight the page actually uses is 16. And the list asked
+for JetBrains Mono, which ADR 0029 had already turned down for a reason
+that still holds, so it was left out and IBM Plex Mono stays. Every
+visitor's share comes to about 132 KB against the brief's 150. Each
+library file was compared with the fingerprint cdnjs publishes for it
+before it was committed, and `static/vendor/SOURCES.txt` says where each
+came from.
+
+Nothing on the live site has changed yet. Next: the stylesheet's tokens,
+then the templates, then the checks.

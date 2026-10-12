@@ -716,6 +716,8 @@ visitor can tell what it is for without being told.
    chip, uppercase label and colour answers "what does this tell the
    visitor?". Colour has four meanings and no others: a rank colour is a
    rating, gold is "act here", green is accepted, `--warn` is wrong.
+   (*2026-10-11, ADR 0031:* in the ridge, "act here" is yellow on the tool
+   pages and ink on the yellow landing page. The four meanings stand.)
 5. **A control looks like a control and says what it does.** A button looks
    pressable, not like a link or a word. Its label names what happens,
    including the consequence the visitor cannot see ("Too hard — next pack
@@ -742,7 +744,9 @@ direction round of 2026-09-28, written down here for the first time:
    card games the audience already knows. Nothing a generic product page
    would say.
 9. **One memorable moment.** One thing somebody could describe an hour
-   later: the pack opening.
+   later: the pack opening. (*In the ridge, ADR 0031:* the five flags
+   closing up onto one pole when the rating is moved. Rule 8's card games
+   go with the card table; rank colours, problem ids and AC stay.)
 10. **It becomes theirs at once.** Typing a handle is the action that sets
     the moment off.
 11. **Bold, and true.** Every number on it is real and comes from the code.
@@ -810,6 +814,31 @@ motion   the landing page only: the deal, a card leaning to the mouse, and
 
 The tool pages take the same tokens and keep their layout. The results page
 drawn as flat cards is the next step, not yet built.
+
+**The ridge, chosen 2026-10-11** — see
+`docs/decisions/0031-the-ridge.md`. It replaces the card table, which stays
+live until the new templates are (due 2026-10-18). It was chosen from two
+directions built as working pages against `docs/design-brief.md`. The
+landing page's lower half is a field, every rated problem as a dot, with a
+ridge where rating alone puts a 50% chance; the field's front edge is a
+rating axis the visitor can hold, and moving it re-picks the five.
+
+```
+type     Sofia Sans Extra Condensed 800 (display) · Sofia Sans (reading)
+         · IBM Plex Mono (data); sentence case, no capitals
+space    five steps, kept: 8 / 16 / 32 / 64 / 96
+colour   yellow, ink, and a pale tint of the yellow
+         landing page: the ground is yellow, "act here" is ink
+         tool pages:   the ground is pale,   "act here" is yellow
+         green = accepted, warn = wrong, seven rank colours = a rating,
+         always a mark with an ink edge
+radius   none; no shadow
+motion   the landing page only: lines that arrive, numbers that count, the
+         field arriving, and the field tied to the scroll (GSAP)
+```
+
+The two colours swapping jobs is how "the landing page uses them loudly and
+the tool uses them quietly" is kept with a ground this strong.
 
 Because every value is a token in one file, changing type, colour and
 spacing later is a one-file change. Layout can change too, at any point. It
@@ -1097,7 +1126,7 @@ starts counting the day the disk is attached (ADR 0017).
 | v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
 | v0.6 | First real model, scored against the baseline; `/how`. **Done 09-19**: model 09-18, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh`; `/how` 09-19 | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts. **Done 09-26**: visits and `/privacy` (ADR 0017), the queue (ADR 0018), the checks in the repository (ADR 0019), the upkeep thread (ADR 0020), too hard / too easy (ADR 0021), errors and logs (ADR 0022). Two things carried, each by decision: the paid disk is bought before the first stranger arrives, not before then (ADR 0017), and component tests arrive with the first React component rather than before it (ADR 0011, amended) | early Nov |
-| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025). **Practice plans**, added 2026-09-27: the five stay until they are done, with a history (ADR 0026). *Unhandled states: audited 2026-10-01, every unusual state rendered and read; seven small things fixed (devlog).* *Design: the card table is live as the current direction, not settled (§12).* | early Nov |
+| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025). **Practice plans**, added 2026-09-27: the five stay until they are done, with a history (ADR 0026). *Unhandled states: audited 2026-10-01, every unusual state rendered and read; seven small things fixed (devlog).* *Design: the card table is live as the current direction, not settled (§12).* *2026-10-11: the ridge chosen to replace it (ADR 0031), landing page due live 10-18.* | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
 | v2.0 | See §11 | spring |
@@ -1304,6 +1333,22 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   characteristics, what is and is not taken from the reference, and the
   order of work; it is a draft until the author
   approves it, and four decisions in it are the author's to make first.
+  *10-11:* **answered: the ridge (ADR 0031).** Two directions were built as
+  working pages; the author chose the yellow field over the blue stair,
+  sentence case over capitals for the headline, and a pale ground with
+  yellow as the accent for the tool pages. Due live by 10-18. Still owed:
+  the brief's five-second test on two or three Codeforces users, which was
+  meant to come before the choice.
+- **Should the results page ask Codeforces by itself?** Raised 2026-10-11,
+  when the author looked for a "solved" button and found none. Solved is
+  read from the history (ADR 0026) and a history counts as fresh for ten
+  minutes, so somebody who solves a problem in eight and comes back sees no
+  tick until they press a button. The button is renamed and moved under the
+  five with the ridge (ADR 0031). The rest of the answer is the page
+  starting that check itself when the visitor returns to its tab, no more
+  than once a minute. Same cost as a press, one request. It changes when a
+  sync starts, so it amends ADR 0018 and needs its own checks: the first
+  thing after the ridge is live, not part of that week.
 - **3D balloons as the landing page's visual idea?** Proposed 2026-09-13: one 3D
   balloon per topic in the centre; clicking one makes it rise with the camera
   following, into that topic's recommendations. Material quality (light,

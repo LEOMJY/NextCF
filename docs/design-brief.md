@@ -7,6 +7,10 @@ table (ADR 0029). The author answered its four open questions the same day
 gets its own ADR and this file becomes the record of what it was asked to
 do.
 
+**Chosen 2026-10-11: direction A, the ridge.** It is
+`docs/decisions/0031-the-ridge.md`, which also lists the rules of §5 it
+bends. One step of §9 was skipped and is still owed: the five-second test.
+
 The first version of this brief took gsap.com itself as the reference. The
 author meant the sites in GSAP's **showcase**: the studio and portfolio
 sites built with it. §4 is rewritten for those, and what follows from it
