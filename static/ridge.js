@@ -106,6 +106,12 @@
   var hasGsap = !!(window.gsap && window.ScrollTrigger && window.SplitText);
   if (hasGsap) gsap.registerPlugin(ScrollTrigger, SplitText);
   var EASE = "expo.out";      // fast out, slow to settle: the page's one curve
+  // The stylesheet's narrow layout starts at this width ("the first screen
+  // on a narrow page" in style.css), and the field is drawn differently in
+  // it: bigger dots, fewer of them, taller poles. Asked with matchMedia, the
+  // same question the stylesheet asks, so the two always agree -- the width
+  // of the canvas alone would not, since a media query counts the scrollbar.
+  var NARROW = window.matchMedia("(max-width: 960px)");
 
   var main = document.querySelector("main");
   var stage = document.getElementById("stage");
@@ -464,7 +470,7 @@
   // the page between its margins, and the ground takes `tall` pixels of the
   // canvas. focal is how many pixels one unit covers at distance 1.
   function lens(w, h) {
-    var compact = w < 860;
+    var compact = NARROW.matches;
     var gutter = parseFloat(getComputedStyle(main).paddingLeft) || 16;
     var perUnit = (w - 2 * gutter) / (2 * HALF);   // pixels per 100 rating, at the front edge
     var dist = DEPTH * 1.1;                        // the back edge comes out about half as wide as the front

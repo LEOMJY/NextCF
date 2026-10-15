@@ -8,8 +8,8 @@
 // that carry meaning. When one changes, the other has to.
 //
 // The order since the review of 2026-09-28, as in the template: one status
-// line, the table, then everything that explains the numbers in one group
-// under it, then the plan's button.
+// line, the table, "Check what I solved" (since 2026-10-14), then everything
+// that explains the numbers in one group under it, then the plan's button.
 
 const nbsp = ' '
 
@@ -61,6 +61,23 @@ function ProblemRow({ problem, topic, urls, onPress }) {
       <td className="num rating">{problem.rating}</td>
       <td className="num chance">{problem.percent}%</td>
     </tr>
+  )
+}
+
+// "Check what I solved" (ADR 0031): asks Codeforces again, so a problem just
+// solved is ticked. The template's form, in the template's two places --
+// under the table, or under the sentence that says why there is none -- and
+// not drawn while a sync is running, when the line at the top of the page
+// says so already. A plain form: the browser sends it and follows the
+// redirect, exactly as without this component.
+function Resync({ topic, urls, syncing }) {
+  if (syncing) return null
+  return (
+    <form className="resync" method="post" action={urls.resync}>
+      {topic && <input type="hidden" name="topic" value={topic} />}
+      <button type="submit">Check what I solved</button>
+      <span className="meta">ticks off what you have solved since; takes a few seconds</span>
+    </form>
   )
 }
 
@@ -207,7 +224,7 @@ function Empty({ recs, dismissed, urls, onChoose, handle }) {
   )
 }
 
-export default function Recommendations({ handle, recs, dismissed, dismissalsKept, urls, busy, heading, onChoose, onPress, said = '' }) {
+export default function Recommendations({ handle, recs, dismissed, dismissalsKept, urls, busy, heading, onChoose, onPress, said = '', syncing = false }) {
   // The rows pressed in this list. "Put back" is offered only for hidden
   // problems beyond these, as in the template -- one skip used to offer
   // both it and the row's own undo. A pressed row since solved counts too:
@@ -254,6 +271,7 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
               ))}
             </tbody>
           </table>
+          <Resync topic={recs.topic} urls={urls} syncing={syncing} />
           <Notes recs={recs} urls={urls} />
           {/* The end of a plan, by asking only (ADR 0026) -- the template's
               form, naming the plan it ends. */}
@@ -274,7 +292,10 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
           </form>
         </>
       ) : (
-        <Empty recs={recs} dismissed={dismissed} urls={urls} onChoose={onChoose} handle={handle} />
+        <>
+          <Empty recs={recs} dismissed={dismissed} urls={urls} onChoose={onChoose} handle={handle} />
+          <Resync topic={recs.topic} urls={urls} syncing={syncing} />
+        </>
       )}
 
       {dismissed > answered && (

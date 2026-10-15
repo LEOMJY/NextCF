@@ -136,7 +136,11 @@ found a real gap. A history counts as fresh for ten minutes
 back sees no tick, and the button that would fix it was at the foot of the
 page, named for what the system does: "Update from Codeforces". It moves to
 directly under the five and is named for what the visitor wants: "Check
-what I solved". "Couldn't solve" already exists as "too hard".
+what I solved". "Couldn't solve" already exists as "too hard". (*Done
+2026-10-14*, on the results page as it is, before its redraw: the form is
+drawn by the template and by the React component both, since inside the
+component's part of the page the component replaces what the template
+wrote; and a press on one topic's five now comes back to that topic.)
 
 ## Amendment, the same evening: what is open again
 

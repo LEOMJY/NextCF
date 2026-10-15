@@ -989,20 +989,27 @@ def results(handle):
         # What the topic chart component starts from (ADR 0025): the same
         # data this template has just drawn, so the component's first render
         # is this page, not a second opinion about it.
-        island=island_data(user["handle"], recs, dismissed, topics, other_topics, totals),
+        island=island_data(user["handle"], recs, dismissed, topics, other_topics, totals,
+                           syncing=job_id is not None),
     )
 
 
-def island_data(handle, recs, dismissed, topics, other_topics, totals):
+def island_data(handle, recs, dismissed, topics, other_topics, totals, syncing=False):
     """Everything the topic chart component needs, as plain data -- ADR 0025.
 
     Embedded in the page as JSON, so the component renders the same five and
     the same chart the template drew; the addresses are worked out here, by
     Flask, so the component never builds a URL of its own that could drift
     from the routes.
+
+    `syncing`: whether this handle is being fetched again right now. The
+    component draws "Check what I solved" under the five only when it is
+    not, as the template does -- while a sync is running, the line at the
+    top of the page already says so, and a second press would only join it.
     """
     return {
         "handle": handle,
+        "syncing": syncing,
         "recs": recs,
         "dismissed": dismissed,
         "dismissals_kept": db.DISMISSALS_KEPT,
@@ -1016,6 +1023,7 @@ def island_data(handle, recs, dismissed, topics, other_topics, totals):
             "restore": url_for("restore", handle=handle),
             "undo": url_for("undo", handle=handle),
             "plan": url_for("new_plan", handle=handle),
+            "resync": url_for("resync", handle=handle),
             "how": url_for("how"),
         },
     }
@@ -1114,6 +1122,13 @@ def resync(handle):
     nothing the progress page could add except taking their page away.
     Redirecting at all is what makes the button safe to press twice: the
     second press reloads a page rather than repeating a POST.
+
+    Since 2026-10-14 the button is "Check what I solved", directly under the
+    five (ADR 0031): named for what the visitor wants rather than what the
+    system does, and where they are looking when they come back from solving
+    one. Under the five it can be one topic's five, so it carries that topic
+    and the page comes back to the same list, as every other button there
+    does.
     """
     if not HANDLE_PATTERN.match(handle):
         return render_template(
@@ -1122,8 +1137,15 @@ def resync(handle):
             message="That does not look like a Codeforces handle.",
         ), 404
 
+    # Checked like ?topic= is, before anything starts: a name that is not a
+    # topic is refused rather than carried into the address.
+    topic = request.form.get("topic") or None
+    if topic is not None and topic not in db.pool_topics(get_db()):
+        return render_template("error.html", handle=handle,
+                               message="There is no topic by that name."), 400
+
     sync.start_sync(handle)
-    return redirect(url_for("results", handle=handle))
+    return redirect(url_for("results", handle=handle, topic=topic))
 
 
 @app.route("/results/<handle>/feedback", methods=["POST"])

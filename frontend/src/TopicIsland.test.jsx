@@ -18,6 +18,7 @@ const urls = {
   restore: '/results/somebody/restore',
   undo: '/results/somebody/undo',
   plan: '/results/somebody/plan',
+  resync: '/results/somebody/sync',
   how: '/how',
 }
 
@@ -300,6 +301,27 @@ describe('a practice plan', () => {
     expect(screen.getByRole('button', { name: 'too easy: Open One' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'skip: Open One' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'undo: Pressed One' })).toBeTruthy()
+  })
+
+  // ADR 0031: the button is under the five, named for what the visitor
+  // wants, and it comes back to the list it was pressed on.
+  it('"Check what I solved" stands directly under the five, and carries the list', () => {
+    const { container } = render(<TopicIsland initial={{ ...initial, recs: recs('dp', [problem('1A', 'A DP One')]) }} fetchImpl={answering({})} navigate={vi.fn()} />)
+    const form = screen.getByRole('button', { name: 'Check what I solved' }).closest('form')
+    expect(form.getAttribute('action')).toBe('/results/somebody/sync')
+    expect(form.getAttribute('method')).toBe('post')
+    expect(form.querySelector('input[name="topic"]').value).toBe('dp')
+    // Next to the table, before the sentences that explain it.
+    expect(container.querySelector('.rec-table').nextElementSibling).toBe(form)
+    expect(screen.queryByText('Update from Codeforces')).toBeNull()
+  })
+
+  it('"Check what I solved" is not offered while a sync is running, and is when there is no list', () => {
+    const { unmount } = render(<TopicIsland initial={{ ...initial, syncing: true }} fetchImpl={answering({})} navigate={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Check what I solved' })).toBeNull()
+    unmount()
+    render(<TopicIsland initial={{ ...initial, recs: { ...recs(null, []), state: 'empty' } }} fetchImpl={answering({})} navigate={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Check what I solved' })).toBeTruthy()
   })
 
   it('offers "put back" only for hidden problems that have no undo on screen', () => {

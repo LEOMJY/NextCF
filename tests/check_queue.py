@@ -262,7 +262,7 @@ def stale_results_are_shown_at_once_and_resynced_behind():
     job = active_job_for("returning")
     assert job is not None, "nothing was queued to refresh it"
     assert f"/progress/{job['id']}/status" in html, "the line points at no job"
-    assert "Update from Codeforces" not in html, "offered to start what is already running"
+    assert "Check what I solved" not in html, "offered to start what is already running"
 
 
 def the_line_carries_the_queue_without_javascript():
@@ -288,7 +288,15 @@ def fresh_results_start_nothing_and_offer_the_button():
     assert active_job_for("current") is None, "a fresh page queued a sync"
     # The case the automatic refresh cannot cover: somebody who was here eight
     # minutes ago and has solved something since.
-    assert "Update from Codeforces" in html, "no way to refresh a page that counts as fresh"
+    assert "Check what I solved" in html, "no way to refresh a page that counts as fresh"
+    # Under the five since 2026-10-14 (ADR 0031): inside the list's section,
+    # and no longer above it at the top of the page.
+    section = html[html.index('<section class="recs" id="next">'):]
+    section = section[:section.index("</section>")]
+    assert '<form class="resync"' in section, "the button is not with the five"
+    assert '<form class="resync"' not in html[:html.index('<div id="topic-island">')], \
+        "the button is still above the five"
+    assert "Update from Codeforces" not in html, "the button still has its old name"
 
 
 def the_button_starts_a_sync_and_comes_back_to_the_page():
@@ -306,6 +314,37 @@ def the_button_starts_a_sync_and_comes_back_to_the_page():
     html = client.get("/results/presses").get_data(as_text=True)
     assert "Re-syncing" in html, "the page did not show the sync the visitor asked for"
     assert f"/progress/{job['id']}/status" in html, "the line points at no job"
+
+
+def the_button_comes_back_to_the_list_it_was_pressed_on():
+    """Under the five since 2026-10-14 (ADR 0031), and the five can be one
+    topic's: the press comes back to that topic's list. A name that is not
+    a topic is refused before anything is queued, as ?topic= is."""
+    clear_jobs()
+    stored("on_a_topic", db.utc_now())
+    conn = db.connect()
+    try:
+        with conn:
+            conn.execute("INSERT INTO problems (id, contest_id, problem_index, name, rating, in_problemset) "
+                         "VALUES ('4000A', 4000, 'A', 'A Topic Problem', 800, 1)")
+            conn.execute("INSERT INTO problem_tags (problem_id, tag) VALUES ('4000A', 'geometry')")
+        response = client.post("/results/on_a_topic/sync", data={"topic": "geometry"})
+        assert response.status_code == 302, response.status_code
+        assert response.headers["Location"].endswith("/results/on_a_topic?topic=geometry"), \
+            response.headers["Location"]
+        assert active_job_for("on_a_topic") is not None, "the press on a topic's list queued nothing"
+
+        clear_jobs()
+        refused = client.post("/results/on_a_topic/sync", data={"topic": "not a topic"})
+        assert refused.status_code == 400, refused.status_code
+        assert active_job_for("on_a_topic") is None, "a press naming no topic still queued a sync"
+    finally:
+        # Out again, so no later check finds a problem in the pool it did
+        # not put there.
+        with conn:
+            conn.execute("DELETE FROM problem_tags WHERE problem_id = '4000A'")
+            conn.execute("DELETE FROM problems WHERE id = '4000A'")
+        conn.close()
 
 
 def only_a_post_can_start_a_sync():
@@ -624,6 +663,7 @@ check("a running sync shows even on a fresh page", a_running_sync_is_shown_even_
 
 print("\nthe button, for when the page counts as fresh")
 check("the button starts a sync and comes back to the page", the_button_starts_a_sync_and_comes_back_to_the_page)
+check("the button comes back to the list it was pressed on", the_button_comes_back_to_the_list_it_was_pressed_on)
 check("only a POST can start a sync", only_a_post_can_start_a_sync)
 check("a junk handle cannot be queued", a_junk_handle_cannot_be_queued_by_the_button)
 check("a sync already running is watched, not duplicated", a_sync_already_running_is_watched_not_duplicated)

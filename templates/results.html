@@ -46,20 +46,9 @@
         <p class="caveat">These numbers are from the sync above.</p>
       {% endif %}
 
-      {# And the button, for the case the automatic refresh does not cover:
-         somebody who was here eight minutes ago, solved something, and knows
-         the page is out of date even though it counts as fresh. A form, not a
-         link -- a GET that starts work gets followed by prefetchers, crawlers
-         and link checkers, each taking a turn in the queue. #}
-      {# The note says what the button is for as well as how long it takes:
-         a problem solved on Codeforces is ticked in the plan only after an
-         update. That sentence used to sit above the five, one of six
-         paragraphs between the heading and the first problem (review of
-         2026-09-28). #}
-      <form class="resync" method="post" action="{{ url_for('resync', handle=handle) }}">
-        <button type="submit">Update from Codeforces</button>
-        <span class="meta">ticks off what you have solved since; takes a few seconds</span>
-      </form>
+      {# The button that asks Codeforces again used to stand here, above
+         the five, as "Update from Codeforces". It is under the five now, as
+         "Check what I solved" (resync_form, below; ADR 0031). #}
     {% endif %}
 
     {# Recommendations first: this is the product, and everything below it is
@@ -74,6 +63,35 @@
        first, from the same data the component is handed below, so a page
        without JavaScript, or whose bundle failed, is this page, and every
        topic is still a link that works. #}
+    {# "CHECK WHAT I SOLVED", for the case the automatic refresh does not
+       cover: somebody who was here eight minutes ago, solved something, and
+       knows the page is out of date even though it counts as fresh. A form,
+       not a link -- a GET that starts work gets followed by prefetchers,
+       crawlers and link checkers, each taking a turn in the queue.
+
+       Directly under the five since 2026-10-14 (ADR 0031), and named for
+       what the visitor wants: asked where to press "solved", the author
+       looked at the five, and the button was at the top of the page named
+       for what the system does. Under the five it can be one topic's five,
+       so it carries the topic back, like every other button there. Not
+       while a sync is running: the line at the top says so already.
+
+       A macro (a piece of template that can be used in more than one
+       place, like a function) because it is drawn in two: under the table
+       when there is a list, and under the sentence that says why there is
+       none. Recommendations.jsx draws the same form in the same two places,
+       because inside #topic-island the component replaces what this
+       template wrote. #}
+    {% macro resync_form() %}
+      {% if not syncing %}
+        <form class="resync" method="post" action="{{ url_for('resync', handle=handle) }}">
+          {% if recs.topic %}<input type="hidden" name="topic" value="{{ recs.topic }}">{% endif %}
+          <button type="submit">Check what I solved</button>
+          <span class="meta">ticks off what you have solved since; takes a few seconds</span>
+        </form>
+      {% endif %}
+    {% endmacro %}
+
     <div id="topic-island">
     {# id="next": where "put back" and "swap the five" come back to (web.py,
        LIST_ANCHOR). #}
@@ -181,6 +199,8 @@
             {% endfor %}
           </tbody>
         </table>
+
+        {{ resync_form() }}
 
         {# UNDER THE TABLE: what the numbers are, then whatever bends them.
            One group, one measure and one spacing, so a page with four of
@@ -412,6 +432,9 @@
           left to recommend.
         </p>
       {% endif %}
+
+      {# No list: the button goes under the sentence that says why. #}
+      {% if recs.state != "ok" %}{{ resync_form() }}{% endif %}
 
       {# The undo for the too hard / too easy buttons. Shown only when there
          is something to undo, and it says how many -- "put them back" with no

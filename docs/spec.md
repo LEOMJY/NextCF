@@ -1370,7 +1370,9 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   read from the history (ADR 0026) and a history counts as fresh for ten
   minutes, so somebody who solves a problem in eight and comes back sees no
   tick until they press a button. The button is renamed and moved under the
-  five with the ridge (ADR 0031). The rest of the answer is the page
+  five with the ridge (ADR 0031): *done 10-14*, as "Check what I solved",
+  and a press on one topic's five comes back to that topic. The rest of the
+  answer is the page
   starting that check itself when the visitor returns to its tab, no more
   than once a minute. Same cost as a press, one request. It changes when a
   sync starts, so it amends ADR 0018 and needs its own checks: the first

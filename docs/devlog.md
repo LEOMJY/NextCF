@@ -6552,3 +6552,37 @@ is a disk.
 Not checked, and worth an hour: Firefox and Safari, a real phone in the
 hand, a slow machine, and the arrival watched at its own speed rather than
 read off the page when it had finished.
+
+## 2026-10-14 — The page narrows later, and "Check what I solved"
+
+Two small changes, both asked for by name.
+
+**The landing page goes to one column at 960 pixels, not 860.** Between the
+two, the block beside the headline had about 330 pixels and a problem's
+name 122 of them, and "Mukhammadali and the Smooth Array" took three lines.
+At 961 the name has 146 and takes two. The number is written twice, once in
+the stylesheet's media query and once in the script, which draws the field
+differently for a narrow page, and they have to agree: a page between two
+different numbers would have a one-column layout and a field drawn for two.
+The script now asks the browser the stylesheet's own question
+(`matchMedia("(max-width: 960px)")`) instead of measuring the canvas, which
+was never quite the same thing, since a media query counts the scrollbar and
+a canvas does not. A check reads both numbers and fails if they part. The
+phone is unchanged, to the pixel.
+
+**"Update from Codeforces" is "Check what I solved", directly under the
+five** (ADR 0031). The interesting part was where "under the five" is. The
+five are inside the part of the results page that the React component draws,
+and the component does not add to what the template wrote there: it
+replaces it. A button added only to the template would have been on the
+page for exactly as long as it took the script to load, and then gone. So
+it is drawn twice, by the template for a page without script and by the
+component for every other, in the same two places (under the table, or under
+the sentence that says why there is no list), and hidden in both while a
+sync is running. Under the five it can be one topic's five, so it now carries
+the topic, and the page comes back to the same list; a name that is not a
+topic is refused before anything is queued.
+
+What was checked: every check (514), the component tests (41, two new), and
+in a browser the button React draws, right after the table, sixteen pixels
+from it, carrying "dp" once the dp list was chosen.

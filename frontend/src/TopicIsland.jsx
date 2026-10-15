@@ -192,6 +192,7 @@ export default function TopicIsland({
         onChoose={onChoose}
         onPress={press}
         said={said}
+        syncing={initial.syncing}
       />
       <TopicChart
         topics={initial.topics}

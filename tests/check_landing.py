@@ -441,6 +441,18 @@ def the_picture_never_holds_the_form():
         < head.index('root.classList.add("arriving")'), "somebody who asked for less motion still waits for it"
 
 
+def the_script_and_the_stylesheet_agree_where_the_page_narrows():
+    """The narrow layout is chosen by a media query in the stylesheet, and
+    the field is drawn for it by the script. Two numbers that must be one:
+    with them apart, a page between the two had a one-column layout and a
+    field drawn for two."""
+    css = re.findall(r"/\* ---- the first screen on a narrow page \*/.*?@media \(max-width: (\d+)px\)", CSS, re.S)
+    script = re.findall(r'var NARROW = window\.matchMedia\("\(max-width: (\d+)px\)"\);', SCRIPT)
+    assert css and script, f"the stylesheet's narrow width {css} or the script's {script} is not where it was"
+    assert css == script, f"the stylesheet narrows at {css[0]}px and the script at {script[0]}px"
+    assert "var compact = NARROW.matches;" in SCRIPT, "the camera decides narrow some other way"
+
+
 def the_page_stands_without_script():
     """Layer 1: with no script the page is its headline, its sentence, its
     form and the five. Everything only script can draw is not shown, rather
@@ -609,6 +621,7 @@ check("the library files are the ones recorded", the_library_files_are_the_ones_
 check("the 3D library is fetched only to draw with", the_3d_library_is_fetched_only_to_draw_with)
 check("the frame rate is measured and answered", the_frame_rate_is_measured_and_answered)
 check("the picture never holds the form", the_picture_never_holds_the_form)
+check("the script and the stylesheet agree where the page narrows", the_script_and_the_stylesheet_agree_where_the_page_narrows)
 check("the page stands without script", the_page_stands_without_script)
 check("with no field the page is its words", with_no_field_the_page_is_its_words)
 

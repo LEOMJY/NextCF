@@ -1337,8 +1337,15 @@ main {
 
    The sizes below are this column's own, measured on a phone 375 wide so
    that the field is in the top half of the screen and the first of the five
-   is on it. Like --e above, they are the poster's and not the scale's. */
-@media (max-width: 860px) {
+   is on it. Like --e above, they are the poster's and not the scale's.
+
+   960, not the prototype's 860 (changed 2026-10-14). Between the two, the
+   block beside the headline had five columns of a narrow grid, about 330
+   pixels, and a problem's name 122 of them: "Mukhammadali and the Smooth
+   Array" took three lines. One column is the better page there. The script
+   asks the same question with the same number (ridge.js, NARROW), so the
+   field is drawn for the layout it is in. */
+@media (max-width: 960px) {
   .facts {
     display: none;
   }
@@ -1750,6 +1757,13 @@ main {
 
 .resync .meta {
   margin: 0;
+}
+
+/* Under the five since 2026-10-14 (ADR 0031): one step from the table,
+   the same as the notes that follow it. Above the five it had space only
+   under it. */
+.recs .resync {
+  margin: var(--s2) 0 0;
 }
 
 /* The same blink as the progress page's cursor, small and grey. It is the
