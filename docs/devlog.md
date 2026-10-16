@@ -6586,3 +6586,52 @@ topic is refused before anything is queued.
 What was checked: every check (514), the component tests (41, two new), and
 in a browser the button React draws, right after the table, sixteen pixels
 from it, carrying "dp" once the dp list was chosen.
+
+## 2026-10-15 — The page checks by itself
+
+The question the author asked on 10-11, where to press "solved", has its
+last answer. A results page whose tab is returned to asks Codeforces again
+by itself, waits for the sync, and redraws the five where they are, so a
+problem solved in the other tab is ticked without a press and without a
+reload. The author turned the reload down in one line: it does not look
+good. The rest of the design was taken as offered: ask only while a problem
+on screen is still unsolved, and at most once a minute.
+
+How it is built. The browser announces a tab coming back into view
+(`visibilitychange`). The React component listens, and sends the request
+"Check what I solved" sends, asking for an answer as data; the server starts
+the sync and answers with where to watch it; the component asks there every
+few seconds, as often as the server says; when the sync is done it fetches
+the five again and draws them. Every part already existed except two small
+answers in JSON.
+
+**The minute is kept twice, as one number.** The browser waits a minute
+between checks, and the server refuses to start one for a handle that had a
+sync begun in the last minute, in any state. The browser's limit alone would
+not hold: ten tabs on one handle, or a page with a bug, would each take two
+requests from a queue every visitor shares. A failed sync counts, so that
+with Codeforces down, flicking between tabs does not queue a failing sync
+every time. The number lives on the server and the page is handed it.
+
+**What broke while writing it.** The first version cancelled itself. The
+component's injectable network and clock -- there so the tests can stand in
+for them -- are new functions on every render, and the effect listening for
+the tab listed them as what it depends on. So every render took the listener
+down and set it up again, and the render that the "checking" note itself
+caused marked the check in progress as abandoned: it would ask, wait, and
+then quietly draw nothing. Caught reading the code before the first test
+ran, and the reason the network and clock are now read through a ref. A
+test also failed for a reason of its own: its second page got a new clock
+and the test moved the old one.
+
+What was checked: 523 checks; 47 component tests, six of them new (it asks
+on a return and ticks in place; not within the minute; not when everything
+is ticked; not while a sync was already running; nothing changes when the
+server holds it back or the sync fails; the note says "checking" while it
+is). And on the real page, locally: a return within the minute after a sync
+was asked and refused, with the page untouched; a return after it started a
+sync, watched it twice, fetched the five, and was done in five seconds, on
+the same page, saying nothing because nothing new had been solved.
+
+Not checked: a real problem solved in another tab and ticked. That needs a
+submission on Codeforces, and is the first thing to try on the live site.

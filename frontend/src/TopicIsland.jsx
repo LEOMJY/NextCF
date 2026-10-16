@@ -7,6 +7,11 @@
 // server's answer -- the list's five -- is drawn in place. Everything else on
 // the page is plain HTML the server wrote.
 //
+// And since 2026-10-15 the page checks Codeforces by itself when its tab is
+// returned to (ADR 0018, amended): somebody who went to solve one of the five
+// comes back to find it ticked, without a press and without a reload. See
+// "THE PAGE'S OWN CHECK" below.
+//
 // Where the five come from: /results/<handle>/recommendations?topic=..., the
 // same recommendation_view the page itself calls (web.py). The component never
 // decides which problems to show; it only asks and draws.
@@ -45,6 +50,10 @@ export default function TopicIsland({
   fetchImpl = (...args) => window.fetch(...args),
   navigate = (url) => window.location.assign(url),
   submit = submitForm,
+  // Time, swappable for the same reason: the tests decide when "now" is and
+  // how long a wait takes, instead of sleeping.
+  now = () => Date.now(),
+  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
   const [recs, setRecs] = useState(initial.recs)
   const [dismissed, setDismissed] = useState(initial.dismissed)
@@ -61,6 +70,22 @@ export default function TopicIsland({
   // After a press is drawn, where the keyboard goes: a problem's id, '' for
   // the heading, null for nowhere.
   const focusNext = useRef(null)
+  // The page's own check: whether one is under way (the note beside "Check
+  // what I solved" says so), and when the last one ended -- or the page
+  // arrived, which counts as one: what it shows was read moments ago.
+  const [checking, setChecking] = useState(false)
+  const inFlight = useRef(false)
+  const lastCheck = useRef(now())
+  // The list on screen, for code that runs later than the render that drew
+  // it: a listener added once would otherwise only ever see the first list.
+  const onScreen = useRef(recs)
+  useEffect(() => { onScreen.current = recs }, [recs])
+  // The network and the clock, for the same reason. The defaults above are
+  // new functions on every render, and an effect that listed them would be
+  // taken down and set up again on every render -- including the render
+  // that "checking" itself causes, which ended the check it was showing.
+  const tools = useRef({ fetchImpl, now, wait })
+  useEffect(() => { tools.current = { fetchImpl, now, wait } })
 
   // Fetch one topic's five (null: the overall five) and draw them.
   // `push` is false when the browser's back or forward button asked, because
@@ -160,6 +185,98 @@ export default function TopicIsland({
     if (target && target.scrollIntoView) target.scrollIntoView()
   }, [])
 
+  // THE PAGE'S OWN CHECK (ADR 0018, amended 2026-10-15). When the tab comes
+  // back into view -- the visitor went to Codeforces and has returned -- ask
+  // Codeforces for the history again, wait for it, and redraw the five in
+  // place, so a problem solved meanwhile is ticked. All of these must hold:
+  //
+  //   - something on screen could still be ticked: a plan with a problem
+  //     not yet solved. Five ticks already, nothing to look for;
+  //   - the last check (or the page's arrival) was check_every seconds ago
+  //     or more. The server keeps the same limit for the handle
+  //     (web.AUTO_CHECK_SECONDS) and answers "started": false inside it;
+  //   - no check is under way, and no sync was running when the page was
+  //     drawn: then the line at the top of the page is watching that one.
+  //
+  // It is silent when anything goes wrong -- offline, Codeforces down, the
+  // sync failing. The page still shows what it showed, which is still true,
+  // and the next return tries again. Nothing moves the keyboard: the visitor
+  // did not press anything.
+  useEffect(() => {
+    if (!initial.urls.resync || initial.syncing) return undefined
+    let gone = false
+    const every = (initial.check_every || 60) * 1000
+
+    async function check() {
+      const { fetchImpl: ask, wait: pause } = tools.current
+      inFlight.current = true
+      setChecking(true)
+      try {
+        const started = await ask(initial.urls.resync, {
+          method: 'POST',
+          headers: { Accept: 'application/json' },
+        })
+        if (!started.ok) return
+        const begun = await started.json()
+        if (!begun.status) return               // held back: checked in the last minute
+        // Ask until the sync is over, as often as the server says, and at
+        // most 60 times: a sync is seconds, and a queue of strangers' syncs
+        // a minute or two. A page left asking for ever is a bug.
+        let state = 'pending'
+        let next = begun.poll_in
+        for (let asked = 0; asked < 60 && !gone; asked += 1) {
+          await pause(Math.max(1, next || 2) * 1000)
+          const answer = await ask(begun.status, { headers: { Accept: 'application/json' } })
+          if (!answer.ok) return
+          const status = await answer.json()
+          state = status.state
+          next = status.poll_in
+          if (state !== 'pending' && state !== 'running') break
+        }
+        if (state !== 'done' || gone) return
+        // The list on screen now, which may not be the one the check began
+        // on: a topic chosen meanwhile is the one to redraw.
+        const before = onScreen.current
+        const solvedBefore = new Set(
+          before.state === 'ok' ? before.problems.filter((problem) => problem.solved).map((problem) => problem.id) : [],
+        )
+        const response = await ask(dataUrl(initial.urls, before.topic), {
+          headers: { Accept: 'application/json' },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        if (gone) return
+        setRecs(data.recs)
+        setDismissed(data.dismissed)
+        // Read out what changed, and only that: nothing when nothing did.
+        const fresh = data.recs.state === 'ok'
+          ? data.recs.problems.filter((problem) => problem.solved && !solvedBefore.has(problem.id))
+          : []
+        if (fresh.length) setSaid(`Solved since you last looked: ${fresh.map((problem) => problem.name).join(', ')}.`)
+      } catch {
+        // Silent, as above.
+      } finally {
+        inFlight.current = false
+        lastCheck.current = tools.current.now()
+        if (!gone) setChecking(false)
+      }
+    }
+
+    function onReturn() {
+      if (document.visibilityState !== 'visible') return
+      const list = onScreen.current
+      if (list.state !== 'ok' || !list.problems.some((problem) => !problem.solved)) return
+      if (inFlight.current || tools.current.now() - lastCheck.current < every) return
+      check()
+    }
+
+    document.addEventListener('visibilitychange', onReturn)
+    return () => {
+      gone = true
+      document.removeEventListener('visibilitychange', onReturn)
+    }
+  }, [initial.urls, initial.syncing, initial.check_every])
+
   // The back and forward buttons: the address changed, so draw its list.
   useEffect(() => {
     const onPop = () => {
@@ -193,6 +310,7 @@ export default function TopicIsland({
         onPress={press}
         said={said}
         syncing={initial.syncing}
+        checking={checking}
       />
       <TopicChart
         topics={initial.topics}

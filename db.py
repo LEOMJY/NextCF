@@ -895,6 +895,28 @@ def recent_failed_job(conn, kind, target, since):
     ).fetchone()
 
 
+def recent_job(conn, kind, target, since):
+    """The newest job for this target begun at or after `since`, in any state,
+    or None.
+
+    What the results page's own check is held back by (ADR 0018, amended
+    2026-10-15): a sync begun in the last minute, whether it is still
+    running, finished, or failed, is reason enough not to begin another.
+    Failed counts too -- with Codeforces down, every return to the tab would
+    otherwise queue one more sync that fails.
+    """
+    return conn.execute(
+        """
+        SELECT id, kind, target, state, progress, started_at, finished_at, error, failure
+          FROM jobs
+         WHERE kind = ? AND target = ? AND started_at >= ?
+         ORDER BY id DESC
+         LIMIT 1
+        """,
+        (kind, target, since),
+    ).fetchone()
+
+
 def count_unfinished_jobs(conn, kind="sync"):
     """How many jobs are waiting or running. What the scheduler asks before
     adding work of its own: a visitor waiting for their first page comes

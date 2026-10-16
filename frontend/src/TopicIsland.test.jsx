@@ -354,6 +354,114 @@ describe('a practice plan', () => {
 
 // The audit of 2026-10-01: the fold under the chart says only what is true
 // of these numbers, and an empty history is not "what you have practised".
+// ADR 0018, amended 2026-10-15: the page asks Codeforces again by itself when
+// its tab is returned to, and redraws the five in place.
+describe("the page's own check", () => {
+  // The tab coming back into view. jsdom has no tabs, so the browser's own
+  // answer to "is this page visible" is stood in for, then the event fired.
+  function returnToTab() {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  // A fetch that answers each address with its own body, as JSON.
+  function routes(table) {
+    return vi.fn(async (url) => {
+      if (!(url in table)) return { ok: false, status: 404, headers: { get: () => '' }, json: async () => ({}) }
+      return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => table[url] }
+    })
+  }
+
+  const solvedOne = recs(null, [problem('1A', 'Overall One', { solved: true }), problem('2A', 'Overall Two')])
+  const answers = {
+    '/results/somebody/sync': { started: true, status: '/progress/9/status', poll_in: 0 },
+    '/progress/9/status': { state: 'done', poll_in: 0 },
+    '/results/somebody/recommendations': { recs: solvedOne, dismissed: 0 },
+  }
+
+  function mount({ table = answers, clock, wait = () => Promise.resolve(), ...over } = {}) {
+    const fetchImpl = routes(table)
+    render(<TopicIsland initial={{ ...initial, check_every: 60, ...over }} fetchImpl={fetchImpl} navigate={vi.fn()}
+                        now={() => clock.at} wait={wait} />)
+    return fetchImpl
+  }
+
+  it('asks Codeforces on a return to the tab, and ticks what was solved, in place', async () => {
+    const clock = { at: 0 }
+    const fetchImpl = mount({ clock })
+    clock.at = 61000
+    returnToTab()
+    await waitFor(() => expect(screen.getByText('✓ solved')).toBeTruthy())
+    // Read out, by name, and only what changed.
+    expect(screen.getByText('Solved since you last looked: Overall One.')).toBeTruthy()
+    const [url, options] = fetchImpl.mock.calls[0]
+    expect(url).toBe('/results/somebody/sync')
+    expect(options.method).toBe('POST')
+    expect(options.headers.Accept).toBe('application/json')
+    expect(fetchImpl.mock.calls.map(([address]) => address)).toEqual(
+      ['/results/somebody/sync', '/progress/9/status', '/results/somebody/recommendations'])
+  })
+
+  it('does not ask again within a minute of the last check, or of the page arriving', async () => {
+    const clock = { at: 0 }
+    const fetchImpl = mount({ clock })
+    clock.at = 30000
+    returnToTab()
+    await Promise.resolve()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('does not ask when every problem on screen is already ticked', async () => {
+    const clock = { at: 0 }
+    const done = recs(null, [problem('1A', 'Overall One', { solved: true })])
+    const fetchImpl = mount({ clock, recs: done })
+    clock.at = 61000
+    returnToTab()
+    await Promise.resolve()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('does not ask while a sync was already running when the page was drawn', async () => {
+    const clock = { at: 0 }
+    const fetchImpl = mount({ clock, syncing: true })
+    clock.at = 61000
+    returnToTab()
+    await Promise.resolve()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('changes nothing when the server holds the check back, or the sync fails', async () => {
+    const clock = { at: 0 }
+    const held = mount({ clock, table: { '/results/somebody/sync': { started: false, reason: 'checked in the last minute' } } })
+    clock.at = 61000
+    returnToTab()
+    await waitFor(() => expect(held).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('✓ solved')).toBeNull()
+    cleanup()
+
+    // A new page, so a new arrival and a clock of its own: a minute after it.
+    const later = { at: 0 }
+    const failed = mount({ clock: later, table: { ...answers, '/progress/9/status': { state: 'failed', poll_in: 0 } } })
+    later.at = 61000
+    returnToTab()
+    await waitFor(() => expect(failed).toHaveBeenCalledTimes(2))
+    expect(failed.mock.calls.map(([address]) => address)).not.toContain('/results/somebody/recommendations')
+    expect(screen.queryByText('✓ solved')).toBeNull()
+  })
+
+  it('says beside the button that it is checking, while it is', async () => {
+    const clock = { at: 0 }
+    let release
+    mount({ clock, wait: () => new Promise((resolve) => { release = resolve }) })
+    clock.at = 61000
+    returnToTab()
+    await waitFor(() => expect(screen.getByText('checking Codeforces for what you have solved…')).toBeTruthy())
+    release()
+    await waitFor(() => expect(screen.getByText('ticks off what you have solved since; takes a few seconds')).toBeTruthy())
+    expect(screen.getByText('✓ solved')).toBeTruthy()
+  })
+})
+
 describe('the chart in unusual states', () => {
   const withChart = (topics, totals, other = ['fft']) =>
     render(<TopicIsland initial={{ ...initial, topics, totals, other_topics: other }} fetchImpl={answering({})} navigate={vi.fn()} />)

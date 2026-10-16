@@ -224,3 +224,60 @@ second press safe: it reloads a page rather than repeating a POST.
 **Still a form and still a POST**, for the reason the first amendment gave: a
 GET that starts work is followed by prefetchers, crawlers and link checkers,
 each taking a turn in a queue everybody shares.
+
+## Amendment — 2026-10-15: the page asks by itself when it is looked at again
+
+The 2026-09-23 amendment drew the line between the two ways a sync starts:
+by the clock, when the stored page is older than `FRESH_FOR_SECONDS`, and by
+the visitor, with the button. One case fell between them, and it is the
+commonest one: somebody opens their five, goes to Codeforces in another tab,
+solves one in eight minutes, and comes back. The page counts as fresh, so
+nothing starts, and nothing tells them to press anything. Asked where to
+press "solved", the author found no answer on the page.
+
+**Decision: the results page checks when its tab is returned to.** The
+browser says when a tab comes back into view (`visibilitychange`); the page
+then sends the button's own request, asking for an answer as data, waits for
+the sync, and redraws the five in place. A tick appears without a press and
+without a reload. It asks only when all of these hold:
+
+- the five on screen still have a problem that is not solved;
+- a minute or more since the page's last check, or since it arrived;
+- no check is under way, and no sync was running when the page was drawn
+  (the line at the top is watching that one).
+
+**The server keeps the same minute, per handle.** A sync begun for the
+handle in the last `AUTO_CHECK_SECONDS` -- running, finished or failed --
+means the request starts nothing and says so. The browser's limit alone is
+not enough: ten tabs on one handle, or a page with a bug in it, would each
+take two requests out of a queue everybody shares. Failed counts, so that
+with Codeforces down a visitor flicking between tabs does not queue a
+failing sync every time. The page reads the number from the server, so the
+two limits are one number.
+
+**A press is never held back.** Somebody who presses has decided, and
+presses are rare; the minute is for the script, which would otherwise ask
+on every return.
+
+**Silent when it does not work.** Offline, Codeforces down, a failed sync:
+the page shows what it showed, which is still true, and the next return
+tries again. The note beside "Check what I solved" says "checking Codeforces
+for what you have solved…" while a check is under way, and a screen reader
+is told the names of problems newly solved, and nothing when there are
+none. The keyboard is not moved: nobody pressed anything.
+
+**Not without script.** A page without JavaScript keeps the button and the
+clock, as before.
+
+### Alternatives considered
+
+- **Reload the whole page when the check is done.** Simpler, and turned down
+  by the author: a reload throws away where the visitor was reading and
+  flashes the page for a change of one tick.
+- **Check on a timer while the page is open.** Costs a sync a minute for
+  every open tab, looked at or not. A return to the tab is the moment
+  something can have changed.
+- **Ask Codeforces from the browser directly.** The page would then have to
+  repeat what a sync does with a history (ADR 0010's aliases, ADR 0026's
+  plans), and Codeforces' own limits would apply per visitor without the
+  queue that keeps this site inside them.

@@ -112,6 +112,15 @@ def handle_from_input(typed):
 # saves no request and misses verdicts that change after they were stored.
 FRESH_FOR_SECONDS = 600
 
+# The results page checks Codeforces by itself when its tab is returned to,
+# so a problem solved in another tab is ticked without a press (ADR 0018,
+# amended 2026-10-15) -- but no more often than this, for one handle. Every
+# sync is two requests out of a queue everybody shares (SECONDS_PER_SYNC);
+# a visitor flicking between tabs, or ten tabs open on one handle, must not
+# turn into a sync each time. The page reads the number from here
+# (island_data), so the browser's limit and the server's are one number.
+AUTO_CHECK_SECONDS = 60
+
 # How long a failed sync is believed before it is attempted again. Measured on
 # 2026-09-24 and it was the worst friction on the site: a mistyped handle cost
 # four seconds and two API requests, and reloading the page cost them again,
@@ -1010,6 +1019,8 @@ def island_data(handle, recs, dismissed, topics, other_topics, totals, syncing=F
     return {
         "handle": handle,
         "syncing": syncing,
+        # How long the page waits between its own checks (AUTO_CHECK_SECONDS).
+        "check_every": AUTO_CHECK_SECONDS,
         "recs": recs,
         "dismissed": dismissed,
         "dismissals_kept": db.DISMISSALS_KEPT,
@@ -1143,6 +1154,35 @@ def resync(handle):
     if topic is not None and topic not in db.pool_topics(get_db()):
         return render_template("error.html", handle=handle,
                                message="There is no topic by that name."), 400
+
+    # THE PAGE'S OWN CHECK (ADR 0018, amended 2026-10-15). The same request,
+    # sent by the page's script when its tab is returned to, asking for an
+    # answer as data (wants_data, as ADR 0030's presses do) instead of a
+    # page to reload. Two differences from a press:
+    #
+    #   - It is held back for a minute. A sync begun for this handle in the
+    #     last AUTO_CHECK_SECONDS -- by anybody, in any state -- means no new
+    #     one: the answer says so and nothing is queued. A press is never
+    #     held back: somebody who presses has decided, and presses are rare.
+    #     The limit is for the script, which would otherwise ask on every
+    #     return to the tab.
+    #   - It answers with where to watch the sync (sync_status, as data),
+    #     so the page can ask until it is done and then redraw the five in
+    #     place.
+    if wants_data():
+        conn = get_db()
+        recent = db.recent_job(conn, "sync", handle, db.utc_ago(AUTO_CHECK_SECONDS))
+        if recent is not None and recent["state"] not in ("pending", "running"):
+            return jsonify({"started": False, "reason": "checked in the last minute"})
+        # Already running -- arriving on an old page, a press, another
+        # visitor on the same handle: start_sync hands back that job, and the
+        # page watches it instead of queueing a second.
+        job_id = sync.start_sync(handle)
+        return jsonify({
+            "started": True,
+            "status": url_for("sync_status", job_id=job_id),
+            "poll_in": MIN_REFRESH_SECONDS,
+        })
 
     sync.start_sync(handle)
     return redirect(url_for("results", handle=handle, topic=topic))
@@ -1367,6 +1407,16 @@ def sync_status(job_id):
         # A job that has been cleaned away. 404 rather than an empty line: the
         # script stops asking, and the page keeps the words it already has.
         return jsonify({"state": "missing"}), 404
+
+    # The results page's own check (resync, as data) asks the same question
+    # and needs no sentence, only whether to ask again and when. Its answer
+    # is two values, not a second copy of the line's wording.
+    if wants_data():
+        running = job["state"] in ("pending", "running")
+        return jsonify({
+            "state": job["state"],
+            "poll_in": queue_view(conn, job_id)["poll_in"] if running else 0,
+        })
 
     return render_template(
         "_sync_line.html",

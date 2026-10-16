@@ -70,13 +70,19 @@ function ProblemRow({ problem, topic, urls, onPress }) {
 // not drawn while a sync is running, when the line at the top of the page
 // says so already. A plain form: the browser sends it and follows the
 // redirect, exactly as without this component.
-function Resync({ topic, urls, syncing }) {
+//
+// While the page is checking by itself (TopicIsland, "THE PAGE'S OWN
+// CHECK"), the note beside the button says so, so a tick that appears a few
+// seconds after coming back has a visible reason.
+function Resync({ topic, urls, syncing, checking }) {
   if (syncing) return null
   return (
     <form className="resync" method="post" action={urls.resync}>
       {topic && <input type="hidden" name="topic" value={topic} />}
       <button type="submit">Check what I solved</button>
-      <span className="meta">ticks off what you have solved since; takes a few seconds</span>
+      <span className="meta">
+        {checking ? 'checking Codeforces for what you have solved…' : 'ticks off what you have solved since; takes a few seconds'}
+      </span>
     </form>
   )
 }
@@ -224,7 +230,7 @@ function Empty({ recs, dismissed, urls, onChoose, handle }) {
   )
 }
 
-export default function Recommendations({ handle, recs, dismissed, dismissalsKept, urls, busy, heading, onChoose, onPress, said = '', syncing = false }) {
+export default function Recommendations({ handle, recs, dismissed, dismissalsKept, urls, busy, heading, onChoose, onPress, said = '', syncing = false, checking = false }) {
   // The rows pressed in this list. "Put back" is offered only for hidden
   // problems beyond these, as in the template -- one skip used to offer
   // both it and the row's own undo. A pressed row since solved counts too:
@@ -271,7 +277,7 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
               ))}
             </tbody>
           </table>
-          <Resync topic={recs.topic} urls={urls} syncing={syncing} />
+          <Resync topic={recs.topic} urls={urls} syncing={syncing} checking={checking} />
           <Notes recs={recs} urls={urls} />
           {/* The end of a plan, by asking only (ADR 0026) -- the template's
               form, naming the plan it ends. */}
@@ -294,7 +300,7 @@ export default function Recommendations({ handle, recs, dismissed, dismissalsKep
       ) : (
         <>
           <Empty recs={recs} dismissed={dismissed} urls={urls} onChoose={onChoose} handle={handle} />
-          <Resync topic={recs.topic} urls={urls} syncing={syncing} />
+          <Resync topic={recs.topic} urls={urls} syncing={syncing} checking={checking} />
         </>
       )}
 

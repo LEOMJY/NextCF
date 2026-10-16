@@ -18,6 +18,7 @@ The checks that need jobs to sit still come first; the worker is only started
 at the end, because once it runs it eats the queue.
 """
 
+import json
 import os
 import re
 import shutil
@@ -347,6 +348,86 @@ def the_button_comes_back_to_the_list_it_was_pressed_on():
         conn.close()
 
 
+def asked_as_data(handle):
+    """The results page's own check: the button's address, asking for an
+    answer as data rather than a page to reload."""
+    return client.post(f"/results/{handle}/sync", headers={"Accept": "application/json"})
+
+
+def the_pages_own_check_starts_a_sync_and_says_where_to_watch_it():
+    """ADR 0018, amended 2026-10-15: the page asks when its tab is returned
+    to, and is told where to watch the sync -- as data, two values, while the
+    line on the page is still the line."""
+    clear_jobs()
+    stored("checks_itself", db.utc_now())
+    response = asked_as_data("checks_itself")
+    assert response.status_code == 200, response.status_code
+    job = active_job_for("checks_itself")
+    assert job is not None, "the page's own check queued nothing"
+    assert response.get_json() == {"started": True, "status": f"/progress/{job['id']}/status",
+                                   "poll_in": web.MIN_REFRESH_SECONDS}, response.get_json()
+    status = client.get(f"/progress/{job['id']}/status", headers={"Accept": "application/json"}).get_json()
+    assert status["state"] == "pending" and status["poll_in"] >= web.MIN_REFRESH_SECONDS, status
+    line = client.get(f"/progress/{job['id']}/status", headers={"Accept": "text/html"}).get_data(as_text=True)
+    assert 'class="syncing-body"' in line, "the live line's own question no longer gets the line"
+
+
+def the_pages_own_check_waits_a_minute():
+    """A sync begun in the last minute -- running, finished or failed --
+    holds the page's own check back; one still running is watched, not
+    doubled; a press is never held back; and after the minute it runs."""
+    clear_jobs()
+    stored("flicks_tabs", db.utc_now())
+    first = asked_as_data("flicks_tabs").get_json()
+    again = asked_as_data("flicks_tabs").get_json()
+    assert again["status"] == first["status"] and len(waiting()) == 1, "a check while one runs queued a second"
+
+    def end(state):
+        conn = db.connect()
+        try:
+            job = db.get_active_job(conn, "sync", "flicks_tabs")
+            failed = state == "failed"
+            db.finish_job(conn, job["id"], error="Codeforces did not answer." if failed else None,
+                          failure="unreachable" if failed else None)
+        finally:
+            conn.close()
+
+    end("done")
+    held = asked_as_data("flicks_tabs")
+    assert held.status_code == 200 and held.get_json()["started"] is False, held.get_json()
+    assert active_job_for("flicks_tabs") is None, "held back, and still queued a sync"
+
+    # A press is somebody deciding, and is not held back.
+    assert client.post("/results/flicks_tabs/sync").status_code == 302
+    assert active_job_for("flicks_tabs") is not None, "a press was held back by the minute"
+
+    # A failed sync holds the check back too: with Codeforces down, every
+    # return to the tab would otherwise queue one more that fails.
+    end("failed")
+    assert asked_as_data("flicks_tabs").get_json()["started"] is False, "a failure in the last minute did not count"
+
+    # A minute on, it runs.
+    conn = db.connect()
+    try:
+        with conn:
+            conn.execute("UPDATE jobs SET started_at = ? WHERE target = 'flicks_tabs'", (db.utc_ago(web.AUTO_CHECK_SECONDS + 1),))
+    finally:
+        conn.close()
+    assert asked_as_data("flicks_tabs").get_json()["started"] is True, "still held back after the minute"
+
+
+def the_page_is_told_the_servers_minute():
+    """The browser's limit and the server's are one number: the page reads
+    it from the island's data, which reads web.AUTO_CHECK_SECONDS."""
+    clear_jobs()
+    stored("told_the_minute", db.utc_now())
+    html = client.get("/results/told_the_minute").get_data(as_text=True)
+    island = json.loads(re.search(r'<script type="application/json" id="topic-island-data">(.*?)</script>', html, re.S).group(1))
+    assert island["check_every"] == web.AUTO_CHECK_SECONDS, island.get("check_every")
+    assert island["urls"]["resync"] == "/results/told_the_minute/sync", island["urls"].get("resync")
+    assert island["syncing"] is False, island["syncing"]
+
+
 def only_a_post_can_start_a_sync():
     """A GET that starts work is followed by prefetchers, crawlers and link
     checkers, and each would take a turn in the queue."""
@@ -665,6 +746,11 @@ print("\nthe button, for when the page counts as fresh")
 check("the button starts a sync and comes back to the page", the_button_starts_a_sync_and_comes_back_to_the_page)
 check("the button comes back to the list it was pressed on", the_button_comes_back_to_the_list_it_was_pressed_on)
 check("only a POST can start a sync", only_a_post_can_start_a_sync)
+
+print("\nthe page's own check, on a return to its tab")
+check("it starts a sync and says where to watch it", the_pages_own_check_starts_a_sync_and_says_where_to_watch_it)
+check("it waits a minute; a press does not", the_pages_own_check_waits_a_minute)
+check("the page is told the server's minute", the_page_is_told_the_servers_minute)
 check("a junk handle cannot be queued", a_junk_handle_cannot_be_queued_by_the_button)
 check("a sync already running is watched, not duplicated", a_sync_already_running_is_watched_not_duplicated)
 check("nothing stored means waiting", a_visitor_with_nothing_stored_waits)
