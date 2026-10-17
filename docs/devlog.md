@@ -6635,3 +6635,37 @@ the same page, saying nothing because nothing new had been solved.
 
 Not checked: a real problem solved in another tab and ticked. That needs a
 submission on Codeforces, and is the first thing to try on the live site.
+
+## 2026-10-17 — Three more directions, and "boring"
+
+The white tool pages were chosen and, minutes later, paused: the author
+wanted to see more different designs for the whole site first, with
+animation, interaction, a real aesthetic, and still clear. Asked to narrow
+it down: the whole site including the landing page; directions completely
+different from the ridge in colour, type, feel and motion; GSAP's showcase
+for craft and tool products such as Linear and Raycast for clarity; and the
+tool pages still moving only to show a change.
+
+Three were built as working prototypes, landing page and results page each,
+on real data, outside the repository:
+
+- **Curve.** Ink on white, the page drawn as the chart the product computes:
+  your chance of a first accept across every problem rating, with the five
+  on it, and a switch between the model's chance and rating alone.
+- **Console.** A dark, keyboard-first command box: type a handle, or a
+  rating to see what rating alone picks; the problemset's contest ids in
+  columns behind it.
+- **Balloons.** The author's idea from 09-13: every problem a 3D balloon in
+  its rank colour, floating at your chance of solving it, the five at eye
+  level, small balloons behind drawing the curve.
+
+The verdict: all three bad. Boring, not creative, the animation bad. Asked
+which parts: the main visual idea, too little and too small motion, and a
+conventional layout. Asked what kind of motion: all four kinds offered -- a
+3D scene to play with, scroll-driven storytelling, something answering
+every gesture, and transitions between pages.
+
+What it says about the method more than the designs: three guesses, made
+well or badly, are still guesses at somebody else's taste. The next round
+starts from sites the author picks himself, with a sentence each on what he
+likes in them, and nothing is drawn before those arrive.
