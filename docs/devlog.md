@@ -6669,3 +6669,44 @@ What it says about the method more than the designs: three guesses, made
 well or badly, are still guesses at somebody else's taste. The next round
 starts from sites the author picks himself, with a sentence each on what he
 likes in them, and nothing is drawn before those arrive.
+
+## 2026-11-02 — Keycaps, and a story that plays by itself
+
+The reference round never happened: seven references were too many, and
+one direction was picked and built instead, landing page and results page,
+on real data, outside the repository.
+
+**Keycaps.** Every problem is a 3D key with its real id on the face and its
+rank colour on the sides. About 160 of them fall into a pile, as many at
+each rating as the problemset really has, and can be grabbed, thrown, and
+tapped to turn over (the back says the chance). The sample's five are the
+dark keys at the front, the Enter and Esc of the board. Scrolling tells the
+story: the pile sorts into one column per rating, in order of your chance;
+the aim appears; five keys leave their columns and line up over it. The
+results page keeps the idea still: each of the five is a key, every button
+is a key that goes down, and a solved problem's key presses in and turns
+green.
+
+**What broke: the scroll.** The first version tied the story to the scroll
+position, frame for frame. Crossing a threshold froze the physics wherever
+the pile happened to be, keys hanging in mid-air, and from there every key
+slid and shrank into its column as fast as the page was scrolled. The
+author found it awkward and, on first use, confusing: the freeze read as
+the page breaking, and the shrinking as squeezing.
+
+The rebuild separates the two. The scroll only says which way to go; the
+story then plays on its own clock, about five seconds, and the page glides
+to one of two resting points (the pile, or the finished chart), never
+halfway. Every key jumps out of the pile in an arc and lands in its column
+with a small squash, in a wave from the hardest column to the easiest. The
+keys keep their size and the camera pulls back instead. The column that
+rating alone would pick from nods and is named; then the five hop out of
+five different columns and cross to the aim, each leaving a dotted thread
+back to where it came from, in the same left-to-right order as their
+columns so no two threads cross. Scrolling back up plays it all backwards,
+faster, and the pile is exactly where it was.
+
+What it taught: tying motion to scroll position suits motion that *is* a
+position -- a progress bar, a parallax layer. It does not suit a story
+with physical causes in it. A key frozen in mid-air is not a pause, it is
+a bug, and nothing on the page says otherwise.
