@@ -6710,3 +6710,51 @@ What it taught: tying motion to scroll position suits motion that *is* a
 position -- a progress bar, a parallax layer. It does not suit a story
 with physical causes in it. A key frozen in mid-air is not a pause, it is
 a bug, and nothing on the page says otherwise.
+
+## 2026-11-04 — Keys that shook when nobody touched them
+
+The author reported the keycaps shaking while he did nothing. The guess was
+the landing squash; it was not. Measured first: the pile was settled, then
+stepped for 600 frames the way the page steps it, counting keys that moved
+more than a tenth of a physics pixel in one frame.
+
+| How the physics was stepped | Keys moving | Worst move in a frame |
+|---|---|---|
+| Fixed steps of 1/60 s | 0 of 155 | 0.08 px |
+| The page, on a 60 Hz screen | 155 of 155 | 1.7 px, 3 degrees |
+| The page, on a 144 Hz screen | 154 of 155 | 0.96 px |
+
+The cause was a change made two days earlier to silence a warning from the
+physics library about steps longer than 1/60 s: a long frame was split into
+two shorter steps. On a 60 Hz screen frames last almost exactly 1/60 s, a
+hair over or under, so every frame was one step of 16.7 ms or two of 8.3 ms,
+flipping back and forth. The solver that pushes overlapping keys apart is
+tuned to the step size; with the size jumping, stacked keys were pushed a
+little too far, then not far enough, every frame.
+
+The fix is the standard one, a fixed timestep: real time goes into an
+accumulator, the physics advances only in steps of exactly 1/60 s, and each
+key is drawn between its last two positions by how far the clock is towards
+the next step, so motion stays smooth on any screen. A test runs the page's
+own stepping function with 60 Hz and 144 Hz frame times; it failed with
+154 moving keys before the fix and passes with none after.
+
+That left a few keys wobbling by fractions of a pixel: a box resting at an
+odd angle on others gets nudged by the solver forever. Sleeping removes it:
+a key that has not moved for a second stops being simulated until something
+hits it or it is picked up. Picking up, throwing, and the story handing the
+keys back to the pile all wake them explicitly.
+
+Checking that turned up one more: a test that started the story before the
+page had drawn a frame sent dozens of keys through the floor and falling
+forever. The story read each key's starting place from the drawn object,
+which was still at the origin, so every key came back to the same spot
+inside the floor. A real page draws long before anyone scrolls, but the
+story now reads positions from the physics, which always has them, and the
+floor is ten keys deep, so nothing moves fast enough to pass through it in
+one step. The five dark keys' gentle float went too: with everything else
+still, a two-pixel bob reads as a shake.
+
+Learned: a warning silenced without understanding what it protects can
+cost more than the warning. And measure before guessing -- the first guess
+here was wrong.
