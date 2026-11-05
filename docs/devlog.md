@@ -6758,3 +6758,16 @@ still, a two-pixel bob reads as a shake.
 Learned: a warning silenced without understanding what it protects can
 cost more than the warning. And measure before guessing -- the first guess
 here was wrong.
+
+## 2026-11-04, later — The form moves under the five
+
+"The position of the handle bar is weird." Asked which way: the form sat
+in the bottom-left corner, the five sample keys centre-right, and the note
+explaining them in the bottom-right -- three parts of one idea in three
+corners. The form now stands directly under the five, centred on them,
+with the note beneath it, so it reads in order: a sample's five, then your
+handle, then yours. The five are 3D and the form is ordinary page content,
+so a script projects the floor line under the five onto the screen and
+places the form there; on a screen too short for both, the camera looks a
+little lower so the whole scene rises. A phone already stacked them this
+way and is unchanged.
