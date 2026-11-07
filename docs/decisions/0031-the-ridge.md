@@ -245,6 +245,30 @@ GSAP, 14 of `ridge.js`, 10 of `field.json`, and 66 of fonts (the two Sofia
 faces the first screen uses, and IBM Plex Mono's two weights). 140 KB
 against the brief's 150. A device that draws layer 3 adds 167.
 
+## Amendment, 2026-11-07: the ridge stays
+
+On 2026-10-17, just after choosing white for the tool pages, the author
+paused to see designs completely different from the ridge, for the whole
+site. Two rounds followed, each built as working pages on real data
+outside the repository (devlog, 10-17 and 11-02 to 11-04):
+
+- **Curve, Console and Balloons** (10-17), all three turned down as boring:
+  the main idea, too little motion, a conventional layout.
+- **Keycaps** (10-23 to 11-04): every problem a 3D key in a pile that can be
+  thrown, a scroll that sorts the pile into columns by your chance, the five
+  crossing to the aim. Revised three times on the author's notes (the
+  scroll story, keys shaking at rest, where the handle form stood).
+
+**Decided:** the author keeps the ridge. The landing page as built and live
+stands, and the exploration is closed. Nothing from the four directions
+comes into the repository.
+
+**Next, and what it is built from:** the tool pages in the ridge. Their
+ground is **white**, as chosen on 10-17 before the pause, unless the author
+changes it when he sees it built; the other open points listed in the
+first amendment (the steps as steps, what the results page leads with,
+where the display face goes) are still open.
+
 ## Alternatives
 
 **B, the stair.** A rank colour always sat on bone there, so none was ever
@@ -259,6 +283,10 @@ three were built. The author chose sentence case in the condensed face.
 **Yellow as the ground of every page.** One ground for the whole site is
 the most recognisable. Built, compared, and not chosen, for the reasons
 above.
+
+**Four other directions for the whole site**, built 10-17 to 11-04 (see the
+amendment of 2026-11-07): Curve, Console, Balloons and Keycaps. Turned
+down; the ridge was kept.
 
 **A button the visitor presses to say "solved".** It answers at once, and
 it can disagree with the history, which is the truth and is one request

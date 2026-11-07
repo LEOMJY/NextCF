@@ -6771,3 +6771,20 @@ so a script projects the floor line under the five onto the screen and
 places the form there; on a screen too short for both, the camera looks a
 little lower so the whole scene rises. A phone already stacked them this
 way and is unchanged.
+
+## 2026-11-07 — Back to the ridge
+
+After the handle form was moved under the five, the author decided to keep
+the ridge: the landing page that has been live since 10-12 stays, and
+Keycaps goes no further. Recorded in ADR 0031's amendment of today; the
+tool pages are next, on the white ground chosen on 10-17, the day the
+exploration began.
+
+What the three weeks bought: the ridge is now kept against four real
+alternatives, not chosen by default, and two pieces of engineering came
+out of the prototypes that hold anywhere -- a story that plays on its own
+clock instead of following the scroll, and a fixed physics timestep.
+What they cost: the tool pages, the five-second test with real Codeforces
+users, and the first real users all waited three weeks. The site's
+definition of done is real users and measured use; a design round with no
+deadline pushes that further away every time it ends in "not this one".

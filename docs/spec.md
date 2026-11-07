@@ -835,7 +835,8 @@ type     Sofia Sans Extra Condensed 800 (display) · Sofia Sans (reading)
          · IBM Plex Mono (data); sentence case, no capitals
 space    five steps, kept: 8 / 16 / 32 / 64 / 96
 colour   yellow and ink; on the landing page "act here" is ink
-         the tool pages' ground and accent: not settled (see below)
+         the tool pages' ground: white (chosen 10-17, resumed 11-07);
+         their accent: not settled
          green = accepted, warn = wrong, seven rank colours = a rating,
          always a mark with an ink edge
 radius   none; no shadow
@@ -849,6 +850,11 @@ author saw the results page whole. A loud redraw on full yellow was built
 that night and rejected as worse. What the results page leads with, and on
 what ground, is being settled on the prototype one change at a time, and
 the rules for tool pages below stand as written until it is.
+
+*2026-11-07* (ADR 0031's last amendment): after two rounds of completely
+different directions for the whole site (Curve, Console, Balloons;
+then Keycaps), the author kept the ridge. The tool pages are next, on the
+white ground chosen on 10-17.
 
 Because every value is a token in one file, changing type, colour and
 spacing later is a one-file change. Layout can change too, at any point. It
@@ -1148,7 +1154,7 @@ starts counting the day the disk is attached (ADR 0017).
 | v0.5 | Evaluation harness; the baseline number written down. **Done 09-18** (ADR 0013) | early Oct |
 | v0.6 | First real model, scored against the baseline; `/how`. **Done 09-19**: model 09-18, §9's first criterion met (ADR 0014), improved the same day (ADR 0015); `collect.py refresh`; `/how` 09-19 | late Oct |
 | v0.7 | Nightly re-sync, logging, error handling, tests; `/privacy`; visit counting for §9, on storage that survives restarts. **Done 09-26**: visits and `/privacy` (ADR 0017), the queue (ADR 0018), the checks in the repository (ADR 0019), the upkeep thread (ADR 0020), too hard / too easy (ADR 0021), errors and logs (ADR 0022). Two things carried, each by decision: the paid disk is bought before the first stranger arrives, not before then (ADR 0017), and component tests arrive with the first React component rather than before it (ADR 0011, amended) | early Nov |
-| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025). **Practice plans**, added 2026-09-27: the five stay until they are done, with a history (ADR 0026). *Unhandled states: audited 2026-10-01, every unusual state rendered and read; seven small things fixed (devlog).* *Design: the card table is live as the current direction, not settled (§12).* *2026-10-11: the ridge chosen to replace it (ADR 0031), landing page due live 10-18.* | early Nov |
+| v0.8 | Design polish pass and unhandled states — see §7.1. **Per-topic recommendations**, moved here from §11 on 2026-09-26: the topic chart as the first React component (ADR 0025). **Practice plans**, added 2026-09-27: the five stay until they are done, with a history (ADR 0026). *Unhandled states: audited 2026-10-01, every unusual state rendered and read; seven small things fixed (devlog).* *Design: the card table is live as the current direction, not settled (§12).* *2026-10-11: the ridge chosen to replace it (ADR 0031), landing page due live 10-18.* *11-07: four other directions explored and turned down; the ridge stays; tool pages next.* | early Nov |
 | **v1.0** | **First public release** | **mid Nov** |
 | — | Users, feedback, USACO contest season | Dec–Feb |
 | v2.0 | See §11 | spring |
@@ -1362,6 +1368,9 @@ self-reporting solves. Needs a user base first, which is why it is not v1.0.
   loud redraw was rejected that night (ADR 0031's amendment). Due live by
   10-18. *10-12:* the landing page is built, checked and live, six days
   inside the week. The tool pages are not, and their ground is not chosen.
+  *11-07:* white was chosen on 10-17, then paused while four other
+  directions for the whole site were built and turned down; the ridge
+  stays, and the tool pages are next, on white.
   Still owed:
   the brief's five-second test on two or three Codeforces users, which was
   meant to come before the choice.
