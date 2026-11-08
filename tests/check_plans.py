@@ -912,7 +912,9 @@ def every_button_names_its_problem():
         assert len(labels) == 4, (verdict, labels)
     undo = re.findall(r'aria-label="undo: ([^"]+)">undo</button>', text)
     assert len(undo) == 1, undo
-    names = [entities.unescape(n) for n in re.findall(r'<td>\s*<a href="[^"]+">([^<]+)</a>', text)]
+    # A row's name is the link after its id (the ridge's rows, 2026-11-07:
+    # a square, the id, then the name).
+    names = [entities.unescape(n) for n in re.findall(r'<span class="pid">[^<]*</span>\s*<a href="[^"]+">([^<]+)</a>', text)]
     assert entities.unescape(undo[0]) in names, (undo, names)
 
 
@@ -1303,6 +1305,61 @@ check("undo and put back answer with the five too", undo_and_put_back_answer_wit
 check("a press on a topic list answers with that list", a_press_on_a_topic_list_answers_with_that_list)
 check("a refused press is still the page that says why", a_refused_press_is_still_the_page_that_says_why)
 check("the page has somewhere to say what a press did", the_page_has_somewhere_to_say_what_a_press_did)
+
+
+def the_results_page_is_the_ridge_on_white():
+    """ADR 0031, amended 2026-11-07: the results page asks for the ridge's
+    quiet values on its <html>, and every one of the five has its rank's
+    square and its id before its name -- drawn by the template, and carried
+    in the island's data for the component that draws them after it."""
+    import json
+    import re
+    a_visitor()
+    ids()
+    html = page()
+    assert '<html lang="en" class="ridge quiet">' in html, "the results page is not the ridge's quiet surface"
+    rows = re.findall(r'<span class="sw rank-(\w+)" aria-hidden="true"></span>\s*<span class="pid">([^<]+)</span>', html)
+    assert len(rows) == 5, rows
+    island = json.loads(re.search(r'<script type="application/json" id="topic-island-data">(.*?)</script>',
+                                  html, re.S).group(1))
+    for problem in island["recs"]["problems"]:
+        assert problem["rank"] == web.rarity(problem["rating"])[0], problem
+        assert str(problem["contest"]) == re.match(r"\d+", problem["id"]).group(0), problem
+
+
+def the_field_over_the_five_has_what_it_needs():
+    """static/strip.js draws the landing page's field over the five. The page
+    hands it the curve, the band, the ranks and the field file, read where
+    the landing page reads them; the figure starts hidden, so a page without
+    script never shows an empty frame; and there is no strip where there
+    are no five to stand in it."""
+    import json
+    import re
+    a_visitor()
+    ids()
+    html = page()
+    assert '<figure class="strip" id="strip" aria-hidden="true" hidden>' in html, \
+        "the strip is missing, or shown before it is drawn"
+    data = json.loads(re.search(r'<script type="application/json" id="strip-data">(.*?)</script>',
+                                html, re.S).group(1))
+    baseline = model.current_baseline()
+    assert data["curve"] == {"intercept": baseline["intercept"], "slope": baseline["slope"],
+                             "scale": int(model.SCALE)}, data["curve"]
+    assert data["band"] == model.BAND and data["ranks"] == web.rank_spans(), data
+    assert data["field"].endswith("/static/field.json"), data["field"]
+    assert "static/strip.js" in html, "the strip's script is not sent"
+    # The script follows the island's five: the component says when they change.
+    assert "nextcf:recs" in Path("frontend/src/TopicIsland.jsx").read_text(encoding="utf-8")
+    assert "nextcf:recs" in Path("static/strip.js").read_text(encoding="utf-8")
+    # No five, no strip.
+    with web.app.test_request_context():
+        assert web.strip_data({"state": "not_ready"}) is None
+        assert web.strip_data({"state": "ok", "computed": None}) is None
+
+
+print("\nthe ridge on white")
+check("the results page is the ridge on white", the_results_page_is_the_ridge_on_white)
+check("the field over the five has what it needs", the_field_over_the_five_has_what_it_needs)
 
 print(f"\n{passed} passed, {failed} failed")
 shutil.rmtree(SCRATCH, ignore_errors=True)

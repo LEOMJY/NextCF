@@ -998,9 +998,40 @@ def results(handle):
         # What the topic chart component starts from (ADR 0025): the same
         # data this template has just drawn, so the component's first render
         # is this page, not a second opinion about it.
+        strip=strip_data(recs),
         island=island_data(user["handle"], recs, dismissed, topics, other_topics, totals,
                            syncing=job_id is not None),
     )
+
+
+def strip_data(recs):
+    """What static/strip.js needs to draw the field over the five: the landing
+    page's field, still, with this visitor's own five standing in it (ADR
+    0031, the tool pages). The curve, the band and the ranks come from where
+    web.landing reads them, so the two pages draw one picture. The five, the
+    rating and the aim are not here: the script reads them from the island's
+    data (the same recs), and from the island again whenever it swaps them.
+
+    None -- and no strip -- when there are no five to stand in it, or no
+    curve or field file to draw it from. The page is complete without it.
+    """
+    if recs.get("state") != "ok" or recs.get("computed") is None:
+        return None
+    try:
+        baseline = model.current_baseline()
+    except (OSError, ValueError):
+        return None
+    if not baseline or not field_count():
+        return None
+    return {
+        "ranks": rank_spans(),
+        # int(): SCALE is 100.0, and "100.0" in the page is the kind of
+        # float the checks keep out of it (the 2800.0 bug). It is a whole
+        # number of rating points.
+        "curve": {"intercept": baseline["intercept"], "slope": baseline["slope"], "scale": int(model.SCALE)},
+        "band": model.BAND,
+        "field": url_for("static", filename="field.json"),
+    }
 
 
 def island_data(handle, recs, dismissed, topics, other_topics, totals, syncing=False):
@@ -1787,6 +1818,11 @@ def recommendation_view(conn, user, topic=None):
                 # The chance as computed, for the record of what was shown
                 # (ADR 0024) -- the page prints only the whole percent.
                 "probability": row["probability"],
+                # The rank its rating falls in, which names the colour of the
+                # square beside it, and its contest, which says how far back
+                # it stands in the field over the five (static/strip.js).
+                "rank": rarity(row["rating"])[0] if row["rating"] is not None else None,
+                "contest": row["contest_id"],
                 "url": (
                     f"https://codeforces.com/problemset/problem/"
                     f"{row['contest_id']}/{row['problem_index']}"

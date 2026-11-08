@@ -80,6 +80,12 @@ export default function TopicIsland({
   // it: a listener added once would otherwise only ever see the first list.
   const onScreen = useRef(recs)
   useEffect(() => { onScreen.current = recs }, [recs])
+  // The field over the five (static/strip.js) draws whichever five are on
+  // screen. It is outside this component, so it is told by an event on the
+  // window each time they change: a topic chosen, a press, a solve found.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('nextcf:recs', { detail: recs }))
+  }, [recs])
   // The network and the clock, for the same reason. The defaults above are
   // new functions on every render, and an effect that listed them would be
   // taken down and set up again on every render -- including the render

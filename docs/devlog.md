@@ -6788,3 +6788,43 @@ What they cost: the tool pages, the five-second test with real Codeforces
 users, and the first real users all waited three weeks. The site's
 definition of done is real users and measured use; a design round with no
 deadline pushes that further away every time it ends in "not this one".
+
+## 2026-11-07, evening — The results page in the ridge
+
+Built from the prototype the author approved: white ground, one yellow band
+across the top, and over the five a still of the landing page's field --
+every rated problem a dot, the ridge where rating alone gives this visitor
+their aim, and their own five as flags standing on their own dots. A solved
+problem's flag turns green. Each of the five now shows its rank's square
+and its id, the way the flags name it.
+
+The page is drawn twice, once by the template and once by the React island
+after a topic is chosen, so every change to a row went into both, and the
+bundle was rebuilt. The strip sits outside the island, which would draw
+over it; the island tells it when the five change with an event on the
+window, and the strip redraws.
+
+What broke on the way:
+
+- **A class name already in use.** The page first asked for the white
+  values with `class="ridge tool"`. `.tool` was already the class of the
+  page's content box, with 64 pixels of padding on top -- and now `<html>`
+  had that padding too, so the yellow band sat under a white strip. Renamed
+  `quiet`, the spec's own word for this surface.
+- **Four checks failed, each for a reason worth keeping.** `100.0` in the
+  strip's data tripped the check that keeps floats out of the page (the
+  2800.0 bug); the scale is a whole number of rating points, so it is sent
+  as one. A hover that turned a button's text yellow, and a hovered solved
+  flag with green text, each gave a colour a second meaning, which the
+  colour check exists to stop; both now use ink. A second phone section in
+  the stylesheet hid the /how check's rule behind a new one; the stylesheet
+  has one phone section, so the new rules moved into it. And a check that
+  read problem names out of the rows needed the rows' new markup.
+- **Buttons squeezed under their own words on a phone.** Beside the rating
+  and the chance, a problem's column is about 200 pixels, and its three
+  buttons want 230; the browser shrank them until "too hard" was cut off.
+  They now keep their width and wrap.
+
+Checked: 525 checks and 47 component tests pass; the page was run locally
+on a copy of the data, at desktop and phone width, with a topic chosen, a
+row pointed at, and a solve shown.

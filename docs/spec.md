@@ -854,7 +854,12 @@ the rules for tool pages below stand as written until it is.
 *2026-11-07* (ADR 0031's last amendment): after two rounds of completely
 different directions for the whole site (Curve, Console, Balloons;
 then Keycaps), the author kept the ridge. The tool pages are next, on the
-white ground chosen on 10-17.
+white ground chosen on 10-17. *Later that day:* the results page is built
+in it -- `class="ridge quiet"`, white, yellow only for "act here", and over
+the five a still of the landing page's field with the visitor's own five
+standing in it as flags (`static/strip.js`; ADR 0031, "the results page as
+built"). The progress page, the error page, /how and /privacy are still the
+card table.
 
 Because every value is a token in one file, changing type, colour and
 spacing later is a one-file change. Layout can change too, at any point. It

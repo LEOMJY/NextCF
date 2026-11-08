@@ -25,7 +25,11 @@ function ProblemRow({ problem, topic, urls, onPress }) {
     // The id is where a press on this row comes back to (web.row_anchor),
     // the same as the template's.
     <tr id={`p-${problem.id}`} className={settled ? 'settled' : undefined}>
-      <td>
+      <td><div className="prob">
+        {/* The rank as a square and the id, as in the template and on the
+            problem's flag in the field over the five. */}
+        <span className={problem.rank ? `sw rank-${problem.rank}` : 'sw'} aria-hidden="true" />
+        <span className="pid">{problem.id}</span>
         <a href={problem.url}>{problem.name}</a>
         {problem.thin && (
           <span className="thin-note">
@@ -57,9 +61,9 @@ function ProblemRow({ problem, topic, urls, onPress }) {
             <button type="submit" name="verdict" value="skip" aria-label={`skip: ${problem.name}`}>skip</button>
           </form>
         )}
-      </td>
+      </div></td>
       <td className="num rating">{problem.rating}</td>
-      <td className="num chance">{problem.percent}%</td>
+      <td className="num chance"><span>{problem.percent}%</span></td>
     </tr>
   )
 }

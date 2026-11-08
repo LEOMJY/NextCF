@@ -269,6 +269,39 @@ changes it when he sees it built; the other open points listed in the
 first amendment (the steps as steps, what the results page leads with,
 where the display face goes) are still open.
 
+## Amendment, 2026-11-07, later: the results page as built
+
+The author chose, from a working prototype, to lead the results page with a
+still of the landing page's field, and said to build it. Built and checked,
+not yet pushed:
+
+1. **The quiet surface is a class, `ridge quiet`, on `<html>`.** `quiet`
+   is spec 7.1's own name for the tool pages, and the first name tried,
+   `tool`, was already the class of the page's content box: the box's
+   padding landed on `<html>` too and pushed the page down 64 pixels. The
+   `.ridge.quiet` block holds the white values: white ground, the ridge's
+   ink, a darker green for solved (5.6 to 1 on white), and yellow as the
+   accent -- under a chance that still asks, and on "Check what I solved"
+   and "Next five". The head is the one full band of yellow (`--brand`).
+2. **Over the five, the field** (`static/strip.js`): every rated problem a
+   dot, as on the landing page, from the same `field.json`, the same
+   scatter and the same ridge sum, drawn once on a 2D canvas, with the
+   visitor's five as flags on their own dots and a line at their own
+   rating. A solved problem's flag turns green; that colour change is the
+   only motion. The server hands the script the curve, the band and the
+   ranks (`web.strip_data`); the five come from the island, which sends an
+   event each time it changes them. Without script, or without the field
+   file, the figure stays hidden and the table says everything.
+3. **Each of the five shows its rank's square and its id** before its name,
+   in the template and in the component, so the table and the flags name a
+   problem the same way.
+4. **Topics, past plans and submissions** keep their markup and take the
+   ridge's quiet style: a rule over each heading, the data face for column
+   heads, a verdict as a coloured mark beside a word in ink.
+
+Still the card table: the progress page, the error page, /how and /privacy.
+Next, in that order, then the card table's tokens and its two fonts go.
+
 ## Alternatives
 
 **B, the stair.** A rank colour always sat on bone there, so none was ever

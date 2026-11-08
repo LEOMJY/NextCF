@@ -5,6 +5,16 @@
    render_template instead of building HTML with f-strings. #}
 {% block title %}{{ handle }} &mdash; NextCF{% endblock %}
 
+{# The ridge's quiet surface (ADR 0031, amended 2026-11-07): the landing
+   page's type and ink, on white, with yellow kept for "act here". The
+   `quiet` half of the class picks the white values in style.css. #}
+{% block root %} class="ridge quiet"{% endblock %}
+
+{% block fonts %}
+    <link rel="preload" href="{{ url_for('static', filename='fonts/SofiaSansExtraCondensed-ExtraBold-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/SofiaSans-Regular-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+{% endblock %}
+
 {% block content %}
   {# The quiet surface. Same tokens as the landing page, turned down: the
      heading is the head size rather than the display size, rows are tight,
@@ -92,6 +102,25 @@
       {% endif %}
     {% endmacro %}
 
+    {# THE FIELD OVER THE FIVE: the landing page's field, still, with this
+       visitor's five standing in it as flags (static/strip.js). Outside the
+       island, which would draw over it; the island tells the script when the
+       five change. Hidden until the script has drawn it, so a page without
+       script never shows an empty frame -- the table below says everything
+       the picture does. A picture of the table, so hidden from a screen
+       reader too. #}
+    {% if strip %}
+      <figure class="strip" id="strip" aria-hidden="true" hidden>
+        <div class="strip-stage">
+          <canvas id="strip-field"></canvas>
+          <div class="strip-flags" id="strip-flags"></div>
+        </div>
+        <div class="strip-edge" id="strip-edge"><div class="strip-band" id="strip-band"></div></div>
+        <figcaption class="strip-says" id="strip-says">Every rated problem on Codeforces is a dot, newest contests in front.</figcaption>
+      </figure>
+      <script type="application/json" id="strip-data">{{ strip | tojson }}</script>
+    {% endif %}
+
     <div id="topic-island">
     {# id="next": where "put back" and "swap the five" come back to (web.py,
        LIST_ANCHOR). #}
@@ -139,7 +168,11 @@
                  The id is where a press on this row comes back to
                  (web.row_anchor). #}
               <tr id="p-{{ problem.id }}"{% if problem.solved or problem.outcome %} class="settled"{% endif %}>
-                <td>
+                <td><div class="prob">
+                  {# The problem's rank as a square and its id, as on the
+                     landing page and on the flag over the five. #}
+                  <span class="sw{% if problem.rank %} rank-{{ problem.rank }}{% endif %}" aria-hidden="true"></span>
+                  <span class="pid">{{ problem.id }}</span>
                   <a href="{{ problem.url }}">{{ problem.name }}</a>
                   {# ADR 0025: a small topic's list is filled to five, and a
                      problem that did not pass ADR 0023's guard rail says so
@@ -189,12 +222,12 @@
                     <button type="submit" name="verdict" value="skip" aria-label="skip: {{ problem.name }}">skip</button>
                   </form>
                   {% endif %}
-                </td>
+                </div></td>
                 <td class="num rating">{{ problem.rating }}</td>
                 {# The accent's defined meaning is "this is good, or this is
                    where you act" -- ADR 0006. These five rows are the only
                    place on the page where somebody is being asked to act. #}
-                <td class="num chance">{{ problem.percent }}%</td>
+                <td class="num chance"><span>{{ problem.percent }}%</span></td>
               </tr>
             {% endfor %}
           </tbody>
@@ -853,4 +886,5 @@
      everything above is on screen first; if this fails to load, nothing on
      the page stops working -- every topic is a link. #}
   <script type="module" src="{{ url_for('static', filename='app/app.js') }}"></script>
+  {% if strip %}<script src="{{ url_for('static', filename='strip.js') }}" defer></script>{% endif %}
 {% endblock %}

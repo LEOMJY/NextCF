@@ -373,6 +373,9 @@
      The second text colour is the ground's own hue darkened, not a grey --
      a neutral grey on a strong colour reads as dirt. 6.6 to 1 on --bg. */
   --bg: #f5cd1e;
+  /* The yellow by name, for where it is not the ground: the tool pages'
+     head band (.ridge.quiet, below). */
+  --brand: #f5cd1e;
   --ink: #15130c;
   --soft: #4a4108;
   --muted: #4a4108;
@@ -414,6 +417,27 @@
      column's width, it has a margin: 16 pixels on a phone, 44 on a wide
      screen, and in between a share of the width. */
   --gutter: clamp(16px, 2.8vw, 44px);
+}
+
+/* THE RIDGE'S TOOL SURFACE: white (ADR 0031, amended 2026-11-07). The
+   results page puts class="ridge quiet" on its <html> and gets the ridge's
+   type and square corners from the block above, and these values on top.
+   The author refused yellow as a tool page's ground (2026-10-12) and chose
+   white (10-17). Yellow stays as the accent -- "act here": the highlighter
+   under a chance that still asks, the button that checks for solves -- and
+   as the head band (--brand). Every text colour here is at least 4.5 to 1
+   on white: --muted 7.9, --good 5.6. --warn is a mark only. */
+.ridge.quiet {
+  --bg: #ffffff;
+  --soft: #55523f;
+  --muted: #55523f;
+  --line: rgba(21, 19, 12, 0.16);
+  --panel: #f4f2ea;
+  --panel-hover: #ece9dd;
+  --accent: #f5cd1e;
+  --accent-ink: #15130c;
+  --good: #0a7a32;
+  --warn: #b3261e;
 }
 
 /* ------------------------------------------------------------------- base */
@@ -2167,6 +2191,410 @@ tbody tr:hover td {
   margin-top: var(--s1);
 }
 
+/* ---------------------------------- surface two, in the ridge: on white
+ *
+ * The results page drawn in the ridge (ADR 0031, amended 2026-11-07): the
+ * landing page's type, ink and square corners at low volume. One full band
+ * of yellow, the head; after it, yellow only where the visitor is asked to
+ * act. Over the five, the landing page's field, still, with the five
+ * standing in it (static/strip.js). Nothing moves except to answer
+ * something that changed.
+ *
+ * Written under .ridge.quiet: the other tool pages share these class names
+ * and are the card table until they follow. When they have, these rules
+ * replace the ones above and the scoping goes.
+ */
+
+/* The page opens in the landing page's colour, then gets out of the way. */
+.ridge.quiet .site-head {
+  background: var(--brand);
+}
+
+/* A column, not a poster: a table's rows read badly two thousand pixels
+   wide. Left-aligned, so its edge is the head's. */
+.ridge.quiet main,
+.ridge.quiet .site-foot {
+  max-width: calc(1180px + 2 * var(--gutter));
+  margin-left: 0;
+}
+
+.ridge.quiet .tool {
+  padding: var(--s3) 0 var(--s4);
+}
+
+.ridge.quiet .tool h1 {
+  margin: 0;
+  font: 800 clamp(40px, 6vw, 64px) / 0.95 var(--display);
+  letter-spacing: -0.015em;
+}
+
+.ridge.quiet .tool > .meta,
+.ridge.quiet .syncing,
+.ridge.quiet .caveat {
+  margin: var(--s1) 0 0;
+  font: 400 var(--text-small) / 1.45 var(--mono);
+}
+
+/* ---- the field over the five */
+
+.strip {
+  /* Room above for the tallest flag, which stands over the canvas's top. */
+  margin: var(--s4) 0 0;
+}
+
+.strip-stage {
+  position: relative;
+}
+
+.strip canvas {
+  display: block;
+  width: 100%;
+  height: 170px;
+}
+
+/* The flags are the landing page's (.flag, above), laid over the canvas. */
+.strip-flags {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* A solved problem's flag turns green: the one thing on the page that
+   changes colour by itself, and only because something changed. */
+.strip .flag {
+  transition: background-color 320ms linear, color 320ms linear;
+}
+
+.flag.solved {
+  background: var(--good);
+}
+
+.flag.solved.is-hot {
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--good);
+}
+
+/* The field's front edge: the rank colours, a few ratings, and the visitor. */
+.strip-edge {
+  position: relative;
+  height: 46px;
+}
+
+.strip-band {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+}
+
+.strip-band span {
+  position: absolute;
+  top: 0;
+  height: 4px;
+  background: var(--rank);
+}
+
+.strip-tick {
+  position: absolute;
+  top: 9px;
+  transform: translateX(-50%);
+  color: var(--muted);
+  font: 400 var(--text-small) / 1 var(--mono);
+  white-space: nowrap;
+}
+
+.strip-you {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  white-space: nowrap;
+}
+
+.strip-you::before {
+  content: "";
+  width: 1.5px;
+  height: 24px;
+  background: var(--ink);
+}
+
+.strip-you b {
+  padding: 2px 5px;
+  background: var(--ink);
+  color: var(--bg);
+  font: 600 var(--text-small) / 1 var(--mono);
+}
+
+.strip-says {
+  margin: 2px 0 0;
+  max-width: 70ch;
+  color: var(--muted);
+  font: 400 var(--text-small) / 1.45 var(--mono);
+}
+
+/* ---- the five */
+
+.ridge.quiet .recs > h2 {
+  margin: var(--s3) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.ridge.quiet .recs-status,
+.ridge.quiet .meta.topic-scope {
+  margin: var(--s1) 0;
+  font-family: var(--mono);
+}
+
+.ridge.quiet .recs-status {
+  font-weight: 600;
+}
+
+.ridge.quiet thead th {
+  padding: 8px var(--s2) 8px 0;
+  border-bottom: 1px solid var(--ink);
+  color: var(--muted);
+  font: 400 var(--text-small) / 1 var(--mono);
+}
+
+.ridge.quiet td {
+  padding: 10px var(--s2) 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* No row lights up under the pointer: a name is a link and says so itself. */
+.ridge.quiet tbody tr:hover td,
+.ridge.quiet tbody tr:hover th {
+  background: none;
+}
+
+.ridge.quiet .rec-table {
+  border-top: 2px solid var(--ink);
+}
+
+.ridge.quiet .rec-table td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  vertical-align: top;
+}
+
+/* A problem: its rank as a square, its id, its name; under them whatever
+   is asked of it or said about it. */
+.prob {
+  display: grid;
+  grid-template-columns: 10px 6.2ch minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: baseline;
+}
+
+.prob .sw {
+  width: 10px;
+  height: 10px;
+  align-self: center;
+  background: var(--rank, var(--muted));
+  outline: 1px solid var(--ink);
+}
+
+.prob .pid {
+  font: 600 var(--text-small) / 1 var(--mono);
+}
+
+.prob > a {
+  justify-self: start;
+  font-size: var(--text-lead);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.prob > a:hover {
+  background: var(--ink);
+  color: var(--bg);
+  border-bottom-color: var(--ink);
+}
+
+.prob > .thin-note,
+.prob > .verdict-form,
+.prob > .plan-mark {
+  grid-column: 3;
+}
+
+.ridge.quiet .rec-table .rating {
+  color: var(--ink);
+  font-size: var(--text-body);
+  line-height: 44px;
+}
+
+/* The chance: the number the page exists for, in the display face, and the
+   accent drawn under it like a highlighter -- only while it still asks. */
+.ridge.quiet .chance {
+  color: var(--ink);
+  font: 800 var(--text-title) / 1 var(--display);
+  letter-spacing: 0;
+}
+
+.ridge.quiet .chance span {
+  padding-inline: 3px;
+  background: linear-gradient(transparent 52%, var(--accent) 52%, var(--accent) 92%, transparent 92%);
+}
+
+.ridge.quiet .rec-table tr.settled .chance span {
+  background: none;
+}
+
+.ridge.quiet .rec-table tr.settled .chance,
+.ridge.quiet .rec-table tr.settled .rating,
+.ridge.quiet .rec-table tr.settled .prob > a {
+  opacity: 0.45;
+  color: var(--ink);
+}
+
+/* The buttons on a row, "undo", "put back" and "swap the five": square,
+   outlined, in the data face -- available, not asked for. */
+.ridge.quiet .verdict-form {
+  flex-wrap: wrap;
+  gap: var(--s1);
+  margin-top: 10px;
+}
+
+.ridge.quiet .verdict-form button,
+.ridge.quiet .plan-mark button,
+.ridge.quiet .restore button,
+.ridge.quiet .plan-next button:not(.primary) {
+  min-height: 34px;
+  margin: 0;
+  padding: 0 12px;
+  background: none;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  font: 600 var(--text-small) / 1 var(--mono);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 120ms linear, color 120ms linear;
+}
+
+.ridge.quiet .verdict-form button:hover,
+.ridge.quiet .plan-mark button:hover,
+.ridge.quiet .restore button:hover,
+.ridge.quiet .plan-next button:not(.primary):hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.ridge.quiet .plan-mark {
+  margin-top: 10px;
+  font: 400 var(--text-small) / 34px var(--mono);
+}
+
+.ridge.quiet .plan-mark button {
+  margin-left: var(--s1);
+}
+
+/* Green from .plan-mark.solved above; the ridge makes it bold. */
+.ridge.quiet .plan-mark.solved {
+  font-weight: 600;
+}
+
+/* The two buttons that are the page's actions: "Check what I solved", and
+   "Next five" once every problem is done. Yellow with an ink edge, as the
+   landing page's button is ink on yellow. */
+.ridge.quiet .resync button,
+.ridge.quiet .plan-next button.primary {
+  height: 46px;
+  padding: 0 18px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  font: 800 22px / 1 var(--display);
+  filter: none;
+  cursor: pointer;
+  transition: background-color 120ms linear, color 120ms linear;
+}
+
+.ridge.quiet .resync button:hover,
+.ridge.quiet .plan-next button.primary:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.ridge.quiet .resync .meta,
+.ridge.quiet .plan-next .meta {
+  font-family: var(--mono);
+}
+
+/* A finger needs 44 pixels; the outlined buttons above are 34. */
+@media (pointer: coarse) {
+  .ridge.quiet .verdict-form button,
+  .ridge.quiet .plan-mark button,
+  .ridge.quiet .restore button,
+  .ridge.quiet .plan-next button:not(.primary) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ---- the rest: topics, past plans, submissions. A rule across the top of
+   each, the head size in the reading face, and tables as quiet as the
+   five's. */
+
+.ridge.quiet .tool h2 {
+  margin: var(--s4) 0 0;
+  padding-top: 10px;
+  border-top: 2px solid var(--ink);
+  font: 600 var(--text-head) / 1.2 var(--body);
+  letter-spacing: -0.01em;
+}
+
+.ridge.quiet .tool h2 + .meta {
+  margin: var(--s1) 0 var(--s2);
+}
+
+.ridge.quiet .table-wrap {
+  border-top: 0;
+}
+
+.ridge.quiet .topic-name {
+  padding-left: var(--s1);
+  font-weight: 600;
+}
+
+.ridge.quiet .topics summary,
+.ridge.quiet .plans summary {
+  color: var(--ink);
+  font: 600 var(--text-small) / 1.4 var(--mono);
+  text-decoration: none;
+}
+
+/* A verdict is a word in ink with a mark before it: green for accepted,
+   red for the rest. Colour as a mark with an ink edge, never as text. */
+.ridge.quiet .verdict,
+.ridge.quiet .verdict-ok {
+  color: var(--ink);
+}
+
+.ridge.quiet .verdict::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 7px;
+  background: var(--warn);
+  outline: 1px solid var(--ink);
+}
+
+.ridge.quiet .verdict-ok::before {
+  background: var(--good);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strip .flag,
+  .ridge.quiet button {
+    transition: none;
+  }
+}
+
 /* ------------------------------------------------------ reading pages: /how
  *
  * The quiet surface, for a page that is read rather than scanned: running
@@ -2336,6 +2764,47 @@ tbody tr:hover td {
   .topics td,
   .topic-name {
     padding-right: var(--s1);
+  }
+
+  /* The results page in the ridge: the field a little taller, so its five
+     flags have room over a narrow field; a problem's name on a line of its
+     own under its square and id; the row's buttons on one line. */
+  .strip canvas {
+    height: 190px;
+  }
+
+  .prob {
+    grid-template-columns: 10px minmax(0, 1fr);
+    column-gap: 8px;
+  }
+
+  .prob > a,
+  .prob > .thin-note,
+  .prob > .verdict-form,
+  .prob > .plan-mark {
+    grid-column: 1 / -1;
+  }
+
+  /* The problem's column is about 200 pixels on a phone, beside the rating
+     and the chance, and three buttons want about 230: they keep their
+     width and wrap, rather than being squeezed under their own words. */
+  .ridge.quiet td {
+    padding-right: var(--s1);
+  }
+
+  .ridge.quiet .verdict-form {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .ridge.quiet .verdict-form button {
+    flex: none;
+    padding: 0 9px;
+    white-space: nowrap;
+  }
+
+  .ridge.quiet .rec-table .rating {
+    line-height: 34px;
   }
 }
 
