@@ -6828,3 +6828,56 @@ What broke on the way:
 Checked: 525 checks and 47 component tests pass; the page was run locally
 on a copy of the data, at desktop and phone width, with a topic chosen, a
 row pointed at, and a solve shown.
+
+## 2026-11-08 — The November refresh, overnight
+
+The second monthly refresh, run overnight on the author's word, after the
+results page in the ridge was pushed.
+
+### What was done
+
+1. **`dataset.db` copied first** (`dataset-backup-2026-11-08.db`, its
+   integrity check passed).
+2. **`collect.py refresh`**, plain this time: every user was last fetched
+   on 10-01 or 10-02, past the 25-day guard. 4,000 users in about four and
+   a half hours, with no stop. The run kept the computer awake by asking
+   Windows not to idle-sleep for as long as it ran, which changes no
+   setting; in September a laptop asleep in the middle of a long fit had
+   frozen it for three and a half hours.
+3. **`model.py fit-baseline` and `model.py fit-topic`.** The refresh also
+   rewrote `static/field.json` from the new problemset, so the landing
+   page's dots and the results page's field gain this month's problems.
+
+### What came back
+
+| | before | after |
+|---|---|---|
+| submissions | 3,948,438 | 4,103,299 |
+| problems seen | 30,366 | 30,957 |
+| rating changes | 163,187 | 169,418 |
+| first attempts the model learns from | 1,623,766 | 1,679,573 |
+| problems with a difficulty estimate | 11,050 | 11,097 |
+| the baseline's curve | +0.2606 + 0.1217 · gap | +0.2637 + 0.1202 · gap |
+
+### Is the new model the old one, a little wiser?
+
+The same test as October's, by comparing the two files, with the same rule
+for stopping: a weight that changes sign, or a thousand problems moving.
+Same configuration, same 39 topics, no problem dropped, 47 new. A problem's
+difficulty moved by 0.026 on average, against 0.016 last time over a
+shorter gap; the two files' difficulties correlate at 0.997. Eight problems
+moved by more than 0.35, the most by 0.78: five of them from contests 2262
+and 2268, the newest when the last model was fitted, with few attempts then
+and more now -- October's pattern exactly. One topic's weight changed sign,
+"dfs and similar", from -0.020 to +0.003: zero both times, in effect. None
+of the user or attempt weights changed sign.
+
+The new model's training loss (0.5611) is not comparable with the old one's
+(0.5605): each is measured on its own data, and the new data has a month
+more in it. Whether the old model's predictions for October came true is
+the forward test's question (ADR 0013), and it is the author's to run: a
+window is scored once, and the protocol writes the window down first.
+
+### How it was checked
+
+All 529 checks, the dataset tier included, on the refitted files.
