@@ -333,3 +333,53 @@ window and `final`, not in place of either. One look.
 One difference to read the result by: this window is five weeks, where the
 first was two and a half, so the files predict further ahead, and more of
 the window's problems were released after the fit.
+
+### The result (run 2026-11-08, after commit `ad6068a`)
+
+`evaluate.py forward --shipped a1d5103 --since 2026-10-03`: 49,846 first
+attempts by 2,582 people, 2026-10-03 to 2026-11-08.
+
+| | baseline file | **shipped model** |
+|---|---|---|
+| weighted total | 0.6565 | **0.6063** (7.7% lower) |
+| 1000–1199 | 0.6612 | 0.6046 |
+| 1200–1399 | 0.6548 | 0.5985 |
+| 1400–1599 | 0.6506 | 0.6120 |
+| 1600–1799 | 0.6613 | 0.6253 |
+| 1800–1999 | 0.6418 | 0.6040 |
+| calibration gap | 3.3 points | 3.2 points |
+
+The gap between them is 0.0503. With other people sampled it would fall
+between 0.0429 and 0.0590 (95%), so it is not the luck of the sample.
+
+Split by whether the file knew the problem:
+
+| | attempts | baseline file | shipped model |
+|---|---|---|---|
+| problems the model had a difficulty for | 31,917 | 0.6535 (7.2 pt) | **0.5735** (3.0 pt) |
+| problems released since | 17,929 | **0.6620** (8.1 pt) | 0.6730 (10.6 pt) |
+
+What it says:
+
+- **Lower in every stratum again, by about the same margin as the first
+  window** (0.050 against 0.055), over a window twice as long.
+- **Around 50%, where the site aims, it was close: attempts it called 45%
+  were accepted 47% of the time, and 55% was 54%.** The first window's four
+  points of pessimism there did not recur. At the top it was optimistic:
+  85% was 78%.
+- **On problems released after the fit it was worse than the rating alone**
+  -- 0.6730 against 0.6620, and ten points off in calibration. In the first
+  window its lead there had been half its usual size; over five weeks it is
+  gone and reversed. A problem the file does not know gets the average
+  difficulty, and the model's confidence about the person is then applied
+  to a guess about the problem. Over a third of this window's attempts were
+  on such problems.
+- A recommendation is almost always an older problem, which the top row of
+  the split describes, so the five the site showed were mostly in the part
+  where it was 0.080 better than the baseline. A month between refits is
+  where the cost shows: the problems a person is likely to be offered new
+  are the ones the model knows least.
+
+Nothing was changed on account of it. Whether new problems should fall back
+to the rating alone until the next refit is a model change, to be chosen on
+validation and scored on a later window, under the terms above.

@@ -6881,3 +6881,28 @@ window is scored once, and the protocol writes the window down first.
 ### How it was checked
 
 All 529 checks, the dataset tier included, on the refitted files.
+
+## 2026-11-08, later — The second forward window
+
+The author asked for it, so it was run the way the first was: the window
+written into ADR 0013 and committed (`ad6068a`) before the command, then
+scored once. The files that were live from the October refit to the
+November one, on the 49,846 first attempts made in the five weeks after
+their data ended.
+
+Overall the same story as October: 0.6565 for the rating alone, 0.6063 for
+the model, lower in every stratum, and not the luck of the sample. Around
+50%, where the site aims, it was well calibrated this time.
+
+The finding is the split. On problems the model knew it was 0.080 better
+than the rating alone. On problems released after it was fitted -- 36% of
+the window -- it was worse: 0.6730 against 0.6620, and ten points off in
+calibration. In the first window, two and a half weeks long, its lead on new
+problems had shrunk to half; over five weeks it reversed. A problem the
+model does not know is given the average difficulty, and then the model's
+confidence about the person is applied to that guess.
+
+Nothing was changed on account of it, as the protocol says. The obvious
+idea -- fall back to the rating alone for a problem the model has never
+seen, until the next refit -- is a model change: chosen on validation,
+then scored on a window that has not been looked at.

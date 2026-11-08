@@ -1105,6 +1105,17 @@ v1.0 is done when all three hold:
    attempts were on problems released after the fit, where its lead over the
    baseline is half as large: the cost of a month without a refit. The two
    tables are not comparable in absolute terms; ADR 0013 says why.
+
+   **The second forward window, 2026-11-08.** The files live from 10-02 to
+   11-08, scored the same way on the 49,846 first attempts made in the five
+   weeks after their data ended (ADR 0013, amendment of 2026-11-08): baseline
+   file **0.6565**, shipped model **0.6063** (7.7% lower; the gap 0.0503,
+   between 0.0429 and 0.0590 with other people sampled), calibration gap 3.3
+   and 3.2 points. Close around 50% this time. But on the problems released
+   after the fit -- over a third of the window -- the model was worse than
+   the rating alone (0.6730 against 0.6620): over five weeks the cost of a
+   month without a refit is no longer a smaller lead but a loss. Nothing was
+   changed on account of it.
    The baseline is a logistic curve in the rating gap, **fitted** to the data
    rather than Elo's own formula, which measured several times too steep and
    would be beaten by anything (ADR 0012). Two rules follow for the harness.
