@@ -305,3 +305,31 @@ What the model said against what happened:
   only measurable from the site's own record (ADR 0024).
 
 Nothing was changed on account of it.
+
+## Amendment — 2026-11-08: the second window, written down before it is run
+
+The November refresh brought in the month the October model never saw. The
+procedure is the amendment of 2026-10-03 unchanged; only the files and the
+window are new, and they are written down here and committed before the
+window is scored.
+
+**What is scored.** `topic_model.json` and `baseline.json` as they stand at
+commit `a1d5103`, the last commit before the November refit. They were
+committed in `53f78cd`, fitted on 1,623,766 first attempts of which the
+newest was made at 2026-10-02T02:50Z, and they answered every visitor from
+the October refit until the refit of 2026-11-08 replaced them.
+
+**The command.** `evaluate.py forward --shipped a1d5103 --since 2026-10-03`.
+
+**The window.** First attempts from 2026-10-03T00:00Z to the end of the
+refreshed dataset (each user's fetch on 2026-11-08). A whole day after the
+last fetch for the data the model saw (2026-10-02T02:57Z).
+
+**Everything else is as before:** how each attempt is predicted, the four
+things reported, and the terms. It decides nothing -- the November refit
+has shipped and stays. It is reported whatever it is, beside the first
+window and `final`, not in place of either. One look.
+
+One difference to read the result by: this window is five weeks, where the
+first was two and a half, so the files predict further ahead, and more of
+the window's problems were released after the fit.
