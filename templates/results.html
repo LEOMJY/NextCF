@@ -5,15 +5,9 @@
    render_template instead of building HTML with f-strings. #}
 {% block title %}{{ handle }} &mdash; NextCF{% endblock %}
 
-{# The ridge's quiet surface (ADR 0031, amended 2026-11-07): the landing
-   page's type and ink, on white, with yellow kept for "act here". The
-   `quiet` half of the class picks the white values in style.css. #}
-{% block root %} class="ridge quiet"{% endblock %}
-
-{% block fonts %}
-    <link rel="preload" href="{{ url_for('static', filename='fonts/SofiaSansExtraCondensed-ExtraBold-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="{{ url_for('static', filename='fonts/SofiaSans-Regular-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-{% endblock %}
+{# Drawn on the ridge's quiet surface, base.html's default (ADR 0031,
+   amended 2026-11-07): the landing page's type and ink, on white, with
+   yellow kept for "act here". #}
 
 {% block content %}
   {# The quiet surface. Same tokens as the landing page, turned down: the

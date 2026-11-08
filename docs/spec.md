@@ -858,8 +858,10 @@ white ground chosen on 10-17. *Later that day:* the results page is built
 in it -- `class="ridge quiet"`, white, yellow only for "act here", and over
 the five a still of the landing page's field with the visitor's own five
 standing in it as flags (`static/strip.js`; ADR 0031, "the results page as
-built"). The progress page, the error page, /how and /privacy are still the
-card table.
+built"). *2026-11-08:* the progress page, the error page, /how and /privacy
+followed; `ridge quiet` is the default class, so every page but the landing
+page is the quiet surface. The card table's tokens and fonts are unused and
+go next.
 
 Because every value is a token in one file, changing type, colour and
 spacing later is a one-file change. Layout can change too, at any point. It

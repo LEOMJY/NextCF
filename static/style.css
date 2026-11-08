@@ -2717,6 +2717,67 @@ tbody tr:hover td {
   margin-top: var(--s2);
 }
 
+/* ---- the other quiet pages, in the ridge: progress, error, /how, /privacy
+ *
+ * The same quiet surface as the results page (base.html's default since
+ * 2026-11-08). The rules above draw these pages from their tokens, so most
+ * of the change is the values; these few are what the values cannot say.
+ */
+
+/* The progress page's cursor: the one thing on the tool's pages that moves
+   by itself, on the one page whose honest message is "still working". A
+   square of ink, as the ridge has no rounded corners and no gold. */
+.ridge.quiet .progress-cursor {
+  margin-top: var(--s4);
+  font: 800 var(--text-display) / 1 var(--display);
+  letter-spacing: 0;
+}
+
+.ridge.quiet .progress-cursor::after {
+  background: var(--ink);
+  border-radius: 0;
+}
+
+/* The progress page's explanation is a sentence to read while waiting, in
+   the reading face and with room around it -- not the data face of the
+   results page's one-line caveat. */
+.ridge.quiet .progress-cursor ~ .caveat {
+  margin: var(--s3) 0;
+  font: 400 var(--text-body) / 1.5 var(--body);
+}
+
+/* The error: a rule of the warning colour down its left, the reason in the
+   data face and in ink -- colour as a mark, never as the words. */
+.ridge.quiet .notice code {
+  color: var(--ink);
+}
+
+/* The handle field on the error page is the landing page's, whose sizes are
+   counted in --e, the landing page's unit, set there from the poster's
+   width. The quiet surface has no poster: the unit is fixed, at a size that
+   sits with the page's other controls, and the button's edge is ink, as
+   every main button on white is. */
+.ridge.quiet .handle-form {
+  --e: 14px;
+  max-width: 560px;
+}
+
+.ridge.quiet .handle-form button {
+  border-color: var(--ink);
+}
+
+.ridge.quiet .handle-form button:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+/* A page of prose has many sections; a hairline over each heading is
+   enough, where the results page's three sections each take the full rule. */
+.ridge.quiet .prose h2 {
+  border-top-width: 1px;
+  margin-bottom: var(--s1);
+}
+
 /* ------------------------------------------------------------------ narrow */
 
 @media (max-width: 640px) {

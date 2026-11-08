@@ -35,11 +35,11 @@
     spellcheck="false"
     placeholder="tourist"
     value="{{ handle or '' }}">
-  {# The button says what the page it is on calls this action. The landing
-     page, drawn in the ridge (ADR 0031), sets submit_label to "Find my five"
-     before including this file. The error page sets nothing and keeps the
-     card table's "Open pack" (ADR 0029) until the tool pages are redrawn. #}
-  <button type="submit">{{ submit_label or "Open pack" }}</button>
+  {# The button says what the site calls this action. "Find my five" on
+     every page since the tool pages were redrawn in the ridge (2026-11-08);
+     before, the error page kept the card table's "Open pack" (ADR 0029). A
+     page may still name it otherwise with submit_label. #}
+  <button type="submit">{{ submit_label or "Find my five" }}</button>
 </form>
 
 {# Filled in by the script below when this browser has looked somebody up

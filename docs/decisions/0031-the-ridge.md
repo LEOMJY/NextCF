@@ -302,6 +302,31 @@ not yet pushed:
 Still the card table: the progress page, the error page, /how and /privacy.
 Next, in that order, then the card table's tokens and its two fonts go.
 
+## Amendment, 2026-11-08: every page is the ridge
+
+The progress page, the error page, `/how` and `/privacy` followed the
+results page. `ridge quiet` is now `base.html`'s default class, so a page
+is the quiet surface unless it says otherwise; the landing page says
+`ridge`, the yellow poster. The fonts every page asks for early are the
+ridge's two. Their rules already drew them from the tokens, so the change
+was mostly the values; what the values could not say:
+
+- the progress page's cursor is a square of ink, and its explanation a
+  sentence in the reading face;
+- the error's reason is set in ink, with the warning colour as a rule down
+  its left -- colour as a mark, as on the results page;
+- the handle field on the error page is the landing page's, whose sizes
+  are counted in the poster's unit; on the quiet surface the unit is fixed
+  at 14 pixels, and its button now says "Find my five", where it kept the
+  card table's "Open pack";
+- a page of prose takes a hairline over each heading, not the results
+  page's full rule.
+
+No page now draws in the card table's faces or colours. Its tokens and its
+two fonts are still in the stylesheet and `static/fonts/`, unused; removing
+them, and folding the `.ridge` blocks into the stylesheet's base values, is
+the next step.
+
 ## Alternatives
 
 **B, the stair.** A rank colour always sat on bone there, so none was ever

@@ -565,8 +565,9 @@ def every_font_travels_with_its_licence():
 
 def each_page_asks_early_for_the_faces_it_draws_in():
     """A preload is a download whether or not the page uses the file, so a
-    page names its own two faces: the ridge's on the landing page, the card
-    table's everywhere else. crossorigin, or the file is fetched twice."""
+    page names only the faces it draws in. Since 2026-11-08 every page is
+    the ridge, so every page names the same two. crossorigin, or the file
+    is fetched twice."""
     def preloads(html):
         found = {}
         for attributes in re.findall(r'<link rel="preload"([^>]*)>', html):
@@ -579,22 +580,23 @@ def each_page_asks_early_for_the_faces_it_draws_in():
     assert preloads(landing()) == ["SofiaSans-Regular-Latin.woff2", "SofiaSansExtraCondensed-ExtraBold-Latin.woff2"], \
         preloads(landing())
     how = client.get("/how").get_data(as_text=True)
-    assert preloads(how) == ["Onest-Latin.woff2", "Unbounded-Latin.woff2"], preloads(how)
+    assert preloads(how) == ["SofiaSans-Regular-Latin.woff2", "SofiaSansExtraCondensed-ExtraBold-Latin.woff2"],         preloads(how)
 
 
-def only_the_landing_page_wears_the_ridge():
-    """The ridge is asked for with one class on <html>. The tool pages are
-    still the card table until their own ground is decided (ADR 0031's
-    amendment), and nothing in the ridge's block may reach them by
-    accident."""
-    assert '<html lang="en" class="ridge">' in landing(), "the landing page does not ask for the ridge"
+def the_landing_page_is_the_poster_and_the_rest_are_quiet():
+    """Which set of values a page is drawn with is one class on <html> (ADR
+    0031). The landing page is the yellow poster, "ridge" alone; every other
+    page is the ridge's quiet surface on white, "ridge quiet" (2026-11-08),
+    and nothing of the card table is left on them -- not even its words."""
+    assert '<html lang="en" class="ridge">' in landing(), "the landing page is not the ridge's poster"
     for path in ("/how", "/privacy"):
         page = client.get(path).get_data(as_text=True)
-        assert '<html lang="en">' in page, f"{path} asks for the ridge"
-        assert "Open pack" not in page or path != "/", path
-    # The error page keeps the card table's words on its button.
-    wrong = client.get("/results/this-is-not-a-handle-at-all-no")
-    assert "Find my five" not in wrong.get_data(as_text=True), "the error page's button changed with the landing page's"
+        assert '<html lang="en" class="ridge quiet">' in page, f"{path} is not the quiet surface"
+    # The handle field says what the site calls the action, on every page:
+    # here on the error page, which a name too long to be a handle reaches
+    # without a sync.
+    wrong = client.get("/results/this-is-not-a-handle-at-all-no").get_data(as_text=True)
+    assert "Find my five" in wrong and "Open pack" not in wrong, "the error page's button says the card table's words"
 
 
 print("the sample")
@@ -631,7 +633,7 @@ check("every rank has its colours", every_rank_has_its_colours)
 check("a rank colour is a mark, never text", a_rank_colour_is_a_mark_never_text)
 check("every font travels with its licence", every_font_travels_with_its_licence)
 check("each page asks early for the faces it draws in", each_page_asks_early_for_the_faces_it_draws_in)
-check("only the landing page wears the ridge", only_the_landing_page_wears_the_ridge)
+check("the landing page is the poster, and the rest are quiet", the_landing_page_is_the_poster_and_the_rest_are_quiet)
 
 shutil.rmtree(SCRATCH, ignore_errors=True)
 print(f"\n{passed} passed, {failed} failed")

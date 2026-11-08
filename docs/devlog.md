@@ -6906,3 +6906,35 @@ Nothing was changed on account of it, as the protocol says. The obvious
 idea -- fall back to the rating alone for a problem the model has never
 seen, until the next refit -- is a model change: chosen on validation,
 then scored on a window that has not been looked at.
+
+## 2026-11-08, later — Every page in the ridge
+
+The progress page, the error page, `/how` and `/privacy` moved to the
+ridge's quiet surface, the white the results page is drawn on. The class
+that picks it became `base.html`'s default, so a page is quiet unless it
+asks to be the poster, which only the landing page does.
+
+Most of it was free: those pages' rules draw everything from the tokens,
+and the tokens changed. What was not:
+
+- **The handle field on the error page collapsed** into a thin strip with a
+  tiny button. It is the landing page's field, and the landing page counts
+  its sizes in its own unit, set from the poster's width; on a page without
+  the poster the unit was undefined and every size with it. The quiet
+  surface fixes the unit at 14 pixels, and the field is the landing page's
+  at a smaller scale.
+- **Its button still said "Open pack"**, the card table's words. The note
+  beside it had said so: until the tool pages are redrawn. Now "Find my
+  five" on every page.
+- **A server restart marks unfinished syncs as failed.** Found while making
+  a waiting sync to look at the progress page, which kept showing the error
+  page instead: the waiting job was made before the server started. That is
+  the behaviour ADR 0018 asks for, and it was a reminder of why.
+- **Two checks still described the old state** -- that only the landing
+  page was the ridge, and that `/how` preloads the card table's faces. They
+  now check the new one. One of them had been checking less than it seemed:
+  the error page's button text was asserted against a page that never
+  contained the button.
+
+The card table's tokens and fonts are now drawn by no page. Removing them
+is next.
