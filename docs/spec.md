@@ -860,8 +860,12 @@ the five a still of the landing page's field with the visitor's own five
 standing in it as flags (`static/strip.js`; ADR 0031, "the results page as
 built"). *2026-11-08:* the progress page, the error page, /how and /privacy
 followed; `ridge quiet` is the default class, so every page but the landing
-page is the quiet surface. The card table's tokens and fonts are unused and
-go next.
+page is the quiet surface. *Later the same day:* the card table's tokens,
+fonts and rules are removed, and the ridge's two sets of values are one:
+`:root` is the quiet surface, and the landing page asks for the poster's
+values with `class="poster"` (ADR 0031, "one set of values"). Hovered links
+and the focus ring became ink, the one visible change meant: yellow on white
+cannot be read.
 
 Because every value is a token in one file, changing type, colour and
 spacing later is a one-file change. Layout can change too, at any point. It

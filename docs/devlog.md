@@ -6938,3 +6938,55 @@ and the tokens changed. What was not:
 
 The card table's tokens and fonts are now drawn by no page. Removing them
 is next.
+
+## 2026-11-08, later — One set of values
+
+The card table is out of the stylesheet. Since the morning no page had
+drawn in it, but its tokens were still `:root`, every page then asked for
+the ridge's values with a class, and most of the tool pages' rules were
+written twice: the card table's, and the ridge's under `.ridge.quiet`
+overriding them. Now `:root` holds the white surface's values, the landing
+page alone asks for the poster's with `class="poster"`, and each rule is
+written once. Its two fonts and their licences went too: 109 KB nobody
+downloaded.
+
+**How it was checked.** A refactor should change nothing on screen, and
+"looks the same" is not a test. A throwaway script loaded each page --
+the landing page, the results page in three states, /how, /privacy,
+progress, two kinds of error -- at 1366, 800 and 375 pixels wide and once
+more as a touch screen, and recorded every computed CSS property of every
+element; then again with every `:hover` and `:focus` rule forced on. The
+same after the change, and the two compared property by property. The
+first comparisons were useless -- thousands of differences -- for two
+reasons that had nothing to do with the stylesheet: the browser's zoom
+changed between runs, which snaps every border to a different fraction of
+a pixel, and the results page's test data had gone stale, so it showed a
+sync in progress instead of the state recorded. The baseline was recorded
+again at the same zoom, differences under half a pixel were allowed for
+borders, and the data reset just before each run.
+
+**What specificity hid.** Removing `.ridge.quiet` from a selector lowers it
+by two classes, so a rule that used to win by being more specific can now
+lose to one that comes later. That was expected, and the comparison found
+the places. It also found that three rules had never been doing what they
+said, because something more specific beat them:
+
+- /how's table headings were right-aligned but kept the results page's
+  padding, so they stood 48 pixels right of their numbers;
+- the progress page asked for figures of one width, and a font shorthand
+  written later reset it;
+- the reduced-motion rule for the results page's buttons was less specific
+  than the buttons' own rules, and did nothing.
+
+All three now work as written. A fourth, meant to keep the five's heading
+free of the rule over each section, was dead the same way and was removed;
+the heading keeps the rule it has always shown.
+
+**What the checks found.** Several checks read the stylesheet's structure
+-- the `.ridge` block, the class names, the card's colours -- and were
+rewritten to hold the same facts about the new structure. One of them
+caught a real bug while being rewritten: the contrast check had tested the
+card table's values and the poster's, never the white pages', and on white
+a hovered link was yellow text, 1.5 to 1, and the focus ring yellow too.
+Both are ink now. On the poster nothing changed: its accent was ink
+already.

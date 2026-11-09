@@ -2,19 +2,10 @@
 
 {% block title %}NextCF &mdash; five Codeforces problems to solve next{% endblock %}
 
-{# This page is drawn in the ridge (ADR 0031): the same stylesheet, with the
-   ridge's values for its tokens. The leading space is part of the attribute
-   list this lands in. #}
-{% block root %} class="ridge"{% endblock %}
-
-{# The ridge's two faces instead of the card table's. The condensed display
-   face is the headline, the largest thing on the page and the first read;
-   the reading face is the sentence under it. The mono face is small text
-   further down and can arrive a moment later. #}
-{% block fonts %}
-    <link rel="preload" href="{{ url_for('static', filename='fonts/SofiaSansExtraCondensed-ExtraBold-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="{{ url_for('static', filename='fonts/SofiaSans-Regular-Latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-{% endblock %}
+{# This page is the poster (ADR 0031): the same stylesheet, with the poster's
+   values for its tokens. The leading space is part of the attribute list
+   this lands in. #}
+{% block root %} class="poster"{% endblock %}
 
 {% block head %}
     {# `ridge` is what the page's script needs (web.landing). Without it --

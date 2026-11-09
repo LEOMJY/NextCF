@@ -439,39 +439,43 @@ check("an unrated user is served from the chosen start, or told why when there i
       an_unrated_user_starts_from_the_chosen_rating_or_is_told_why)
 
 
-def gold_and_green_each_keep_one_meaning():
-    """ADR 0029, which split ADR 0006's one accent in two. Text in gold is
-    the forecast, or the landing page's own voice; text in green is an
-    accepted solve. Anything else reaching for either is a new meaning, and
-    a colour only works while it has one."""
+def yellow_and_green_each_keep_one_meaning():
+    """ADR 0029 split ADR 0006's one accent in two, and the ridge kept the
+    split (ADR 0031). Yellow is "act here": the main buttons, and the
+    highlighter under a chance that still asks. Green is an accepted solve.
+    Anything else reaching for either is a new meaning, and a colour only
+    works while it has one. And the accent is never the colour of text: on
+    the poster it is ink, but on white it is yellow, 1.5 to 1, and a rule
+    cannot know which page it is drawn on (found 2026-11-08 in a:hover)."""
     import re
     css = Path("static/style.css").read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
 
-    def users(token):
+    def users(token, prop=r"[\w-]+"):
         return sorted({
             selector.strip()
-            for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css)
-            # (?<![\w-]) so that "border-color:" and "border-bottom-color:"
-            # do not count. A focused input's border in gold is the form
-            # saying "type here", which is its meaning; text drawn in it is
-            # the question.
-            if re.search(r"(?<![\w-])color:\s*var\(" + token + r"\)", body)
+            for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css)
+            for selector in selectors.split(",")
+            # (?<![\w-]) so that "color" alone does not match the end of
+            # "border-color".
+            if re.search(r"(?<![\w-])" + prop + r":[^;]*var\(" + token + r"\)", body)
         })
 
-    # The chance on a recommendation; a link under the pointer; and on the
-    # landing page only, the line under the form and the steps' numbers.
-    gold = {".chance", "a:hover", ".motto", ".step-n"}
-    unexpected = [s for s in users("--accent") if s not in gold]
-    assert not unexpected, f"new users of gold: {unexpected}"
-    # An OK verdict, and a plan's solved mark -- the same meaning on a
-    # practice plan's row (ADR 0026) -- and the landing page's picture of
-    # a history, whose OKs are verdicts too.
-    green = {".verdict-ok", ".plan-mark.solved", ".step .verdicts .ac"}
+    assert not users("--accent", "color"), f"text drawn in the accent: {users('--accent', 'color')}"
+    # The main buttons -- the landing page's two, "Check what I solved",
+    # "Next five" -- the highlighter, and a focused field's edge, the form
+    # saying "type here".
+    yellow = {".handle-form button", ".continue a", ".resync button", ".plan-next button.primary",
+              ".chance span", ".handle-form input:focus"}
+    unexpected = [s for s in users("--accent") if s not in yellow]
+    assert not unexpected, f"new users of yellow: {unexpected}"
+    # An OK verdict's mark, a plan's solved mark -- the same meaning on a
+    # practice plan's row (ADR 0026) -- and a solved problem's flag.
+    green = {".verdict-ok::before", ".plan-mark.solved", ".flag.solved", ".flag.solved.is-hot"}
     unexpected = [s for s in users("--good") if s not in green]
     assert not unexpected, f"new users of green: {unexpected}"
-    assert ".chance" in users("--accent"), "the chance is no longer drawn in gold"
-    assert ".verdict-ok" in users("--good"), "an accepted verdict is no longer green"
+    assert ".chance span" in users("--accent"), "a chance is no longer marked in yellow"
+    assert ".verdict-ok::before" in users("--good"), "an accepted verdict is no longer green"
 
 
 def importing_web_starts_no_fetch():
@@ -480,7 +484,7 @@ def importing_web_starts_no_fetch():
     assert "problemset" not in names, names
 
 
-check("gold and green each keep one meaning", gold_and_green_each_keep_one_meaning)
+check("yellow and green each keep one meaning", yellow_and_green_each_keep_one_meaning)
 check("importing web starts no problemset fetch", importing_web_starts_no_fetch)
 
 

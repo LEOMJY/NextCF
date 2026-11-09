@@ -18,7 +18,7 @@ you something, and chosen from a model that is measured, not guessed.
 | Works now | Enter a handle; the history is fetched in the background, then shown with a breakdown by topic and five recommended problems — overall, or in any one topic ([ADR 0025](docs/decisions/0025-problems-by-topic.md)) |
 | Practice plans | The five are kept as a plan until you ask for the next: a solve is ticked from your history, "too hard", "too easy" or "skip" marks a problem, one tap undoes a mark, and past plans are listed ([ADR 0026](docs/decisions/0026-practice-plans.md), [ADR 0028](docs/decisions/0028-skip-and-undo.md)) |
 | Difficulty that adapts | When a plan ends, its "too hard" and "too easy" move where the next five aim — a small step first, larger while you keep pressing the same way, smaller when you turn back ([ADR 0027](docs/decisions/0027-target-staircase.md)) |
-| Looks like | The landing page is the ridge: every problem that can be recommended is a dot in a field, a ridge stands where rating alone gives a 50% chance, and the field's front edge is a rating axis to hold, which re-picks five real problems as it moves ([ADR 0031](docs/decisions/0031-the-ridge.md)). The other pages are still the card table of [ADR 0029](docs/decisions/0029-the-card-table.md) until they are redrawn |
+| Looks like | The landing page is the ridge: every problem that can be recommended is a dot in a field, a ridge stands where rating alone gives a 50% chance, and the field's front edge is a rating axis to hold, which re-picks five real problems as it moves ([ADR 0031](docs/decisions/0031-the-ridge.md)). The other pages are the same design at low volume: ink on white, yellow only where you are asked to act, and over the five the same field with the five standing in it |
 | Remembers you | The browser keeps the last handle typed into the box, and the landing page offers to continue as it; no accounts |
 | Built to be used at once by many | Syncs run one at a time, and a waiting visitor sees their place in the queue and a countdown; a returning visitor sees their page at once while it refreshes behind them ([ADR 0018](docs/decisions/0018-one-sync-at-a-time.md)) |
 | Built to be left running | A background thread keeps the problem list current and refreshes recent visitors when nobody is waiting ([ADR 0020](docs/decisions/0020-the-upkeep-thread.md)); every failure answers with a status code for its cause, on the site's own page, and is logged without the handle it was about ([ADR 0022](docs/decisions/0022-errors-and-logs.md)) |
@@ -118,8 +118,8 @@ evaluate.py          the evaluation harness behind spec §9's number — see doc
 baseline.json        the baseline's two fitted numbers
 topic_model.json     the topic model's crowd part, refitted monthly
 support.json         who attempted each problem, by rating: what may be offered — see docs/decisions/0023-guard-rails-on-what-is-offered.md
-static/style.css     the whole design system — see docs/decisions/0029-the-card-table.md
-static/fonts/        Unbounded, Onest and IBM Plex Mono, served from this site, each with its licence
+static/style.css     the whole design system — see docs/decisions/0031-the-ridge.md
+static/fonts/        Sofia Sans, Sofia Sans Extra Condensed and IBM Plex Mono, served from this site, each with its licence
 static/app/          the built topic chart component, committed — see docs/decisions/0011-bundle-built-locally.md
 frontend/            its React source, and the Vite build that makes static/app/ — see docs/decisions/0025-problems-by-topic.md
 schema.sql           the tables and the view — see docs/spec.md §6

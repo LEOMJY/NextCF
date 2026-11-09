@@ -805,7 +805,7 @@ def the_icon_is_served_and_its_old_address_redirects():
 def the_buttons_are_targets_a_finger_can_hit():
     """Measured 2026-09-28 at phone width: the words that steer the
     difficulty were 16 pixels tall. On a touch screen they are 44, and every
-    one of them is in the rule; for a mouse, 24 without moving the layout."""
+    one of them is in the rule; for a mouse, at least 24 (WCAG 2.2, 2.5.8)."""
     import re
     css = Path("static/style.css").read_text(encoding="utf-8")
     coarse = css.split("@media (pointer: coarse)", 1)[1].split("\n}\n", 1)[0]
@@ -819,15 +819,21 @@ def the_buttons_are_targets_a_finger_can_hit():
     for selector in (".verdict-form button", ".restore button", ".plan-mark button",
                      ".plan-next button", ".continue button", ".topics summary", ".plans summary"):
         assert selector in sized.group(1), f"{selector} is not in the touch-screen rule"
-    fine = re.search(r"\.verdict-form button,\s*\.restore button,\s*\.plan-mark button \{(.*?)\}", css, re.S)
-    assert fine and "padding-top: 4px" in fine.group(1) and "margin-top: -4px" in fine.group(1), \
-        "the 24-pixel target for a mouse is gone"
+    # Since the ridge (ADR 0031) the row's buttons are outlined boxes with a
+    # height of their own, rather than words given padding.
+    fine = re.search(r"\n\.verdict-form button,\s*\.plan-mark button,\s*\.restore button,"
+                     r"\s*\.plan-next button:not\(\.primary\) \{([^}]*)\}", css)
+    tall = re.search(r"min-height: (\d+)px", fine.group(1)) if fine else None
+    assert tall and int(tall.group(1)) >= 24, "the 24-pixel target for a mouse is gone"
     # "skip" and "undo" are narrower than 44 pixels. Widened, a button
     # centres its words, and the gap before "skip" was 26 pixels where the
     # gap before "too easy" was 16 (measured 2026-10-04: now 16 and 16).
-    wide = re.search(r"\.verdict-form button,\s*\.plan-mark button \{([^{}]*min-width: 44px[^{}]*)\}",
-                     re.sub(r"/\*.*?\*/", "", coarse, flags=re.S))
-    assert wide and "text-align: left" in wide.group(1), \
+    bare = re.sub(r"/\*.*?\*/", "", coarse, flags=re.S)
+    wide = re.search(r"([^{}]*)\{[^{}]*min-width: 44px[^{}]*\}", bare.split("{", 1)[1])
+    assert wide and ".verdict-form button" in wide.group(1) and ".plan-mark button" in wide.group(1), \
+        "a short button is narrower than a finger on a touch screen"
+    left = re.search(r"\.verdict-form button,\s*\.plan-mark button \{([^{}]*)\}", bare)
+    assert left and "text-align: left" in left.group(1), \
         "a short button's words are centred in its 44 pixels again: uneven gaps between the answers"
 
 
@@ -986,23 +992,17 @@ def the_stylesheet_carries_the_review():
     is invisible to every other check."""
     import re
     css = Path("static/style.css").read_text(encoding="utf-8")
-    # The field's edge is its fill since v0.8 (ADR 0029): cream on the navy.
-    # Whatever the two tokens become, that edge is held to WCAG's 3 to 1 for
-    # a control's boundary -- the review found it at 1.3. The rule that
-    # starts its own line is the card table's, which the error page wears.
+    # The field's edge, held to WCAG's 3 to 1 for a control's boundary --
+    # the review found it at 1.3. Its fill is too close to either ground to
+    # be the edge (a lighter yellow on yellow is 1.2 to 1), so since the
+    # ridge (ADR 0031) the edge is drawn: a border in ink, against both the
+    # quiet surface's white and the poster's yellow.
     field = re.search(r"\n\.handle-form input \{([^}]*)\}", css).group(1)
-    fill = re.search(r"background: var\((--[\w-]+)\)", field)
-    assert fill, "the handle field has no fill of its own"
-    ratio = contrast(token(css, fill.group(1)), token(css, "--bg"))
-    assert ratio >= 3, f"the handle field's edge is {ratio:.2f} to 1 against the page"
-    # In the ridge (ADR 0031) the landing page's field is a lighter yellow on
-    # yellow, 1.2 to 1, so there its edge is a drawn one: a border in ink,
-    # held to the same 3 to 1 against the ground.
-    ridge = re.search(r"\n\.ridge \{\n(.*?)\n\}", css, re.S).group(1)
-    drawn = re.search(r"\n\.ridge \.handle-form input \{([^}]*)\}", css).group(1)
-    assert "border: 2px solid var(--ink);" in drawn, "the ridge's handle field has no drawn edge"
-    ratio = contrast(token(ridge, "--ink"), token(ridge, "--bg"))
-    assert ratio >= 3, f"the ridge's handle field's edge is {ratio:.2f} to 1 against the page"
+    assert "border: 2px solid var(--ink);" in field, "the handle field has no drawn edge"
+    poster = re.search(r"\n\.poster \{\n(.*?)\n\}", css, re.S).group(1)
+    for name, ground in (("the page", token(css, "--bg")), ("the poster", token(poster, "--bg"))):
+        ratio = contrast(token(css, "--ink"), ground)
+        assert ratio >= 3, f"the handle field's edge is {ratio:.2f} to 1 against {name}"
     busy = re.search(r'\.recs\[aria-busy="true"\] \{([^}]*)\}', css)
     assert busy and "opacity" in busy.group(1), "nothing shows that a topic's five are loading"
     notes = re.search(r"\.notes \{([^}]*)\}", css).group(1)
@@ -1308,16 +1308,17 @@ check("the page has somewhere to say what a press did", the_page_has_somewhere_t
 
 
 def the_results_page_is_the_ridge_on_white():
-    """ADR 0031, amended 2026-11-07: the results page asks for the ridge's
-    quiet values on its <html>, and every one of the five has its rank's
-    square and its id before its name -- drawn by the template, and carried
-    in the island's data for the component that draws them after it."""
+    """ADR 0031, amended 2026-11-07: the results page is the quiet surface,
+    which since 2026-11-08 is what a page is when its <html> asks for
+    nothing else; and every one of the five has its rank's square and its id
+    before its name -- drawn by the template, and carried in the island's
+    data for the component that draws them after it."""
     import json
     import re
     a_visitor()
     ids()
     html = page()
-    assert '<html lang="en" class="ridge quiet">' in html, "the results page is not the ridge's quiet surface"
+    assert '<html lang="en">' in html, "the results page is not the quiet surface"
     rows = re.findall(r'<span class="sw rank-(\w+)" aria-hidden="true"></span>\s*<span class="pid">([^<]+)</span>', html)
     assert len(rows) == 5, rows
     island = json.loads(re.search(r'<script type="application/json" id="topic-island-data">(.*?)</script>',

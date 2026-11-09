@@ -6,8 +6,10 @@ site's design system in place of ADR 0006 (terminal). **Not settled as the
 final one.** On 2026-09-30 the author said the theme is not decided yet, so
 spec §12's question stays open. The next test of it is the results page
 drawn in it (see Consequences).
-**To be superseded by ADR 0031, the ridge**, chosen 2026-10-11. The card
-table is still what the live site shows until those templates replace it.
+**Superseded by ADR 0031, the ridge**, chosen 2026-10-11. The landing page
+left the card table on 2026-10-12 and the other pages on 2026-11-07 and
+11-08; its tokens and its two fonts were removed from the stylesheet on
+2026-11-08.
 
 ## Context
 

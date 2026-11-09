@@ -19,8 +19,8 @@ these hold it to:
     the 3D library is fetched only by a device that will draw with it; the
     page stands without script; and no picture ever holds the form.
   * EVERY COLOUR CAN BE READ. Text tokens against the surfaces they sit on,
-    at WCAG's 4.5 to 1, in the card table the tool pages still wear and in
-    the ridge.
+    at WCAG's 4.5 to 1, on the quiet surface's white and on the poster's
+    yellow.
 """
 
 import hashlib
@@ -67,8 +67,8 @@ client = web.app.test_client()
 CSS = Path("static/style.css").read_text(encoding="utf-8")
 SCRIPT = Path("static/ridge.js").read_text(encoding="utf-8")
 FIELD = json.loads(Path("static/field.json").read_text(encoding="utf-8"))
-# The ridge's own values for the tokens: the one block that starts ".ridge {".
-RIDGE = re.search(r"\n\.ridge \{\n(.*?)\n\}", CSS, re.S).group(1)
+# The poster's own values for the tokens: the one block that starts ".poster {".
+POSTER = re.search(r"\n\.poster \{\n(.*?)\n\}", CSS, re.S).group(1)
 
 
 def landing():
@@ -84,18 +84,19 @@ def words(html):
 
 
 def token(name):
-    """A colour token's value in style.css's :root, as #rrggbb. The first
-    place a name is given a colour is :root: the ridge's block comes after."""
+    """A colour token's value in style.css's :root -- the quiet surface's --
+    as #rrggbb. The first place a name is given a colour is :root: the
+    poster's block comes after."""
     value = re.search(r"(?<![\w-])" + re.escape(name) + r":\s*(#[0-9a-fA-F]{6});", CSS)
     assert value, f"no {name} colour in :root"
     return value.group(1)
 
 
-def ridge_token(name):
-    """The same token's value in the ridge."""
-    value = re.search(r"(?<![\w-])" + re.escape(name) + r":\s*(#[0-9a-fA-F]{6});", RIDGE)
-    assert value, f"no {name} colour in the ridge's block"
-    return value.group(1)
+def poster_token(name):
+    """The same token's value on the poster: its own block's, or :root's
+    where the poster does not name it."""
+    value = re.search(r"(?<![\w-])" + re.escape(name) + r":\s*(#[0-9a-fA-F]{6});", POSTER)
+    return value.group(1) if value else token(name)
 
 
 def contrast(one, other):
@@ -494,40 +495,31 @@ def with_no_field_the_page_is_its_words():
 
 # ------------------------------------------------------------ the tokens
 def every_text_colour_can_be_read():
-    """WCAG's 4.5 to 1 for text, on every surface the text is drawn on. The
-    card table, which the tool pages still wear: the table and its two
-    panels, and the cream of a card. The ridge: the yellow ground, and the
-    field to type in at rest and focused."""
+    """WCAG's 4.5 to 1 for text, on every surface the text is drawn on: the
+    ground and the two panels, white on the quiet surface and yellow on the
+    poster, and the words on the accent. The accent itself is not a text
+    colour (check_model.py holds the stylesheet to that): on white it is
+    yellow, 1.5 to 1."""
+    pairs = [(ink, ground) for ink in ("--ink", "--soft", "--muted", "--warn")
+             for ground in ("--bg", "--panel", "--panel-hover")]
+    pairs.append(("--accent-ink", "--accent"))
     low = []
-    for ink in ("--ink", "--soft", "--muted", "--accent", "--good", "--warn"):
-        for ground in ("--bg", "--panel", "--panel-hover"):
-            ratio = contrast(token(ink), token(ground))
+    for name, value in (("", token), ("the poster's ", poster_token)):
+        for ink, ground in pairs:
+            ratio = contrast(value(ink), value(ground))
             if ratio < 4.5:
-                low.append(f"{ink} on {ground}: {ratio:.2f}")
-    for ink in ["--card-ink", "--card-muted"] + [f"--t-{key}" for _, key, _ in web.RARITIES]:
-        ratio = contrast(token(ink), token("--card"))
-        if ratio < 4.5:
-            low.append(f"{ink} on --card: {ratio:.2f}")
-    ratio = contrast(token("--accent-ink"), token("--accent"))
+                low.append(f"{name}{ink} on {ground}: {ratio:.2f}")
+    # Green, an accepted solve, is text only on the quiet surface's own
+    # ground: a solved mark, in a row with no fill. The poster draws no green.
+    ratio = contrast(token("--good"), token("--bg"))
     if ratio < 4.5:
-        low.append(f"--accent-ink on --accent: {ratio:.2f}")
-
-    for ink in ("--ink", "--soft", "--muted", "--warn"):
-        for ground in ("--bg", "--panel", "--panel-hover"):
-            ratio = contrast(ridge_token(ink), ridge_token(ground))
-            if ratio < 4.5:
-                low.append(f"the ridge's {ink} on {ground}: {ratio:.2f}")
-    ratio = contrast(ridge_token("--accent-ink"), ridge_token("--accent"))
-    if ratio < 4.5:
-        low.append(f"the ridge's --accent-ink on --accent: {ratio:.2f}")
+        low.append(f"--good on --bg: {ratio:.2f}")
     assert not low, f"text below 4.5 to 1: {low}"
 
 
 def every_rank_has_its_colours():
-    missing = [f"--{kind}-{key}" for _, key, _ in web.RARITIES for kind in ("r", "t")
-               if not re.search(r"--" + kind + "-" + key + r":\s*#", CSS)]
-    missing += [f"the ridge's --r-{key}" for _, key, _ in web.RARITIES
-                if not re.search(r"--r-" + key + r":\s*#", RIDGE)]
+    missing = [f"--r-{key}" for _, key, _ in web.RARITIES
+               if not re.search(r"--r-" + key + r":\s*#", CSS)]
     missing += [f".rank-{key}" for _, key, _ in web.RARITIES
                 if f".rank-{key} {{ --rank: var(--r-{key}); }}" not in CSS]
     assert not missing, f"a problem can be marked in a colour that does not exist: {missing}"
@@ -551,7 +543,7 @@ def every_font_travels_with_its_licence():
     files go. One licence file per family, each the OFL; and every file the
     stylesheet names is there to be served."""
     licences = {
-        "IBM Plex Mono": "LICENSE.txt", "Unbounded": "LICENSE-Unbounded.txt", "Onest": "LICENSE-Onest.txt",
+        "IBM Plex Mono": "LICENSE.txt",
         "Sofia Sans": "LICENSE-SofiaSans.txt", "Sofia Sans Extra Condensed": "LICENSE-SofiaSans.txt",
     }
     families = set(re.findall(r'@font-face\s*\{[^}]*font-family:\s*"([^"]+)"', CSS))
@@ -559,8 +551,12 @@ def every_font_travels_with_its_licence():
     for family, name in licences.items():
         text = Path("static/fonts", name).read_text(encoding="utf-8")
         assert "SIL Open Font License" in text, f"{name} is not the OFL"
-    missing = [name for name in re.findall(r'url\("fonts/([^"]+)"\)', CSS) if not Path("static/fonts", name).exists()]
+    named = set(re.findall(r'url\("fonts/([^"]+)"\)', CSS))
+    missing = [name for name in named if not Path("static/fonts", name).exists()]
     assert not missing, f"the stylesheet names font files that are not there: {missing}"
+    # And the other way: a file nobody names is a download for nobody.
+    unused = [f.name for f in Path("static/fonts").glob("*.woff2") if f.name not in named]
+    assert not unused, f"font files the stylesheet does not name: {unused}"
 
 
 def each_page_asks_early_for_the_faces_it_draws_in():
@@ -585,13 +581,13 @@ def each_page_asks_early_for_the_faces_it_draws_in():
 
 def the_landing_page_is_the_poster_and_the_rest_are_quiet():
     """Which set of values a page is drawn with is one class on <html> (ADR
-    0031). The landing page is the yellow poster, "ridge" alone; every other
-    page is the ridge's quiet surface on white, "ridge quiet" (2026-11-08),
-    and nothing of the card table is left on them -- not even its words."""
-    assert '<html lang="en" class="ridge">' in landing(), "the landing page is not the ridge's poster"
+    0031). The landing page says "poster", the yellow one; every other page
+    says nothing and is the quiet surface on white (since 2026-11-08), and
+    nothing of the card table is left on them -- not even its words."""
+    assert '<html lang="en" class="poster">' in landing(), "the landing page is not the poster"
     for path in ("/how", "/privacy"):
         page = client.get(path).get_data(as_text=True)
-        assert '<html lang="en" class="ridge quiet">' in page, f"{path} is not the quiet surface"
+        assert '<html lang="en">' in page, f"{path} is not the quiet surface"
     # The handle field says what the site calls the action, on every page:
     # here on the error page, which a name too long to be a handle reaches
     # without a sync.

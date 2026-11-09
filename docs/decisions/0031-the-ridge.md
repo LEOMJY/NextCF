@@ -1,9 +1,9 @@
 # 0031 — Design direction: the ridge
 
 **Date:** 2026-10-11
-**Status:** accepted, and **being built**. The card table (ADR 0029) is what
-the live site shows until these templates replace it, and is superseded on
-that day. The brief set one week from the choice to the landing page live:
+**Status:** accepted, and **built**: every page is drawn in it since
+2026-11-08, and the card table (ADR 0029), which it superseded, is gone from
+the stylesheet (amendment of 2026-11-08, "one set of values"). The brief set one week from the choice to the landing page live:
 **2026-10-18**. **Amended the same evening** (below): the tool pages'
 ground, the three steps and the results page's arrangement are open again,
 and are being settled one change at a time.
@@ -326,6 +326,46 @@ No page now draws in the card table's faces or colours. Its tokens and its
 two fonts are still in the stylesheet and `static/fonts/`, unused; removing
 them, and folding the `.ridge` blocks into the stylesheet's base values, is
 the next step.
+
+## Amendment, 2026-11-08, later: one set of values
+
+The card table is gone from the stylesheet: its tokens (the navy, the
+cream, the gold, three radii, the shadow, the rank colours darkened for
+text), its two fonts with their licences (109 KB), and every rule of its
+that the ridge had been overriding. The two sets of values became one:
+
+- `:root` holds the quiet surface's values, so a page is drawn on white
+  unless it says otherwise;
+- the landing page puts `class="poster"` on its `<html>`, and a `.poster`
+  block gives the same tokens the poster's values. The `ridge` and
+  `ridge quiet` classes are gone;
+- the few rules the poster needs beyond its values -- a page that runs edge
+  to edge, the handle field at the poster's scale, its button's hover --
+  are written under `.poster`.
+
+It was meant to change nothing on screen, and was checked that way: the
+computed style of every element on nine pages and states, at three widths
+and on a touch screen, with every hover and focus state forced on, recorded
+before and after and compared. What did change:
+
+- **Hovered links and the keyboard focus ring are ink, not yellow.** On
+  white, yellow text is 1.5 to 1, and a yellow ring under the 3 to 1 WCAG
+  asks of a focus indicator. The check for readable text had tested the
+  card table's values and the poster's, never the white pages'; with one
+  set of values it tested them for the first time. On the poster the two
+  are unchanged: its accent was ink already.
+- **The column headings on /how line up with their figures.** A heading
+  rule written for the results page had been overriding /how's own column
+  spacing, so each right-aligned heading stood 48 pixels to the right of
+  the numbers under it. On a phone the same table gets back the 32 pixels
+  between columns it was given on 2026-10-03.
+- **The progress page's number has figures of one width again**, as its
+  rule always asked: the quiet surface's font shorthand had been resetting
+  it.
+- **Under reduced motion the results page's buttons change colour at
+  once.** The rule that said so was less specific than the rules it was
+  meant to override, and did nothing.
+- The landing page's head is filled with the yellow the page already is.
 
 ## Alternatives
 

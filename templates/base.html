@@ -15,13 +15,13 @@
    exactly what this comment did, on the live site, from 08-15 to 09-12. #}
 <!doctype html>
 {# The root block is for a class on the whole document: which of the
-   stylesheet's sets of token values the page is drawn with (ADR 0031). By
-   default "ridge quiet", the ridge's tool surface, on white -- the results,
-   progress and error pages, /how and /privacy. The landing page fills it
-   with "ridge" alone, the yellow poster. On <html> and not <body>, because
+   stylesheet's two sets of token values the page is drawn with (ADR 0031).
+   By default none, and the page is the quiet surface, on white -- the
+   results, progress and error pages, /how and /privacy. The landing page
+   fills it with "poster", the yellow one. On <html> and not <body>, because
    the page's ground is painted from <html>: on a phone the strip shown when
    a page is pulled past its end is that colour. #}
-<html lang="en"{% block root %} class="ridge quiet"{% endblock %}>
+<html lang="en"{% block root %}{% endblock %}>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -61,8 +61,7 @@
     <header class="site-head">
       {# url_for("index") asks the routing table for that view's URL instead
          of hardcoding "/". #}
-      {# The small card is the mark: a specialist's frame, tipped over. #}
-      <a class="brand" href="{{ url_for('index') }}"><span class="brand-card" aria-hidden="true"></span>NextCF</a>
+      <a class="brand" href="{{ url_for('index') }}">NextCF</a>
       <span class="version">v0.8</span>
       {# One line between the name and the links, for a page that has one:
          the landing page states its two counts here. #}
